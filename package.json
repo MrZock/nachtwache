@@ -1,0 +1,14 @@
+{
+  "name": "nachtwache",
+  "version": "1.0.0",
+  "description": "Nachtwache – Zombie-Survival mit Basisbau (Browser-Spiel) inkl. Spielserver für den Online-Modus",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "private": true
+}

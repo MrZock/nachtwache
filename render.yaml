@@ -1,0 +1,9 @@
+# Render.com Blueprint – kostenloser Spielserver für den Online-Modus
+services:
+  - type: web
+    name: nachtwache
+    runtime: node
+    plan: free
+    buildCommand: echo "keine Abhängigkeiten"
+    startCommand: node server.js
+    healthCheckPath: /health
