@@ -1,0 +1,17 @@
+{
+  "name": "Nachtwache Spielserver",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "Nachtwache",
+      "onAutoForward": "notify"
+    }
+  },
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "customizations": {
+    "codespaces": {
+      "openFiles": ["README.md"]
+    }
+  }
+}
