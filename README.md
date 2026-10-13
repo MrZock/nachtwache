@@ -37,7 +37,7 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 - **Wetter:** Regen, Gewitter mit Blitzen, die Zombies treffen.
 - **7 versteckte Easter Eggs** 🥚 – viel Spaß beim Suchen!
 
-**Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Skillpunkte für Stärke, Schütze, Sammler, Ausdauer, Flinkheit, Plünderer, Präzision, Rüstung und Lebensraub (je 5 Stufen, Menü mit K).
+**Level & Skills:** XP für Kills, Abbauen, Bauen, Beute und überlebte Nächte. Skillpunkte für Stärke, Schütze, Sammler, Ausdauer, Flinkheit, Plünderer, Präzision, Rüstung und Lebensraub (je 5 Stufen, Menü mit K).
 
 **Schmiede (H):** Speer, Streitaxt und Plasmawerfer freischalten, alle Waffen bis Stufe 5 aufwerten. Höchststufe = Reaktor-Stufe + 1.
 
@@ -49,14 +49,14 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 
 - **Rüstung** in 4 Plätzen (Helm, Weste, Handschuhe, Stiefel), je 4 Stufen: Schrott → Leder → Stahl → Militär. Helm & Weste senken Schaden, die Weste gibt HP, Handschuhe machen schneller angreifen, Stiefel schneller laufen. Rüstung sieht man am Spielermodell.
 - **Verbrauchsgegenstände** (max. 5): 🩹 Medkit (L, heilt 50 %), 💣 Granate (G, Explosion), 🔥 Molotow (Z, Feuerfläche 5 s). Am Handy erscheinen eigene Knöpfe.
-- **Neue Materialien** gehören jedem Spieler selbst: 🧵 Stoff (Zombies, Tiere), 🔌 Elektronik (Schrott, Panzerzombies, Bosse), 🧪 Chemie (Spucker, Schamanen, Schrott). Truhen geben von allem etwas.
+- **Neue Materialien** gehören jedem Spieler selbst: 🧵 Stoff (Zombies, Tiere), 🔌 Elektronik (Schrott, Panzerzombies, Bosse), 🧪 Chemie (Spucker, Schamanen, Schrott). Zombies lassen manchmal einen 🎒 **Beutebeutel** fallen (drüberlaufen = einsammeln, verschwindet nach 45 s).
 - Markieren jetzt mit **Y**.
 
 ## Neue Orte (4.0, Etappe 2)
 
-- **Ruinenstädte** (2 pro Karte): Straßenraster mit Asphalt, mehrstöckige Betonruinen mit Fensterhöhlen, eingestürzte Wände, Autowracks (Schrott → Eisen & Material) und **Truhen in manchen Häusern**.
-- **Bunker-Dungeons**: 3 Luken auf der Karte (**F** = betreten). Drinnen ist es dunkel (Taschenlampe), 9 Räume mit Gängen, **Wächter-Zombies** und oben eine **große Beute-Truhe** (Gold, Eisen, Material, Medkits/Granaten/Molotows). Nach 4 Minuten füllt sich ein Bunker wieder auf.
-- **Buggy** (Inventar → Ausrüstung): schnell, überfährt Zombies, halber Schaden für den Fahrer, braucht Sprit (1 🧪 Chemie = +40 %). **F** = ein-/aussteigen.
+- **Ruinenstädte** (2 pro Karte): Straßenraster mit Asphalt, hohe Betonruinen (2–5 Stockwerke) mit Fensterhöhlen, eingestürzte Wände und Autowracks (Schrott → Eisen & Material).
+- **Bunker-Dungeons**: 3 Luken auf der Karte (**F** = betreten). Drinnen ist es dunkel: Wandlampen, Notlichter, Rohre, je Bunker eigene Einrichtung (Kisten, Maschinen, Labortanks). 9 Räume mit Gängen, **Wächter-Zombies** und oben ein **goldener Wärter**, der die große Beute trägt (Gold, Eisen, Material, Medkits/Granaten/Molotows). Nach 4 Minuten füllt sich ein Bunker wieder auf.
+- Die Minimap zeigt Bunker und Schattenreich nur, wenn man drin ist – dann nur diesen Bereich.
 
 ## Windows-Version
 

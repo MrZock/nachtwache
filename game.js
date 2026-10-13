@@ -32,7 +32,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 // Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
-const NET_VER = 31;
+const NET_VER = 32;
 const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -372,7 +372,7 @@ const SKILLS = [
   { id: 'gath', icon: '⛏', name: 'Sammler',    max: 5, desc: l => (l * 20) + '% Chance auf doppelte Ausbeute' },
   { id: 'vit',  icon: '❤', name: 'Ausdauer',   max: 5, desc: l => '+' + (l * 15) + ' Max-HP, +' + l + ' HP/s Regeneration' },
   { id: 'spd',  icon: '➤', name: 'Flinkheit',  max: 5, desc: l => '+' + (l * 6) + '% Laufgeschwindigkeit' },
-  { id: 'loot', icon: '$', name: 'Plünderer',  max: 5, desc: l => '+' + (l * 15) + '% Gold von Zombies & Truhen' },
+  { id: 'loot', icon: '$', name: 'Plünderer',  max: 5, desc: l => '+' + (l * 15) + '% Gold & mehr Beute von Zombies' },
   { id: 'crit', icon: '✦', name: 'Präzision',  max: 5, desc: l => (l * 7) + '% Chance auf doppelten Schaden' },
   { id: 'armor', icon: '🛡', name: 'Rüstung',  max: 5, desc: l => '-' + (l * 7) + '% erlittener Schaden' },
   { id: 'vamp', icon: '❣', name: 'Lebensraub', max: 5, desc: l => 'Heilt dich um ' + (l * 3) + '% deines Schadens' },
@@ -401,7 +401,7 @@ const ACHIEVEMENTS = [
   { id: 'lvl10',   name: 'Veteran',           desc: 'Erreiche Level 10',                     ok: S => S.player.lvl >= 10 },
   { id: 'gold',    name: 'Goldrausch',        desc: 'Verdiene 2000 Gold in einer Runde',     ok: S => S.goldEarned >= 2000 },
   { id: 'build50', name: 'Baumeister',        desc: 'Habe 50 Gebäude gleichzeitig',          ok: S => S.buildings.length >= 50 },
-  { id: 'chest5',  name: 'Schatzjäger',       desc: 'Öffne 5 Schatztruhen',                  ok: S => (S.chestsOpened || 0) >= 5 },
+  { id: 'chest5',  name: 'Schatzjäger',       desc: 'Sammle 5 Beutebeutel von Zombies',      ok: S => (S.chestsOpened || 0) >= 5 },
   { id: 'bomber',  name: 'Entschärft',        desc: 'Erledige 10 Bomber, bevor sie explodieren', ok: S => (S.bomberKills || 0) >= 10 },
   { id: 'hq5',     name: 'Festung',           desc: 'Reaktor auf Stufe 5',              ok: S => !!S.hq && S.hq.lvl >= 5 },
   { id: 'hunter',  name: 'Jäger',             desc: 'Erlege 10 Tiere',                       ok: S => (S.animalKills || 0) >= 10 },
@@ -694,7 +694,7 @@ function genMap() {
   S.resTarget = S.resCount.slice();
   calcMountains();
 }
-// Ruinenstadt: Straßenraster, Hausruinen aus Mauern mit Türen und Lücken, Autowracks, Truhen in manchen Häusern
+// Ruinenstadt: Straßenraster, hohe Hausruinen aus Mauern mit Türen und Lücken, Autowracks
 function genCities() {
   const R = S.res;
   for (const cc of cityCenters()) {
@@ -717,7 +717,6 @@ function genCities() {
         }
         if (w >= 8 && Math.random() < 0.5) { const px = x0 + (w >> 1); for (let y = y0 + 1; y < y0 + h; y++) if (Math.random() < 0.8 && y !== y0 + (h >> 1)) R[y * MAP + px] = 8; }
         for (let k = 0; k < 2; k++) { const x = x0 + randi(1, w - 1), y = y0 + randi(1, h - 1); if (!R[y * MAP + x] && Math.random() < 0.4) R[y * MAP + x] = 7; }
-        if (Math.random() < 0.22) { const x = x0 + randi(1, w - 1), y = y0 + randi(1, h - 1); if (!R[y * MAP + x]) S.chests.push({ id: S.nextChest++, x: (x + 0.5) * TS, y: (y + 0.5) * TS, city: true }); }
       }
     // Autowracks auf den Straßen
     for (let y = cc.y - CITY_R; y <= cc.y + CITY_R; y++) for (let x = cc.x - CITY_R; x <= cc.x + CITY_R; x++)
@@ -806,33 +805,19 @@ function mineRes(i, amt) {
   } else setRes(i, kind, left);
   return got;
 }
-// ---------- Schatztruhen: tauchen tagsüber auf, Beute für den, der sie zuerst erreicht
+// ---------- Beutebeutel: Zombies lassen manchmal Beute fallen, wer zuerst drüberläuft, bekommt sie
+function dropLoot(x, y, dun) {
+  const big = dun !== undefined;
+  if (!big && S.chests.filter(c => c.dun === undefined).length >= 14) return;
+  const c = { id: S.nextChest++, x, y, exp: S.t + (big ? 180 : 45) };
+  if (big) c.dun = dun;
+  S.chests.push(c);
+  burst(x, y, '#ffe27a', big ? 30 : 12, 140, 0.6, 3);
+}
 function chestTick(dt) {
-  const hqs = allHQs();
-  if (!S.started || !hqs.length) return;
-  if (S.phase === 'day') {
-    S.chestT -= dt;
-    if (S.chestT <= 0) {
-      S.chestT = rand(18, 30) / Math.min(4, hqs.length);
-      if (S.chests.filter(c => !c.city && c.dun === undefined).length < 3 * hqs.length) {
-        const hq = hqs[randi(0, hqs.length - 1)], hx = hq.tx + 1, hy = hq.ty + 1;
-        for (let tries = 0; tries < 60; tries++) {
-          const a = rand(0, TAU), d = rand(9, 32);
-          const tx = Math.round(hx + Math.cos(a) * d), ty = Math.round(hy + Math.sin(a) * d);
-          if (tx < 2 || ty < 2 || tx >= MAP - 2 || ty >= MAP - 2) continue;
-          const i = ty * MAP + tx;
-          if (S.res[i] || S.bmap[i]) continue;
-          const c = { id: S.nextChest++, x: (tx + 0.5) * TS, y: (ty + 0.5) * TS };
-          S.chests.push(c);
-          burst(c.x, c.y, '#ffe27a', 16, 120, 0.7, 3);
-          toastAll('Eine Schatztruhe ist aufgetaucht! (gelb auf der Minimap)', '#ffe27a');
-          break;
-        }
-      }
-    }
-  }
   for (const c of S.chests) {
-    if (c.open || c.locked) continue;
+    if (c.open) continue;
+    if (c.exp && S.t > c.exp) { c.open = true; continue; }
     const q = S.players.find(pl => pl.dead <= 0 && Math.hypot(pl.x - c.x, pl.y - c.y) < 34);
     if (q) withTeam(teamOf(q), () => openChest(c, q));
   }
@@ -851,22 +836,23 @@ function openChest(c, q) {
     burst(c.x, c.y, '#ffe27a', 50, 240, 0.9, 4); ring(c.x, c.y, 90, 0.5, '#ffe27a');
     floatText(c.x, c.y - 24, '+' + n + ' Gold, +8 Eisen, Material & Ausrüstung!', '#ffe27a', 16);
     SFX.play('upgrade', c.x, c.y);
-    toastAll((q.name || 'Jemand') + ' hat ' + DUN_NAME[c.dun] + ' geplündert!', '#ffe27a');
+    toastAll((q.name || 'Jemand') + ' hat die große Bunker-Beute geholt!', '#ffe27a');
     return;
   }
-  if (r < 0.32) { const n = Math.round(rand(30, 70) * m); S.wood += n; txt = '+' + n + ' Holz'; }
-  else if (r < 0.62) { const n = Math.round(rand(30, 70) * m); S.stone += n; txt = '+' + n + ' Stein'; }
-  else if (r < 0.9) { const n = Math.round(rand(60, 140) * m * lootMul()); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
-  else { for (const pl of S.players) pl.hp = pl.maxHp; const n = Math.round(30 * m * lootMul()); S.gold += n; S.goldEarned += n; txt = 'Heiltrank! Alle geheilt +' + n + ' Gold'; }
-  giveXp(q, 25);
-  giveMat(q, 'c', randi(1, 3)); giveMat(q, 'e', randi(1, 2)); giveMat(q, 'h', randi(0, 2));
+  if (r < 0.25) { const n = Math.round(rand(15, 35) * m); S.wood += n; txt = '+' + n + ' Holz'; }
+  else if (r < 0.5) { const n = Math.round(rand(15, 35) * m); S.stone += n; txt = '+' + n + ' Stein'; }
+  else if (r < 0.82) { const n = Math.round(rand(30, 70) * m * lootMul()); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
+  else if (r < 0.92) { const id = ['med', 'gren', 'molo'][randi(0, 2)], C = CONS.find(x => x.id === id); q.cons[id] = Math.min(CONS_MAX, (q.cons[id] | 0) + 1); txt = '+1 ' + C.icon + ' ' + C.name; }
+  else { q.hp = q.maxHp; const n = Math.round(20 * m * lootMul()); S.gold += n; S.goldEarned += n; txt = 'Heiltrank! Volle HP +' + n + ' Gold'; }
+  giveXp(q, 12);
+  giveMat(q, 'c', randi(0, 2)); giveMat(q, 'e', randi(0, 1)); giveMat(q, 'h', randi(0, 1));
   S.chestsOpened = (S.chestsOpened || 0) + 1;
   burst(c.x, c.y, '#ffe27a', 30, 200, 0.8, 3.5);
   ring(c.x, c.y, 60, 0.4, '#ffe27a');
   floatText(c.x, c.y - 24, txt, '#ffe27a', 16);
   SFX.play('upgrade', c.x, c.y);
   const who = q.name || ('Spieler ' + (q.id + 1));
-  toastAll(who + ' hat eine Truhe geöffnet: ' + txt, '#ffe27a');
+  toastFor(q, '🎒 Beute: ' + txt, '#ffe27a');
 }
 // ---------- Tiere: Hirsche & Hasen flüchten, Wildschweine wehren sich
 const ADEF = {
@@ -1680,11 +1666,11 @@ function nearHatch(p) {
   return null;
 }
 function useHatch(p) {
-  const h = nearHatch(p); if (!h || p.drive) return false;
+  const h = nearHatch(p); if (!h) return false;
   if (h.out) {
     const e = dunExit(h.k); p.x = e.x; p.y = e.y - 2.4 * TS;
     dunFill(h.k);
-    toastFor(p, '🔦 ' + DUN_NAME[h.k] + ' – oben wartet eine Beute-Truhe. Vorsicht, Wächter!', '#ffcf8a');
+    toastFor(p, '🔦 ' + DUN_NAME[h.k] + ' – der goldene Wärter oben trägt die große Beute. Vorsicht, Wächter!', '#ffcf8a');
   } else { const o = hatchPos(h.k); p.x = o.x; p.y = o.y + 1.6 * TS; toastFor(p, 'Zurück an der Oberfläche.', '#cfe8ff'); }
   p.tp++; sfxFor(p, 'zap'); burst(p.x, p.y, '#ffcf8a', 20, 160, 0.6, 3);
   return true;
@@ -1704,9 +1690,8 @@ function dunFill(k) {
       z.guard = k; z.hp *= 1.3; z.maxHp *= 1.3;
     }
   }
-  const L = S.dunRooms[k].loot;
-  S.chests = S.chests.filter(c => c.dun !== k);
-  S.chests.push({ id: S.nextChest++, x: L.x, y: L.y - TS, dun: k });
+  const L = S.dunRooms[k].loot, w = spawnZombie('brute', { tx: Math.floor(L.x / TS), ty: Math.floor(L.y / TS) - 1 });
+  w.guard = k; w.warden = true; w.hp *= 3 + 0.3 * N; w.maxHp = w.hp; w.golden = true;
 }
 function dimTick(dt) {
   if (!S.portal) { const h0 = allHQs()[0]; if (h0) withTeam(S.teams.get(h0.team), makePortal); }
@@ -1767,7 +1752,7 @@ let lastBiome = -1;
 function biomeNotice() {
   if (!S || !S.player || !S.biome || mode !== 'play') return;
   const b = biomeAtW(S.player.x, S.player.y);
-  if (b !== lastBiome) { if (lastBiome >= 0) toast((['🌿', '🌲', '🏜', '❄', '🐸', '🌀', '🏚', '🔦'][b]) + ' ' + BIOME_NAME[b] + (b === 4 ? ' – der Schlamm bremst dich' : b === 6 ? ' – in den Ruinen liegen Truhen und Schrott' : ''), b === 5 ? '#d8b4ff' : '#cfe8ff'); lastBiome = b; }
+  if (b !== lastBiome) { if (lastBiome >= 0) toast((['🌿', '🌲', '🏜', '❄', '🐸', '🌀', '🏚', '🔦'][b]) + ' ' + BIOME_NAME[b] + (b === 4 ? ' – der Schlamm bremst dich' : b === 6 ? ' – in den Ruinen liegt Schrott' : ''), b === 5 ? '#d8b4ff' : '#cfe8ff'); lastBiome = b; }
 }
 function weatherTick(dt) {
   if (S.weather !== 2 || !S.started) return;
@@ -1844,7 +1829,9 @@ function killZombie(z) {
       if (Math.random() < (z.type === 'boss' ? 1 : z.type === 'armored' ? 0.45 : 0.03)) giveMat(k, 'e', z.type === 'boss' ? 4 : 1);
     }
   }
-  if (z.golden) {
+  if (z.warden) dropLoot(z.x, z.y, z.guard);
+  else if (Math.random() < (z.type === 'boss' ? 1 : z.guard !== undefined ? 0.22 : z.type === 'brute' || z.type === 'armored' ? 0.12 : 0.05)) dropLoot(z.x, z.y);
+  if (z.golden && !z.warden) {
     S.gold += 75; S.goldEarned += 75;
     burst(z.x, z.y, '#ffd36b', 40, 260, 1.0, 4); ring(z.x, z.y, 90, 0.5, '#ffd36b');
     floatText(z.x, z.y - 34, 'GOLDZOMBIE! +75 Gold', '#ffe27a', 18);
@@ -1869,14 +1856,13 @@ function killZombie(z) {
 }
 function hurtPlayer(p, dmg) {
   if (p.dead > 0 || p.afk || p.invT > 0 || p.z > 6) return;   // in der Luft weicht man aus
-  dmg *= (1 - 0.07 * (p.sk.armor || 0)) * (1 - armorRed(p)) * (p.drive ? 0.5 : 1);
+  dmg *= (1 - 0.07 * (p.sk.armor || 0)) * (1 - armorRed(p));
   p.hp -= dmg; p.lastHurt = S.t; p.flash = 0.15;
   burst(p.x, p.y, '#c0392b', 8, 130, 0.45, 2.5);
   shakeFor(p, 2.5);
   sfxFor(p, 'hurt');
   if (p.hp <= 0) {
     p.hp = 0; p.dead = 5;
-    if (p.drive) { const v = vById(p.drive); if (v) v.driver = -1; p.drive = 0; }
     burst(p.x, p.y, '#c0392b', 40, 220, 0.9, 3.5);
     sfxFor(p, 'die');
     toastFor(p, 'Du bist gestorben – Respawn in 5 Sekunden', '#ff7b6b');
@@ -1967,7 +1953,7 @@ function toggleView() {
 const mouseLocked = () => typeof document !== 'undefined' && !!canvas && document.pointerLockElement === canvas;
 function jump(p) {
   p = p || S.player;
-  if (!p || p.dead > 0 || p.z > 0.5 || mode !== 'play' || p.drive) return;
+  if (!p || p.dead > 0 || p.z > 0.5 || mode !== 'play') return;
   p.vz = 345; p.z = 0.1;
   if (p.afk) setAfk(p, false);
   SFX.play('swing', p.x, p.y);
@@ -2246,57 +2232,14 @@ function actCraftEq(kind, id) {
   if (err) { toast(err, '#ff7b6b'); SFX.play('error', undefined, undefined, true); }
 }
 // Verbrauchsgegenstand benutzen (Host). a = Zielpunkt
-// ---------- Buggy: aus Schrott gebaut, schnell, überfährt Zombies, braucht Sprit (Chemie)
-const BUGGY_COST = { w: 0, s: 40, g: 80, i: 25, e: 4, h: 3 };
-const vById = id => S.vehicles && S.vehicles.find(v => v.id === id);
-function buildBuggy(p) { return withTeam(teamOf(p), () => {
-  if (!S.vehicles) S.vehicles = [];
-  if (S.vehicles.some(v => v.owner === p.id)) return 'Du hast schon einen Buggy';
-  if (!eqCostOk(p, BUGGY_COST)) return 'Nicht genug Material: ' + eqCostText(BUGGY_COST);
-  if (S.biome[tileAt(p.x, p.y)] === 7) return 'Nicht im Bunker';
-  eqPay(p, BUGGY_COST);
-  S.vehicles.push({ id: (S.nextVeh = (S.nextVeh || 0) + 1), x: p.x + Math.cos(p.face) * 50, y: p.y + Math.sin(p.face) * 50, face: p.face, owner: p.id, fuel: 100, driver: -1 });
-  burst(p.x, p.y, '#c8a040', 26, 160, 0.6, 3); sfxFor(p, 'upgrade');
-  toastFor(p, '🚙 Buggy gebaut! Geh hin und drück F (Handy: Einsteigen)', '#ffe27a');
-  return null;
-}); }
-function refuel(p) {
-  const v = S.vehicles && S.vehicles.find(q => q.owner === p.id);
-  if (!v) return 'Kein Buggy';
-  if (v.fuel >= 99) return 'Der Tank ist voll';
-  if (!(p.mat.h > 0)) return 'Zum Tanken brauchst du 1 🧪 Chemie';
-  p.mat.h--; v.fuel = Math.min(100, v.fuel + 40); sfxFor(p, 'click'); toastFor(p, '⛽ Getankt: ' + Math.round(v.fuel) + ' %', '#ffe27a');
-  return null;
-}
-function nearVehicle(p) { let best = null, bd = 1.9 * TS; for (const v of S.vehicles || []) { if (v.driver >= 0) continue; const d = Math.hypot(v.x - p.x, v.y - p.y); if (d < bd) { bd = d; best = v; } } return best; }
-// Eine Taste für alles in der Nähe: aussteigen, einsteigen, Bunker-Luke
+// Eine Taste für alles in der Nähe (zurzeit: Bunker-Luke)
 function interact(p) {
   if (!p || p.dead > 0) return;
-  if (p.drive) { const v = vById(p.drive); p.drive = 0; if (v) { v.driver = -1; p.x = v.x + Math.cos(v.face + Math.PI / 2) * 36; p.y = v.y + Math.sin(v.face + Math.PI / 2) * 36; p.tp++; } return; }
-  const v = nearVehicle(p);
-  if (v) { p.drive = v.id; v.driver = p.id; p.x = v.x; p.y = v.y; p.tp++; sfxFor(p, 'click'); if (v.fuel <= 0) toastFor(p, 'Tank leer – tanke im Inventar (I → Ausrüstung) mit 🧪 Chemie', '#ff9a7a'); return; }
   useHatch(p);
 }
 function actInteract() {
   if (NET.role === 'client') { netSendR({ t: 'act' }); return; }
   interact(S.player);
-}
-function vehicleTick(p, dt) {
-  const v = vById(p.drive);
-  if (!v) { p.drive = 0; return; }
-  const dx = p.x - v.x, dy = p.y - v.y, d = Math.hypot(dx, dy), sp = d / Math.max(dt, 0.001);
-  if (d > 0.5) v.face = Math.atan2(dy, dx);
-  v.x = p.x; v.y = p.y;
-  if (!S.isClient) {
-    v.fuel = Math.max(0, v.fuel - d / TS * 0.3);
-    if (sp > 140) forZ(p.x, p.y, 70, z => {
-      if ((z.ramT || 0) > S.t || Math.hypot(z.x - p.x, z.y - p.y) > 26 + z.r) return;
-      z.ramT = S.t + 0.5; z.lastHit = p;
-      const a = Math.atan2(z.y - p.y, z.x - p.x);
-      hurtZombie(z, sp * 0.14 * (1 + 0.3 * (hqLvl() - 1)), { x: Math.cos(a) * 420, y: Math.sin(a) * 420 });
-      addShake(2, p.x, p.y);
-    });
-  }
 }
 function useCons(p, id, a) {
   if (!p || p.dead > 0 || (p.useCd || 0) > 0 || !(p.cons[id] > 0)) return;
@@ -2388,8 +2331,7 @@ function movePlayer(p, dt) {
   let mx = p.inp.mx, my = p.inp.my;
   const ml = Math.hypot(mx, my);
   const onMtn = S.res[tileAt(p.x, p.y)] === 6;
-  const veh = p.drive ? vById(p.drive) : null;
-  const spd = (veh ? (veh.fuel > 0 ? 2.3 : 0.4) : 1) * 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0) + armorSpd(p)) * (p.rageT > 0 ? 1.2 : 1) * (biomeAtW(p.x, p.y) === 4 && !onMtn ? 0.85 : 1) * (onMtn ? 0.75 : 1);
+  const spd = 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0) + armorSpd(p)) * (p.rageT > 0 ? 1.2 : 1) * (biomeAtW(p.x, p.y) === 4 && !onMtn ? 0.85 : 1) * (onMtn ? 0.75 : 1);
   // Sprung
   if (p.z > 0 || p.vz > 0) { p.vz -= 1500 * dt; p.z = Math.max(0, p.z + p.vz * dt); if (p.z <= 0) { p.vz = 0; if (!HEADLESS) burst(p.x, p.y + 8, '#a89a88', 4, 60, 0.35, 2.5); } }
   if (ml > 0) { mx /= ml; my /= ml; p.x += mx * spd * dt; p.y += my * spd * dt; p.walk += dt * 10; }
@@ -2439,8 +2381,7 @@ function updPlayer(p, dt) {
       hurtZombie(z, critDmg(p, dmg), { x: Math.cos(a) * 380, y: Math.sin(a) * 380 });
     });
   }
-  if (p.drive) vehicleTick(p, dt);
-  if (p.inp.down && p.cd <= 0 && !(p.danceT > 0) && !p.drive) playerAttack(p);
+  if (p.inp.down && p.cd <= 0 && !(p.danceT > 0)) playerAttack(p);
 }
 function playerAttack(p) {
   if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
@@ -3226,7 +3167,6 @@ function netHostTick(dt) {
     an: (S.animals || []).map(a => [a.id, ATYPES.indexOf(a.type), a.x | 0, a.y | 0, r2(a.face), Math.round(100 * a.hp / a.maxHp), a.flash > 0 ? 1 : 0, a.vx | 0, a.vy | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0, z.frostT > 0 ? 1 : 0, z.golden ? 1 : 0]),
     fi: S.fires.map(f => [f.x | 0, f.y | 0, f.r | 0, r2(f.t)]),
-    ve: (S.vehicles || []).map(v => [v.id, v.x | 0, v.y | 0, r2(v.face), v.driver, Math.round(v.fuel), v.owner]),
     pr: S.projs.map(q => [PKINDS.indexOf(q.k), q.x | 0, q.y | 0, q.k === 'bomb' ? ((q.tx - q.sx) / q.T) | 0 : q.vx | 0, q.k === 'bomb' ? ((q.ty - q.sy) / q.T) | 0 : q.vy | 0, q.h | 0]),
     bd,
   });
@@ -3266,9 +3206,6 @@ function hostHandleClient(m, p) {
     if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
   } else if (m.t === 'act') {
     interact(p);
-  } else if (m.t === 'veh') {
-    const err = m.a === 'fuel' ? refuel(p) : buildBuggy(p);
-    if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
   } else if (m.t === 'use') {
     useCons(p, String(m.id), { x: clamp(+m.x || 0, 0, WORLD), y: clamp(+m.y || 0, 0, WORLD) });
   } else if (m.t === 'tool') {
@@ -3404,8 +3341,6 @@ function clientSnapshot(m) {
   });
   S.projs = m.pr.map(a => ({ k: PKINDS[a[0]], x: a[1], y: a[2], vx: a[3], vy: a[4], h: a[5], r: 6 }));
   S.fires = (m.fi || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], tick: 1 }));
-  S.vehicles = (m.ve || []).map(a => ({ id: a[0], x: a[1], y: a[2], face: a[3], driver: a[4], fuel: a[5], owner: a[6] }));
-  { const me = S.player, mv = S.vehicles.find(v => v.driver === me.id); me.drive = mv ? mv.id : 0; if (mv) { mv.x = me.x; mv.y = me.y; } }
   if (m.ch) S.chests = m.ch.map(a => ({ id: a[0], x: a[1], y: a[2], dun: a[3] ? 0 : undefined }));
   if (m.po) { S.portal = { x: m.po[0], y: m.po[1] }; S.portal2 = { x: m.po[2], y: m.po[3] }; }
   for (const a of m.bd) {
@@ -4423,7 +4358,7 @@ function drawTouchUI() {
     ['⤒', 'Springen', () => jump()],
     ['🛠', 'Bauen', () => toggleCraft()],
     ['☰', 'Mehr', () => { touch.more = !touch.more; }],
-    ...(S.player.drive || nearVehicle(S.player) || nearHatch(S.player) ? [[S.player.drive ? '⏏' : nearVehicle(S.player) ? '🚙' : '🔦', 'Aktion', () => actInteract()]] : []),
+    ...(nearHatch(S.player) ? [['🔦', 'Aktion', () => actInteract()]] : []),
     ...CONS.filter(c => S.player.cons && S.player.cons[c.id] > 0).map(c => [c.icon, c.name, () => actUse(c.id)]),
   ];
   if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
@@ -4661,11 +4596,10 @@ function drawHUD() {
     ctx.fillStyle = c; circle(cx, cy, 1.5); ctx.fill();
     if (!isTouch && !mouseLocked()) text('Linksklick = Maus fangen · oder rechte Maustaste halten und bewegen = umsehen', cx, cy + 34, 13, '#ffe27a', 'center', '600');
   }
-  // Hinweis für Interaktion (Buggy, Bunker)
+  // Hinweis für Interaktion (Bunker)
   if (mode === 'play' && p.dead <= 0) {
-    const h = !p.drive && nearHatch(p), v = !p.drive && nearVehicle(p);
-    const msg = p.drive ? '🚙 ' + (isTouch ? 'Aussteigen: Knopf rechts' : 'F = Aussteigen') + ' · Sprit ' + Math.round((vById(p.drive) || { fuel: 0 }).fuel) + ' %'
-      : v ? '🚙 ' + (isTouch ? 'Einsteigen: Knopf rechts' : 'F = Einsteigen') : h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
+    const h = nearHatch(p);
+    const msg = h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
     if (msg) { ctx.font = 'bold 15px ' + FONT; const w = ctx.measureText(msg).width + 30; panel(VW / 2 - w / 2, VH * 0.62, w, 34, 0.85); text(msg, VW / 2, VH * 0.62 + 17, 15, '#ffe27a', 'center'); }
   }
   // Ressourcen
@@ -5198,23 +5132,6 @@ function drawEquipTab(x, y, w, h) {
     } else text('★ Höchste Stufe', cx + cw / 2, cy + ch - 22, 13, '#ffd36b', 'center', '700');
   });
   let cy0 = y + 26 + rowsA * (ch + 8) + 8;
-  // Fahrzeug
-  {
-    const v = (S.vehicles || []).find(q => q.owner === p.id), vy = y + h - 58;
-    card(x, vy, w, 54, !!v);
-    text('🚙 Buggy', x + 12, vy + 18, 14, '#fff', 'left', '700');
-    if (!v) {
-      text('Schnell, überfährt Zombies, braucht Sprit (🧪 Chemie)', x + 12, vy + 38, 10, '#bbb', 'left', '600');
-      costLine(BUGGY_COST, x + w - 330, vy + 18);
-      btn(x + w - 140, vy + 14, 128, 'Bauen', withTeam(teamOf(p), () => eqCostOk(p, BUGGY_COST)), () => { if (NET.role === 'client') netSendR({ t: 'veh', a: 'build' }); else { const e = buildBuggy(p); if (e) toast(e, '#ff7b6b'); } });
-    } else {
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x + 110, vy + 12, 160, 10);
-      ctx.fillStyle = v.fuel > 30 ? '#8fe08f' : '#ff9a5a'; ctx.fillRect(x + 110, vy + 12, 160 * v.fuel / 100, 10);
-      text('Sprit ' + Math.round(v.fuel) + ' %', x + 280, vy + 17, 12, '#ddd', 'left', '600');
-      text(isTouch ? 'Einsteigen: hingehen, Knopf rechts' : 'Einsteigen/Aussteigen: F', x + 12, vy + 38, 10, '#bbb', 'left', '600');
-      btn(x + w - 170, vy + 14, 158, 'Tanken (1 🧪 = +40 %)', (p.mat.h | 0) > 0 && v.fuel < 99, () => { if (NET.role === 'client') netSendR({ t: 'veh', a: 'fuel' }); else { const e = refuel(p); if (e) toast(e, '#ff7b6b'); } });
-    }
-  }
   text('🎒 VERBRAUCHSGEGENSTÄNDE', x + 4, cy0 + 8, 13, '#ffcf8a', 'left', '700');
   text(isTouch ? 'Benutzen: Knöpfe rechts' : 'Benutzen: Tasten L · G · Z (oder anklicken oben links)', x + w - 4, cy0 + 8, 12, '#aaa', 'right', '600');
   const ccols = w > 560 ? 3 : 2, ccw = (w - (ccols - 1) * 8) / ccols, cch = Math.max(96, Math.min(120, y + h - 64 - cy0 - 26));
@@ -5288,6 +5205,27 @@ function drawSlotTooltip(h) {
   lines.forEach((l, i) => text(l, x + 10, y + 36 + i * 18, 13, '#ddd', 'left', '600'));
   if (cost) text(costText(cost), x + 10, y + hh - 14, 13, canAfford(cost) ? '#8fe08f' : '#ff8a7a');
 }
+function mmView() {
+  const p = S.player, tx = Math.floor(p.x / TS), ty = Math.floor(p.y / TS);
+  const sq = (x0, y0, w, h) => { const n = Math.max(w, h); return { x0: x0 - (n - w) / 2, y0: y0 - (n - h) / 2, n, hide: [] }; };
+  if (inDim(tx, ty)) return sq(DIM.x0, DIM.y0, DIM.x1 - DIM.x0, DIM.y1 - DIM.y0);
+  if (inDun(tx, ty)) { const k = clamp(Math.floor((tx - DUN.x0) / DUN.w), 0, DUN.n - 1); return sq(DUN.x0 + k * DUN.w, DUN.y0, DUN.w, DUN.h); }
+  return { x0: 0, y0: 0, n: MAP, hide: [[DIM.x0 - 2, DIM.y0 - 2, DIM.x1 - DIM.x0 + 4, DIM.y1 - DIM.y0 + 4], [DUN.x0 - 1, DUN.y0 - 1, DUN.n * DUN.w + 2, DUN.h + 2]] };
+}
+// Karte zeichnen; gibt die Umrechnung Welt → Bildschirm und einen Sichtbarkeitstest zurück
+function mmDraw(x, y, size) {
+  const v = mmView();
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, size, size); ctx.clip();
+  ctx.fillStyle = '#07080b'; ctx.fillRect(x, y, size, size);
+  ctx.imageSmoothingEnabled = false;
+  if (mmC) ctx.drawImage(mmC, v.x0, v.y0, v.n, v.n, x, y, size, size);
+  ctx.imageSmoothingEnabled = true;
+  const k = size / (v.n * TS), ox = x - v.x0 * TS * k, oy = y - v.y0 * TS * k;
+  ctx.fillStyle = 'rgb(58,84,48)';   // wie normale Wiese – man soll nicht sehen, dass dort etwas ist
+  for (const h of v.hide) ctx.fillRect(ox + h[0] * TS * k, oy + h[1] * TS * k, h[2] * TS * k, h[3] * TS * k);
+  const vis = (wx, wy) => { const tx = wx / TS, ty = wy / TS; if (tx < v.x0 || ty < v.y0 || tx >= v.x0 + v.n || ty >= v.y0 + v.n) return false; for (const h of v.hide) if (tx >= h[0] && ty >= h[1] && tx < h[0] + h[2] && ty < h[1] + h[3]) return false; return true; };
+  return { k, ox, oy, vis };
+}
 function mmSize() { return VW < 900 ? 120 : 170; }
 let mapOpen = false;
 function drawBigMap() {
@@ -5295,34 +5233,31 @@ function drawBigMap() {
   ctx.fillStyle = 'rgba(5,8,12,0.6)'; ctx.fillRect(0, 0, VW, VH);
   panel(x - 8, y - 34, size + 16, size + 42, 0.95);
   text('Karte (M zum Schließen) · Klick setzt eine Markierung', x, y - 17, 13, '#ffe27a', 'left');
-  ctx.imageSmoothingEnabled = false;
-  if (mmC) ctx.drawImage(mmC, x, y, size, size);
-  ctx.imageSmoothingEnabled = true;
-  const k = size / WORLD;
-  if (S.hq) {
+  const M = mmDraw(x, y, size), k = M.k, vis = M.vis, X = wx => M.ox + wx * k, Y = wy => M.oy + wy * k;
+  if (S.hq && vis(S.hq.tx * TS, S.hq.ty * TS)) {
     const hx = (S.hq.tx + 1.5) * TS, hy = (S.hq.ty + 1.5) * TS, R = (buildRange() + 0.5) * TS;
-    ctx.strokeStyle = 'rgba(255,230,140,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(x + (hx - R) * k, y + (hy - R) * k, 2 * R * k, 2 * R * k);
+    ctx.strokeStyle = 'rgba(255,230,140,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(X(hx - R), Y(hy - R), 2 * R * k, 2 * R * k);
   }
   for (const b of S.buildings) {
+    if (!vis(b.tx * TS, b.ty * TS)) continue;
     ctx.fillStyle = b.type === 'hq' ? '#ffd36b' : TOWERS[b.type] ? '#5fb0ff' : b.type === 'trap' ? '#c0392b' : '#c8b898';
-    const s = Math.max(2, b.size * TS * k); ctx.fillRect(x + b.tx * TS * k, y + b.ty * TS * k, s, s);
+    const s = Math.max(2, b.size * TS * k); ctx.fillRect(X(b.tx * TS), Y(b.ty * TS), s, s);
   }
-  for (const a of S.animals || []) { ctx.fillStyle = '#c8955a'; ctx.fillRect(x + a.x * k - 2, y + a.y * k - 2, 4, 4); }
-  for (const c of S.chests) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(x + c.x * k - 4, y + c.y * k - 4, 8, 8); }
-  for (const z of S.zombies) { ctx.fillStyle = z.type === 'boss' ? '#e07bff' : '#ff4a4a'; const s = z.type === 'boss' ? 7 : 3; ctx.fillRect(x + z.x * k - s / 2, y + z.y * k - s / 2, s, s); }
-  for (const pg of S.pings) { ctx.strokeStyle = pingCol(pg.pid); ctx.lineWidth = 2; circle(x + pg.x * k, y + pg.y * k, 8 + Math.sin(animT * 8) * 2); ctx.stroke(); }
-  for (const q of S.players) if (q.dead <= 0) {
-    ctx.fillStyle = q === S.player ? '#ffffff' : '#ff9a90'; circle(x + q.x * k, y + q.y * k, 5); ctx.fill();
+  for (const a of S.animals || []) if (vis(a.x, a.y)) { ctx.fillStyle = '#c8955a'; ctx.fillRect(X(a.x) - 2, Y(a.y) - 2, 4, 4); }
+  for (const c of S.chests) if (vis(c.x, c.y)) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(X(c.x) - 4, Y(c.y) - 4, 8, 8); }
+  for (const z of S.zombies) if (vis(z.x, z.y)) { ctx.fillStyle = z.type === 'boss' ? '#e07bff' : '#ff4a4a'; const s = z.type === 'boss' ? 7 : 3; ctx.fillRect(X(z.x) - s / 2, Y(z.y) - s / 2, s, s); }
+  for (const pg of S.pings) if (vis(pg.x, pg.y)) { ctx.strokeStyle = pingCol(pg.pid); ctx.lineWidth = 2; circle(X(pg.x), Y(pg.y), 8 + Math.sin(animT * 8) * 2); ctx.stroke(); }
+  for (const q of S.players) if (q.dead <= 0 && vis(q.x, q.y)) {
+    ctx.fillStyle = q === S.player ? '#ffffff' : '#ff9a90'; circle(X(q.x), Y(q.y), 5); ctx.fill();
     ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5; ctx.stroke();
-    text(q.name || ('P' + (q.id + 1)), x + q.x * k, y + q.y * k - 12, 11, '#fff', 'center');
+    text(q.name || ('P' + (q.id + 1)), X(q.x), Y(q.y) - 12, 11, '#fff', 'center');
   }
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
-  ctx.strokeRect(x + camX * k, y + camY * k, VW * k, VH * k);
+  ctx.restore();
   // Legende
-  const lg = [['#ffffff', 'Du'], ['#ffd36b', 'Reaktor'], ['#5fb0ff', 'Türme'], ['#ff4a4a', 'Zombies'], ['#ffe14a', 'Truhen'], ['#c8955a', 'Tiere'], ['rgb(214,176,52)', 'Golderz']];
+  const lg = [['#ffffff', 'Du'], ['#ffd36b', 'Reaktor'], ['#5fb0ff', 'Türme'], ['#ff4a4a', 'Zombies'], ['#ffe14a', 'Beute'], ['#c8955a', 'Tiere'], ['rgb(214,176,52)', 'Golderz']];
   lg.forEach((l, i) => { ctx.fillStyle = l[0]; ctx.fillRect(x + 6 + i * 92, y + size - 18, 10, 10); text(l[1], x + 20 + i * 92, y + size - 13, 11, '#eee', 'left', '600'); });
   ui.push({ x: x - 8, y: y - 34, w: size + 16, h: size + 42, fn: () => {
-    const wx = (input.sx / uiS - x) / k, wy = (input.sy / uiS - y) / k;
+    const wx = (input.sx / uiS - M.ox) / k, wy = (input.sy / uiS - M.oy) / k;
     if (wx >= 0 && wy >= 0 && wx <= WORLD && wy <= WORLD) pingAt(wx, wy);
   } });
 }
@@ -5330,33 +5265,31 @@ function drawMinimap() {
   const size = mmSize(), m = 12;
   const x = VW - size - m, y = VH - size - m;
   panel(x - 4, y - 4, size + 8, size + 8, 0.8);
-  ctx.imageSmoothingEnabled = false;
-  if (mmC) ctx.drawImage(mmC, x, y, size, size);
-  ctx.imageSmoothingEnabled = true;
-  const k = size / WORLD;
-  if (S.hq) {
+  const M = mmDraw(x, y, size), k = M.k, vis = M.vis, X = wx => M.ox + wx * k, Y = wy => M.oy + wy * k;
+  if (S.hq && vis(S.hq.tx * TS, S.hq.ty * TS)) {
     const hx = (S.hq.tx + 1.5) * TS, hy = (S.hq.ty + 1.5) * TS, R = (buildRange() + 0.5) * TS;
-    ctx.strokeStyle = 'rgba(255,230,140,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(x + (hx - R) * k, y + (hy - R) * k, 2 * R * k, 2 * R * k);
+    ctx.strokeStyle = 'rgba(255,230,140,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(X(hx - R), Y(hy - R), 2 * R * k, 2 * R * k);
   }
   for (const b of S.buildings) {
+    if (!vis(b.tx * TS, b.ty * TS)) continue;
     const own = b.team === tidOf(S.player);
     ctx.fillStyle = b.type === 'hq' ? (own ? '#ffd36b' : '#ff6a4a') : !own ? 'rgba(255,140,110,0.7)' : TOWERS[b.type] ? '#5fb0ff' : '#c8b898';
     const s = Math.max(b.type === 'hq' ? 4 : 2, b.size * TS * k);
-    ctx.fillRect(x + b.tx * TS * k, y + b.ty * TS * k, s, s);
+    ctx.fillRect(X(b.tx * TS), Y(b.ty * TS), s, s);
   }
-  for (const c of S.chests) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(x + c.x * k - 3, y + c.y * k - 3, 6, 6); }
-  if (S.portal) for (const po of [S.portal, S.portal2]) { ctx.fillStyle = Math.sin(animT * 4) > 0 ? '#d8b4ff' : '#8a4ae0'; circle(x + po.x * k, y + po.y * k, 4); ctx.fill(); }
-  for (const a of S.animals || []) { ctx.fillStyle = '#c8955a'; ctx.fillRect(x + a.x * k - 1.5, y + a.y * k - 1.5, 3, 3); }
-  for (const pg of S.pings) if (Math.sin(animT * 10) > 0) { ctx.strokeStyle = pingCol(pg.pid); ctx.lineWidth = 2; circle(x + pg.x * k, y + pg.y * k, 6); ctx.stroke(); }
+  for (const c of S.chests) if (vis(c.x, c.y)) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(X(c.x) - 3, Y(c.y) - 3, 6, 6); }
+  if (S.portal) for (const po of [S.portal, S.portal2]) if (vis(po.x, po.y)) { ctx.fillStyle = Math.sin(animT * 4) > 0 ? '#d8b4ff' : '#8a4ae0'; circle(X(po.x), Y(po.y), 4); ctx.fill(); }
+  for (const a of S.animals || []) if (vis(a.x, a.y)) { ctx.fillStyle = '#c8955a'; ctx.fillRect(X(a.x) - 1.5, Y(a.y) - 1.5, 3, 3); }
+  for (const pg of S.pings) if (Math.sin(animT * 10) > 0 && vis(pg.x, pg.y)) { ctx.strokeStyle = pingCol(pg.pid); ctx.lineWidth = 2; circle(X(pg.x), Y(pg.y), 6); ctx.stroke(); }
   for (const z of S.zombies) {
-    ctx.fillStyle = z.type === 'boss' ? '#e07bff' : '#ff4a4a';
-    const s = z.type === 'boss' ? 5 : 2.5;
-    ctx.fillRect(x + z.x * k - s / 2, y + z.y * k - s / 2, s, s);
+    if (!vis(z.x, z.y)) continue;
+    ctx.fillStyle = z.type === 'boss' || z.warden ? '#e07bff' : '#ff4a4a';
+    const s = z.type === 'boss' || z.warden ? 5 : 2.5;
+    ctx.fillRect(X(z.x) - s / 2, Y(z.y) - s / 2, s, s);
   }
   const p = S.player;
-  for (const q of S.players) if (q.dead <= 0) { ctx.fillStyle = q === p ? '#fff' : q.clan && q.clan === p.clan ? '#7fffa0' : CHAT_COL[q.id % 8]; circle(x + q.x * k, y + q.y * k, 3); ctx.fill(); }
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;
-  ctx.strokeRect(x + camX * k, y + camY * k, VW * k, VH * k);
+  for (const q of S.players) if (q.dead <= 0 && vis(q.x, q.y)) { ctx.fillStyle = q === p ? '#fff' : q.clan && q.clan === p.clan ? '#7fffa0' : CHAT_COL[q.id % 8]; circle(X(q.x), Y(q.y), 3); ctx.fill(); }
+  ctx.restore();
   ui.push({ x, y, w: size, h: size, fn: () => {} });
 }
 function towerStats(type, L) {
@@ -5600,7 +5533,7 @@ if (!HEADLESS) {
     if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyI') { toggleCraft(); return; }
-    if (e.code === 'KeyF') { if (S.player.drive || nearVehicle(S.player) || nearHatch(S.player)) actInteract(); else selectBuild('trap'); return; }
+    if (e.code === 'KeyF') { if (nearHatch(S.player)) actInteract(); else selectBuild('trap'); return; }
     if (e.code === 'KeyJ') { selectBuild('frost'); return; }
     if (e.code === 'Space') { jump(); return; }
     if (e.code === 'KeyO' || e.code === 'F5') { e.preventDefault(); toggleView(); return; }
@@ -5776,7 +5709,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { cityCenters, hatchPos, dunExit, DUN, isStreet, buildBuggy, interact, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,

@@ -17,6 +17,9 @@
   const geo = (k, f) => { let g = geoCache.get(k); if (!g) { g = f(); geoCache.set(k, g); } return g; };
   const v3 = new T.Vector3(), m4 = new T.Matrix4(), q4 = new T.Quaternion(), s3 = new T.Vector3(), e3 = new T.Euler(), col = new T.Color(), col2 = new T.Color();
   const mB = new T.Matrix4(), mL = new T.Matrix4(), pB = new T.Vector3(), qB = new T.Quaternion();
+  const frus = new T.Frustum(), projM = new T.Matrix4(), sph = new T.Sphere(), vC = new T.Vector3();
+  const inView = (x, y, z, r) => frus.intersectsSphere(sph.set(vC.set(x, y, z), r));
+  const FH = 1.9;                   // Stockwerkhöhe der Stadtruinen
   const hash = n => { const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return s - Math.floor(s); };
 
   const R3 = window.NW3D = {
@@ -86,7 +89,7 @@
 
   // ---------------------------------------------------------------- Setup
   let fpView = null, fpTools = null, fpMetal = null, lastFp = null;
-  let ruinFloor, ruinTop, bunkerWall, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
+  let ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
   let projArrow, projBall, parts, glows, rain;
@@ -186,15 +189,36 @@
         .lit(IC(0.5, 0), '#a8bca0', 0, 1.3, 0, 0, 0.5, 0, 1.15, 0.45, 1.15, 0.1);
       oaks = inst(k.build().lit, matInst, MAXRES, true); }
     rocks = inst(rockGeometry(), matInst, MAXRES, true);
-    { const k = new Kit().lit(BX(1, 0.96, 1), '#ffffff', 0, 0.48, 0).lit(BX(1.02, 0.05, 1.02), '#c8c8c8', 0, 0.97, 0);
-      for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) k.lit(BX(nz ? 0.34 : 0.02, 0.36, nx ? 0.34 : 0.02), '#1a1a1e', nx * 0.505, 0.55, nz * 0.505);
+    { const k = new Kit().lit(BX(1, FH, 1), '#ffffff', 0, FH / 2, 0).lit(BX(1.04, 0.1, 1.04), '#c4c4c4', 0, FH - 0.05, 0);
+      for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        k.lit(BX(nz ? 0.42 : 0.02, 0.8, nx ? 0.42 : 0.02), '#18181c', nx * 0.505, 1.0, nz * 0.505);               // Fensterhöhle
+        k.lit(BX(nz ? 0.5 : 0.06, 0.06, nx ? 0.5 : 0.06), '#b8b8b8', nx * 0.52, 0.58, nz * 0.52);              // Fensterbank
+      }
       ruinFloor = inst(k.build().lit, matInst, 9000, true); }
     { const k = new Kit().lit(BX(1, 0.12, 1), '#e6e6e6', 0, 0.06, 0).lit(BX(0.4, 0.22, 0.3), '#d0d0d0', -0.25, 0.2, 0.2, 0, 0.3, 0.2).lit(BX(0.3, 0.16, 0.4), '#dcdcdc', 0.28, 0.16, -0.22, 0.2, 0, 0)
         .lit(CY(0.02, 0.02, 0.4, 4), '#8a4a2a', 0.1, 0.3, 0.1, 0.3, 0, 0.2).lit(CY(0.02, 0.02, 0.32, 4), '#8a4a2a', -0.2, 0.26, -0.15, -0.4, 0, 0.3);
       ruinTop = inst(k.build().lit, matInst, 9000, true); }
     bunkerWall = inst(new Kit().lit(BX(1, 2.2, 1), '#ffffff', 0, 1.1, 0).lit(BX(1.02, 0.18, 1.02), '#d8a82a', 0, 0.09, 0).lit(BX(1.02, 0.06, 1.02), '#1a1a1a', 0, 0.2, 0)
-      .lit(CY(0.06, 0.06, 1.02, 6), '#7a7e86', 0.5, 1.7, 0.3, Math.PI / 2, 0, 0).lit(CY(0.04, 0.04, 1.02, 6), '#8a4a2a', 0.5, 1.5, -0.2, Math.PI / 2, 0, 0)
       .lit(BX(1.04, 0.08, 1.04), '#6a6e76', 0, 2.2, 0).build().lit, matInst, 6000, true);
+    // Rohre laufen durchgehend an den Wänden entlang (ein Stück pro Wandfeld, immer gleich ausgerichtet)
+    bPipe = inst(new Kit().lit(CY(0.06, 0.06, 1.0, 6), '#7a7e86', 0, 2.0, 0, 0, 0, Math.PI / 2).lit(CY(0.04, 0.04, 1.0, 6), '#8a4a2a', 0, 1.82, 0, 0, 0, Math.PI / 2)
+      .lit(BX(0.04, 0.3, 0.06), '#4a4e56', 0, 1.9, -0.04).build().lit, matInst, 6000, false);
+    // Bunker-Einrichtung: Wandlampen mit Gitter, Kistenstapel, Maschinen, Labortanks
+    bLamp = inst(new Kit().lit(BX(0.1, 0.16, 0.36), '#3a3e46', 0, 0, 0).lit(BX(0.04, 0.02, 0.38), '#8a8e96', 0.06, 0.06, 0).lit(BX(0.04, 0.02, 0.38), '#8a8e96', 0.06, -0.06, 0)
+      .lit(BX(0.2, 0.03, 0.06), '#3a3e46', -0.06, 0.1, 0).build().lit, matInst, 400, false);
+    bLampG = inst(BX(0.05, 0.1, 0.3), new T.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), 400, false);
+    { const k = new Kit().lit(BX(0.62, 0.5, 0.62), '#ffffff', -0.1, 0.25, 0.05).lit(BX(0.64, 0.05, 0.64), '#5a4a32', -0.1, 0.5, 0.05)
+        .lit(BX(0.5, 0.42, 0.5), '#e8e8e8', 0.18, 0.21, -0.2, 0, 0.3, 0).lit(BX(0.44, 0.38, 0.44), '#f0f0f0', -0.05, 0.69, 0, 0, 0.5, 0)
+        .lit(BX(0.04, 0.5, 0.64), '#5a4a32', 0.21, 0.25, 0.05).lit(BX(0.04, 0.5, 0.64), '#5a4a32', -0.41, 0.25, 0.05);
+      bCrate = inst(k.build().lit, matInst, 500, true); }
+    { const k = new Kit().lit(BX(0.8, 0.9, 0.6), '#5a6068', 0, 0.45, 0).lit(BX(0.84, 0.08, 0.64), '#3a3e46', 0, 0.04, 0).lit(BX(0.5, 0.3, 0.02), '#1a2a22', 0.05, 0.65, 0.31)
+        .lit(CY(0.12, 0.12, 0.5, 8), '#7a7e86', -0.25, 1.1, 0).lit(CY(0.05, 0.05, 0.6, 6), '#8a4a2a', 0.25, 1.15, -0.1, 0, 0, 0.5)
+        .lit(CY(0.09, 0.09, 0.04, 10), '#c8a040', 0.3, 0.5, 0.31, Math.PI / 2, 0, 0).lit(BX(0.06, 0.06, 0.02), '#d82a2a', -0.25, 0.8, 0.31).lit(BX(0.06, 0.06, 0.02), '#2ad84a', -0.12, 0.8, 0.31);
+      bMachine = inst(k.build().lit, matInst, 300, true); }
+    bTank = inst(new Kit().lit(CY(0.32, 0.36, 0.14, 12), '#4a4e56', 0, 0.07, 0).lit(CY(0.32, 0.32, 0.12, 12), '#4a4e56', 0, 1.5, 0).lit(CY(0.05, 0.05, 0.4, 6), '#7a7e86', 0, 1.75, 0)
+      .lit(BX(0.04, 1.3, 0.04), '#6a6e76', 0.3, 0.8, 0).lit(BX(0.04, 1.3, 0.04), '#6a6e76', -0.3, 0.8, 0).lit(BX(0.04, 1.3, 0.04), '#6a6e76', 0, 0.8, 0.3).lit(BX(0.04, 1.3, 0.04), '#6a6e76', 0, 0.8, -0.3)
+      .build().lit, matInst, 200, true);
+    bTankG = inst(new Kit().lit(CY(0.28, 0.28, 1.3, 12), '#ffffff', 0, 0.79, 0).lit(SP(0.12, 7, 5), '#c8ffc8', 0.05, 0.9, 0.05).build().lit, new T.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55, toneMapped: false }), 200, false);
     ores = inst(new Kit()
       .lit(OC(0.1), '#f6d05a', 0, 0, 0, 0, 0, 0, 0.8, 2.2, 0.8, 0.15)
       .lit(OC(0.08), '#ffe27a', 0.12, -0.04, 0.05, 0, 0, -0.6, 0.8, 1.8, 0.8, 0.15)
@@ -273,7 +297,7 @@
         .lit(BX(0.42, 0.34, 0.7), '#e6e6e6', -0.2, 0.32, 0, 0, 0, 0.3)
         .lit(SP(0.29, 7, 5), '#e8e8e8', 0, 0.38, 0.43).lit(SP(0.29, 7, 5), '#dcdcdc', 0, 0.36, -0.43)
         .lit(BX(0.46, 0.1, 0.46), '#cfcfcf', 0.02, 0.5, 0);
-      for (let i = 0; i < 7; i++) { const zz = -0.38 + i * 0.13, len = 0.16 + ((i * 37) % 5) * 0.05; k.lit(BX(0.04, len, 0.1), i % 2 ? '#f0f0f0' : '#d8d8d8', 0.27, -0.52 - len / 2 + 0.08, zz, 0, 0, ((i * 13) % 5 - 2) * 0.08); }
+      for (let i = 0; i < 7; i++) { const zz = -0.38 + i * 0.13, len = 0.16 + ((i * 37) % 5) * 0.05; k.lit(BX(0.04, len, 0.1), i % 2 ? '#f0f0f0' : '#d8d8d8', 0.27, -0.32 - len / 2, zz, 0, 0, ((i * 13) % 5 - 2) * 0.08); }
       for (const s of [-1, 1]) for (let i = 0; i < 3; i++) k.lit(BX(0.12, 0.14 + i * 0.05, 0.04), '#e0e0e0', -0.18 + i * 0.16, -0.58 - i * 0.02, s * 0.44, 0, 0, 0.1 * s);
       zTorso = inst(k.build().lit, matInst, MAXZ, true); }
     // Wunden & Knochen (eigene Farben, werden nicht eingefärbt)
@@ -414,7 +438,10 @@
       if (bi === 6) {
         if (G.isStreet(x, y)) { const m = (x + 1500) % 15 === 1 || (y + 1500) % 15 === 1; r = 58 + (v % 6); g = 58 + (v % 6); b = 62 + (v % 5); if (m && (x + y) % 3 === 0 && !((x + 1500) % 15 < 3 && (y + 1500) % 15 < 3)) { r = 170; g = 150; b = 70; } }
         else { r = 112 + (v % 11); g = 108 + (v % 9); b = 100 + (v % 7); if (v < 30) { r = 82; g = 92; b = 62; } }
-      } else if (bi === 7) { r = 46 + (v % 6); g = 46 + (v % 5); b = 50 + (v % 6); if ((x + y) % 4 === 0) { r -= 6; g -= 6; b -= 6; } }
+      } else if (bi === 7) {
+        const bk = Math.floor((x - G.DUN.x0) / G.DUN.w), tone = [[50, 50, 54], [58, 50, 42], [52, 60, 64]][G.clamp(bk, 0, 2)];
+        r = tone[0] + (v % 6); g = tone[1] + (v % 5); b = tone[2] + (v % 6); if ((x + y) % 2 === 0) { r -= 5; g -= 5; b -= 5; }
+      }
       if (S.res[y * MAP + x] === 6) { r = 92 + (v % 9); g = 86 + (v % 7); b = 80 + (v % 5); }
       const i = (y * MAP + x) * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
     }
@@ -553,9 +580,9 @@
         st.lit(BX(1.5, 0.14, 1.5), P.main, 0, 1.98, 0);
         for (const s of [-1, 1]) st.lit(BX(1.5, 0.3, 0.06), P.dark, 0, 2.2, s * 0.72).lit(BX(0.06, 0.3, 1.5), P.dark, s * 0.72, 2.2, 0);
         for (let i = 0; i < 4; i++) st.lit(BX(0.18, 0.1, 0.18), '#8a6a3a', -0.5 + i * 0.12, 2.1, -0.5 + (i % 2) * 0.1);
-        glow(0.62, 2.35, 0.62, 0.5, '#ff4a2a', false, true); st.glow(SP(0.04, 5, 4), '#ff3a2a', 0.62, 2.35, 0.62);
+        glow(0.72, 2.4, 0.72, 0.5, '#ff4a2a', false, true); st.glow(SP(0.045, 5, 4), '#ff3a2a', 0.72, 2.39, 0.72);
         const tu = prt('turret', 0, 2.12, 0);
-        tu.lit(CY(0.24, 0.3, 0.16, 8), P.metal, 0, 0, 0).lit(BX(0.5, 0.28, 0.36), P.main, 0.05, 0.25, 0).lit(BX(0.18, 0.2, 0.42), P.dark, -0.25, 0.25, 0)
+        tu.lit(CY(0.24, 0.3, 0.16, 8), P.metal, 0, 0, 0).lit(BX(0.5, 0.28, 0.36), P.main, 0.05, 0.2, 0).lit(BX(0.18, 0.2, 0.42), P.dark, -0.25, 0.2, 0)
           .lit(CY(0.04, 0.04, 0.7, 6), '#222226', 0.6, 0.29, 0.07, 0, 0, Math.PI / 2).lit(CY(0.04, 0.04, 0.7, 6), '#222226', 0.6, 0.29, -0.07, 0, 0, Math.PI / 2)
           .lit(CY(0.07, 0.07, 0.12, 8), P.dark, 0.95, 0.29, 0, 0, 0, Math.PI / 2).lit(BX(0.2, 0.18, 0.1), '#5a6044', 0, 0.2, 0.26)
           .lit(BX(0.04, 0.3, 0.36), P.trim, 0.32, 0.36, 0, 0, 0, 0.3).glow(BX(0.02, 0.04, 0.04), '#ff4a2a', 0.31, 0.3, 0.15);
@@ -611,7 +638,7 @@
         for (let h = 0; h < 4; h++) for (const s of [-1, 1]) st.lit(BX(0.75 - h * 0.12, 0.04, 0.04), P.dark, 0, 0.5 + h * 0.5, s * (0.36 - h * 0.06)).lit(BX(0.04, 0.04, 0.75 - h * 0.12), P.dark, s * (0.36 - h * 0.06), 0.5 + h * 0.5, 0);
         st.lit(BX(0.4, 0.2, 0.4), P.trim, 0, 2.35, 0).glow(SP(0.05, 5, 4), '#ff3a2a', 0, 2.5, 0);
         st.lit(BX(0.5, 0.4, 0.5), P.main, 0.6, 0.4, 0.55).lit(CY(0.06, 0.06, 0.6, 6), '#3a3a40', 0.75, 0.9, 0.7);
-        for (let i = 0; i < 4; i++) { st.lit(OC(0.07), '#ffd36b', -0.2 + (i % 2) * 0.4, 0.3, 0.6 + (i >> 1) * 0.15, i, i, 0, 0.9, 1.4, 0.9, 0.15); }
+        for (let i = 0; i < 4; i++) { st.lit(OC(0.07), '#ffd36b', -0.2 + (i % 2) * 0.4, 0.26, 0.6 + (i >> 1) * 0.15, i, i, 0, 0.9, 1.4, 0.9, 0.15); }
         glow(0, 0.35, 0.65, 0.6, '#ffd36b', true, false);
         const drill = prt('spin', 0, 0.9, 0, { axis: 'y', speed: 3 + lvl });
         drill.lit(CY(0.06, 0.06, 1.6, 6), P.metal, 0, 0.4, 0).lit(CO(0.16, 0.5, 8), '#c8c8d0', 0, -0.55, 0, Math.PI, 0, 0);
@@ -1038,7 +1065,7 @@
         .lit(SP(0.05, 5, 4), '#e87a90', 0.86, L + 0.68, 0).lit(SP(0.06, 6, 4), '#0a0a0a', 0.68, L + 0.8, 0.17).lit(SP(0.06, 6, 4), '#0a0a0a', 0.68, L + 0.8, -0.17)
         .lit(SP(0.018, 4, 3), '#ffffff', 0.72, L + 0.83, 0.19).lit(SP(0.018, 4, 3), '#ffffff', 0.72, L + 0.83, -0.15)
         .lit(SP(0.17, 7, 5), '#ffffff', -0.62, L + 0.48, 0)
-        .lit(SP(0.26, 7, 5), fc, -0.3, L + 0.14, 0.26, 0, 0, 0, 1.2, 1, 0.6).lit(SP(0.26, 7, 5), fc, -0.3, L + 0.14, -0.26, 0, 0, 0, 1.2, 1, 0.6)
+        .lit(SP(0.26, 7, 5), fc, -0.3, L + 0.04, 0.26, 0, 0, 0, 1.2, 1, 0.6).lit(SP(0.26, 7, 5), fc, -0.3, L + 0.04, -0.26, 0, 0, 0, 1.2, 1, 0.6)
         .lit(SP(0.14, 6, 4), lt, -0.12, 0.05, 0.26, 0, 0, 0, 2.2, 0.5, 0.9).lit(SP(0.14, 6, 4), lt, -0.12, 0.05, -0.26, 0, 0, 0, 2.2, 0.5, 0.9);
       for (let i = 0; i < 3; i++) for (const sd of [-1, 1]) k.lit(BX(0.008, 0.008, 0.22), '#e8e8e8', 0.8, L + 0.66 + (i - 1) * 0.03, sd * 0.14, 0, sd * (i - 1) * 0.2, 0);
       for (const sd of [-1, 1]) k.lit(SP(0.1, 7, 5), fc, 0.36, L + 1.18, sd * 0.13, sd * 0.25, 0, 0.3, 0.55, 3.2, 1.1).lit(SP(0.07, 6, 4), '#f0a8b8', 0.39, L + 1.18, sd * 0.135, sd * 0.25, 0, 0.3, 0.3, 2.8, 0.9);
@@ -1073,32 +1100,17 @@
   const TSHIRT = { brute: '#5a4030', spitter: '#2f5a4a', bomber: '#6a4a2a', boss: '#3a1448', shaman: '#3a2050', armored: '#4a4a52', shade: '#140a22' };
   const FROST = new T.Color('#bfe6ff'), WHITE = new T.Color('#ffffff'), GOLD = new T.Color('#ffd36b');
   let hatchObjs = null;
-  const vehObjs = new Map();
-  // Buggy aus Schrott: Rohrrahmen, Sitz, Motor hinten, große Räder, Scheinwerfer
-  function buggyModel() {
-    const grp = new T.Group(), k = new Kit()
-      .lit(BX(1.5, 0.12, 0.8), '#4a4e56', 0, 0.42, 0).lit(BX(0.5, 0.25, 0.7), '#8a4a2a', 0.55, 0.55, 0, 0, 0, -0.15)
-      .lit(BX(0.4, 0.3, 0.5), '#3a3a3e', -0.55, 0.62, 0).lit(CY(0.08, 0.08, 0.3, 8), '#2a2a2a', -0.75, 0.8, 0.15, 0, 0, 0.8).lit(CY(0.08, 0.08, 0.3, 8), '#2a2a2a', -0.75, 0.8, -0.15, 0, 0, 0.8)
-      .lit(BX(0.3, 0.08, 0.36), '#5a3a2a', -0.1, 0.55, 0).lit(BX(0.08, 0.36, 0.36), '#5a3a2a', -0.26, 0.72, 0, 0, 0, 0.2)
-      .lit(CY(0.03, 0.03, 0.8, 6), '#c84a2a', 0.1, 0.95, 0.38).lit(CY(0.03, 0.03, 0.8, 6), '#c84a2a', 0.1, 0.95, -0.38)
-      .lit(CY(0.03, 0.03, 0.8, 6), '#c84a2a', 0.1, 1.35, 0, Math.PI / 2, 0, 0).lit(CY(0.03, 0.03, 0.6, 6), '#c84a2a', 0.45, 1.1, 0.38, 0, 0, 0.9).lit(CY(0.03, 0.03, 0.6, 6), '#c84a2a', 0.45, 1.1, -0.38, 0, 0, 0.9)
-      .lit(CY(0.02, 0.02, 0.4, 4), '#2a2a2a', 0.35, 0.85, 0.12, 0, 0, -0.6).lit(BX(0.04, 0.08, 0.12), '#fff2c8', 0.8, 0.62, 0.25).lit(BX(0.04, 0.08, 0.12), '#fff2c8', 0.8, 0.62, -0.25)
-      .lit(BX(0.04, 0.06, 0.1), '#c82a2a', -0.76, 0.5, 0.3).lit(BX(0.04, 0.06, 0.1), '#c82a2a', -0.76, 0.5, -0.3);
-    const m = new T.Mesh(k.build().lit, matLit); m.castShadow = true; grp.add(m);
-    const wheels = [], wk = new Kit().lit(CY(0.28, 0.28, 0.2, 12), '#1a1a1a', 0, 0, 0, Math.PI / 2, 0, 0).lit(CY(0.13, 0.13, 0.22, 6), '#8a8e96', 0, 0, 0, Math.PI / 2, 0, 0)
-      .lit(BX(0.04, 0.5, 0.21), '#2a2a2a', 0, 0, 0).build().lit;
-    for (const [x, z] of [[0.55, 0.5], [0.55, -0.5], [-0.5, 0.52], [-0.5, -0.52]]) { const w = new T.Mesh(wk, matLit); w.position.set(x, 0.28, z); w.castShadow = true; grp.add(w); wheels.push(w); }
-    grp.userData = { wheels }; scene.add(grp);
-    return grp;
-  }
-  function chestModel() {
-    const grp = new T.Group();
-    const k = new Kit()
-      .lit(BX(0.7, 0.4, 0.45), '#7a4a1e', 0, 0.2, 0).lit(CY(0.225, 0.225, 0.7, 12, false, 0, Math.PI), '#9a6028', 0, 0.4, 0, 0, 0, Math.PI / 2)
-      .lit(BX(0.72, 0.06, 0.47), '#e6b83a', 0, 0.33, 0).lit(BX(0.1, 0.14, 0.05), '#e6b83a', 0, 0.32, 0.24)
-      .lit(BX(0.06, 0.42, 0.47), '#e6b83a', -0.3, 0.2, 0).lit(BX(0.06, 0.42, 0.47), '#e6b83a', 0.3, 0.2, 0)
-      .glow(IC(0.05, 0), '#fff3b0', 0.02, 0.33, 0.26).build();
-    const a = new T.Mesh(k.lit, matLit); a.castShadow = true; grp.add(a); grp.add(new T.Mesh(k.glow, matGlow));
+  function lootModel(big) {
+    const grp = new T.Group(), k = new Kit();
+    // Sack: bauchiger Körper, abgebundener Hals, Kordel, Flicken und ein Goldstück obenauf
+    k.lit(SP(0.24, 9, 7), '#8a6a3e', 0, 0.2, 0, 0, 0, 0, 1, 0.85, 1).lit(CY(0.08, 0.14, 0.12, 8), '#7a5a32', 0, 0.42, 0)
+      .lit(TO(0.085, 0.022, 5, 10), '#c8a050', 0, 0.42, 0, Math.PI / 2, 0, 0).lit(CO(0.12, 0.12, 8), '#8a6a3e', 0, 0.53, 0, Math.PI)
+      .lit(BX(0.12, 0.1, 0.02), '#6a4a2a', 0.1, 0.18, 0.2, 0, 0.4, 0).lit(CY(0.06, 0.06, 0.02, 10), '#ffd36b', -0.06, 0.6, 0.02, 0.3, 0, 0.5);
+    if (big) k.lit(SP(0.18, 8, 6), '#6a5a3a', 0.26, 0.15, 0.1, 0, 0, 0, 1, 0.8, 1).lit(CY(0.07, 0.07, 0.03, 10), '#ffd36b', 0.3, 0.3, 0.1, 0.4, 0, 0.2)
+      .lit(BX(0.3, 0.2, 0.22), '#4a5a3a', -0.3, 0.1, 0.05, 0, 0.3, 0).lit(BX(0.31, 0.04, 0.23), '#d8a82a', -0.3, 0.15, 0.05, 0, 0.3, 0);
+    k.glow(IC(0.04, 0), '#fff3b0', -0.06, 0.62, 0.04);
+    const g2 = k.build(), a = new T.Mesh(g2.lit, matLit); a.castShadow = true; grp.add(a); grp.add(new T.Mesh(g2.glow, matGlow));
+    if (big) grp.scale.setScalar(1.5);
     scene.add(grp);
     return grp;
   }
@@ -1159,7 +1171,6 @@
       for (const o of chestObjs.values()) scene.remove(o); chestObjs.clear();
       for (const o of animalObjs.values()) scene.remove(o); animalObjs.clear();
       if (hatchObjs) { for (const hb of hatchObjs) { scene.remove(hb.o1); scene.remove(hb.o2); } hatchObjs = null; }
-      for (const o of vehObjs.values()) scene.remove(o); vehObjs.clear();
     }
 
     // Kamera: schräg von oben, folgt dem Spieler
@@ -1172,6 +1183,7 @@
     if (S.shake > 0.2 && G.mode === 'play' && R3.shakeOn !== false) { shx = (Math.random() - 0.5) * S.shake * 0.03; shz = (Math.random() - 0.5) * S.shake * 0.03; }
     // Ansichten: Third-Person (Kamera hinter der Schulter) oder Ego-Perspektive (R3.eye)
     const viewOn = R3.fp && G.mode !== 'menu' && S.player && S.player.dead <= 0, fpOn = viewOn && R3.eye, tpOn = viewOn && !R3.eye;
+    if (viewOn) { cx = S.player.x / TS; cz = S.player.y / TS; }   // Umgebung immer um die Figur (auch direkt nach einem Teleport)
     const camKey = fpOn ? 'fp' : tpOn ? 'tp' : 'top';
     if (camKey !== lastFp) {
       lastFp = camKey;
@@ -1208,6 +1220,9 @@
       camera.lookAt(cx + shx - sy * 0.4, 0, cz - cyw * 0.4 + shz);
     }
 
+    camera.updateMatrixWorld();
+    projM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); frus.setFromProjectionMatrix(projM);
+
     // Tag/Nacht/Wetter
     const dk = G.darkness(), night = G.clamp(dk / 0.8, 0, 1), wet = S.weather || 0;
     let strikeA = 0;
@@ -1241,7 +1256,7 @@
     };
     for (const s of S.strikes || []) addL(s.x, s.y, 4, '#d8e4ff', 120 * G.clamp(s.life / 0.45, 0, 1), 16, true);
     for (const f of S.flashes) addL(f.x, f.y, 1.5, '#ffb347', 30 * G.clamp(f.life / f.max, 0, 1), f.r / TS * 1.2, true);
-    for (const q of S.players) if (q.dead <= 0) { const inB = S.biome && S.biome[G.clamp(Math.floor(q.y / TS), 0, MAP - 1) * MAP + G.clamp(Math.floor(q.x / TS), 0, MAP - 1)] === 7; addL(q.x, q.y, inB ? 1.8 : 2.2, inB ? '#fff2d8' : '#ffd9a0', inB ? 30 : 14, inB ? 11 : 8, inB); }
+    for (const q of S.players) if (q.dead <= 0) { const inB = S.biome && S.biome[G.clamp(Math.floor(q.y / TS), 0, MAP - 1) * MAP + G.clamp(Math.floor(q.x / TS), 0, MAP - 1)] === 7; addL(q.x, q.y, inB ? 1.8 : 2.2, inB ? '#fff2d8' : '#ffd9a0', inB ? 11 : 14, inB ? 9 : 8, inB); }
     if (S.portal) { addL(S.portal.x, S.portal.y, 2, '#a060ff', 18, 8, true); addL(S.portal2.x, S.portal2.y, 2, '#a060ff', 22, 10, true); }
     for (const b of S.buildings) {
       const c = G.bCenter(b);
@@ -1267,6 +1282,19 @@
         addL((tx + 0.5 + 0.62 * Math.cos(ry)) * TS, (ty + 0.5 - 0.62 * Math.sin(ry)) * TS, 2.0, '#ffb050', 7, 6);
       }
     }
+    if (bunkerV) {
+      const lr = 10;
+      for (let ty = Math.max(0, Math.floor(cz - lr)); ty <= Math.min(MAP - 1, Math.ceil(cz + lr)); ty++) for (let tx = Math.max(0, Math.floor(cx - lr)); tx <= Math.min(MAP - 1, Math.ceil(cx + lr)); tx++) {
+        const i = ty * MAP + tx, v = S.variant[i];
+        if (S.res[i] !== 8 || v % 7 || S.biome[i] !== 7) continue;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const j = i + dz * MAP + dx; if (S.res[j] === 8 || S.biome[j] !== 7) continue;
+          const lx = tx + 0.5 + dx * 0.9, lz = ty + 0.5 + dz * 0.9, d2 = (lx - cx) ** 2 + (lz - cz) ** 2;
+          cand.push({ x: lx, y: 1.75, z: lz, c: v % 12 === 0 ? '#ff4a3a' : '#ffd890', i: Math.sin(at * 9 + v) > -0.92 ? 3.2 : 0.6, dist: 5, d2, always: false });
+          break;
+        }
+      }
+    }
     cand.sort((a, b) => (b.always - a.always) || a.d2 - b.d2);
     for (let i = 0; i < NL; i++) {
       const L = pointLights[i], c = cand[i];
@@ -1275,19 +1303,20 @@
     }
 
     // Natur in Sichtweite
-    const R = 30, x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(MAP - 1, Math.ceil(cx + R));
-    const vfx = -Math.sin(R3.yaw), vfz = -Math.cos(R3.yaw);
+    // nur so weit, wie man durch den Nebel sieht
+    const R = Math.min(30, Math.ceil(scene.fog.far) + 5), R2 = R * R, x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(MAP - 1, Math.ceil(cx + R));
     const z0 = Math.max(0, Math.floor(cz - R - 4)), z1 = Math.min(MAP - 1, Math.ceil(cz + R + 4));
-    let nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
+    let nbp = 0, nbl = 0, nbc = 0, nbm = 0, nbt = 0, nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
     const BI = S.biome || null;
     const sway = (wet === 2 ? 0.16 : wet ? 0.09 : 0.05);
     for (let ty = z0; ty <= z1; ty++) for (let tx = x0; tx <= x1; tx++) {
       const i = ty * MAP + tx, k = S.res[i], v = S.variant[i];
       const px = tx + 0.5, pz = ty + 0.5;
-      // Leistung: was hinter oder weit neben der Kamera liegt, wird gar nicht erst gezeichnet
+      // Leistung: nur zeichnen, was im Sichtfeld der Kamera liegt (Nebelgrenze + Sichtkegel)
       const dxv = px - cx, dzv = pz - cz, dd = dxv * dxv + dzv * dzv;
-      if (viewOn && dd > 30 && (dxv * vfx + dzv * vfz) < 0.28 * Math.sqrt(dd)) continue;
+      if (dd > R2) continue;
       const bi = BI ? BI[i] : 0;
+      if (dd > 6 && !(k === 8 && bi === 6 ? inView(px, 4.5, pz, 5.2) : k === 6 ? inView(px, 2, pz, 3.6) : inView(px, 1.2, pz, 2.2))) continue;
       if (!k) {
         if (S.bmap[i]) continue;
         const hv = hash(i);
@@ -1340,6 +1369,13 @@
       const wob = S.wobble.get(i);
       if (wob) { const a = Math.sin(wob.t * 40) * 0.1 * (wob.t / 0.25); ox = Math.cos(wob.a) * a; oz = Math.sin(wob.a) * a; tilt = a; }
       const rot = v * 0.05;
+      if (k === 7 && bi === 7) {
+        const bk = Math.floor((tx - G.DUN.x0) / G.DUN.w);
+        if (bk === 2 && v % 2 === 0) { if (nbt < 200) { setInst(bTank, nbt, px, 0, pz, 1, 1, 1, v); setInst(bTankG, nbt, px, 0, pz, 1, 1, 1, v); bTankG.setColorAt(nbt, col.set(v % 4 ? '#5aff8a' : '#5ac8ff')); nbt++; glowAt(px, 0.9, pz, 1.3, v % 4 ? '#5aff8a' : '#5ac8ff', 0.35); } }
+        else if (bk === 1 && v % 2 === 0) { if (nbm < 300) { setInst(bMachine, nbm, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2); bMachine.setColorAt(nbm, WHITE); nbm++; } }
+        else if (nbc < 500) { setInst(bCrate, nbc, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2 + (v % 3) * 0.1); bCrate.setColorAt(nbc, col.set(['#6a7a4a', '#7a6a4a', '#5a6a5a'][v % 3])); nbc++; }
+        continue;
+      }
       if (k === 7) {
         if (v % 3 === 0) { if (ncar < 600) { setInst(cars, ncar, px + ox, 0, pz + oz, sc, sc, sc, v * 0.7, tilt, v % 2 ? 0.06 : 0); cars.setColorAt(ncar, col.set(['#8a3a2a', '#4a5a6a', '#7a6a3a', '#5a5a52'][v % 4]).multiplyScalar(0.85)); ncar++; } }
         else for (let b = 0; b < 3 && nbar2 < 1200; b++) { const a = v + b * 2.1; setInst(barrels, nbar2, px + ox + Math.cos(a) * 0.22 * sc, 0, pz + oz + Math.sin(a) * 0.2 * sc, sc, sc, sc, v + b, b === 2 ? Math.PI / 2 : tilt, 0); barrels.setColorAt(nbar2, col.set(['#a84a20', '#3a5a3a', '#8a2a20', '#4a4a52'][(v + b) % 4])); nbar2++; }
@@ -1357,13 +1393,28 @@
       }
       if (k === 8) {
         // Mauer: in der Stadt je Grundstück 1–4 Stockwerke, im Bunker niedrig und dunkel
-        if (bi === 7) { if (nbw < 6000) { setInst(bunkerWall, nbw, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2); bunkerWall.setColorAt(nbw, col.setRGB(0.36 + (v % 5) * 0.01, 0.37, 0.39)); nbw++; } continue; }
-        const bunker = false, lot = Math.floor(tx / 15) * 977 + Math.floor(ty / 15) * 131 + (S.seed | 0);
-        let fl = bunker ? 2 : 1 + Math.floor(hash(lot) * 4);
-        if (!bunker && v % 5 === 0) fl = Math.max(1, fl - 1);
-        if (bunker) col.setRGB(0.32, 0.33, 0.34); else { const c0 = 0.62 + hash(lot + 3) * 0.2; col.setRGB(c0, c0 * 0.97, c0 * 0.9); }
-        for (let f = 0; f < fl && nrf < 9000; f++) { setInst(ruinFloor, nrf, px, f * 0.96, pz, 1, 1, 1, 0); ruinFloor.setColorAt(nrf, col); nrf++; }
-        if (nrt < 9000) { setInst(ruinTop, nrt, px, fl * 0.96, pz, 1, 0.6 + (v % 4) * 0.25, 1, (v % 4) * Math.PI / 2); ruinTop.setColorAt(nrt, col); nrt++; }
+        if (bi === 7) {
+          if (nbw < 6000) { setInst(bunkerWall, nbw, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2); bunkerWall.setColorAt(nbw, col.setRGB(0.12 + (v % 5) * 0.006, 0.125, 0.14)); nbw++; }
+          for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const j = i + dz * MAP + dx;
+            if (S.res[j] === 8 || BI[j] !== 7) continue;
+            if (nbp < 6000) { setInst(bPipe, nbp, px + dx * 0.56, 0, pz + dz * 0.56, 1, 1, 1, Math.atan2(-dz, dx) + Math.PI / 2); bPipe.setColorAt(nbp, WHITE); nbp++; }
+            if (v % 7 || nbl >= 400) continue;
+            const lx = px + dx * 0.56, lz = pz + dz * 0.56, ry = Math.atan2(-dz, dx), on = Math.sin(at * 9 + v) > -0.92 ? 1 : 0.2;
+            setInst(bLamp, nbl, lx, 1.75, lz, 1, 1, 1, ry); bLamp.setColorAt(nbl, WHITE);
+            setInst(bLampG, nbl, lx + dx * 0.04, 1.75, lz + dz * 0.04, 1, 1, 1, ry); bLampG.setColorAt(nbl, col.set(v % 12 === 0 ? '#ff4a3a' : '#ffe6b0').multiplyScalar(on)); nbl++;
+            glowAt(lx + dx * 0.15, 1.75, lz + dz * 0.15, 1.1, v % 12 === 0 ? '#ff4a3a' : '#ffd890', 0.45 * on);
+          }
+          continue;
+        }
+        const lot = Math.floor(tx / 15) * 977 + Math.floor(ty / 15) * 131 + (S.seed | 0);
+        let fl = 2 + Math.floor(hash(lot) * 4);
+        if (v % 5 === 0) fl--;                       // abgebrochene Kanten
+        if (v % 11 === 0) fl = 1;
+        const c0 = 0.58 + hash(lot + 3) * 0.22, tint = hash(lot + 7);
+        col.setRGB(c0 * (tint > 0.66 ? 1.05 : 1), c0 * 0.97, c0 * (tint < 0.33 ? 0.82 : 0.92));
+        for (let f = 0; f < fl && nrf < 9000; f++) { setInst(ruinFloor, nrf, px, f * FH, pz, 1, 1, 1, 0); ruinFloor.setColorAt(nrf, col); nrf++; }
+        if (nrt < 9000) { setInst(ruinTop, nrt, px, fl * FH, pz, 1, 0.6 + (v % 4) * 0.25, 1, (v % 4) * Math.PI / 2); ruinTop.setColorAt(nrt, col); nrt++; }
         continue;
       }
       if (k === 4) { if (nvo < MAXRES) { setInst(voids, nvo, px, 0, pz, 1, 0.8 + (v % 5) * 0.12, 1, (v % 4) * Math.PI / 2); voids.setColorAt(nvo, col.setRGB(0.09, 0.06, 0.14)); nvo++; if (v % 11 === 0) glowAt(px, 1.4 + (v % 5) * 0.12, pz, 0.6, '#9a5aff', 0.4); } continue; }
@@ -1410,6 +1461,7 @@
     trunks.count = nt; pine1.count = pine2.count = pine3.count = np; oaks.count = no; rocks.count = nr; ores.count = ng;
     peaks.count = npk; peakSnow.count = nps; done(peaks, peakSnow);
     ruinFloor.count = nrf; ruinTop.count = nrt; bunkerWall.count = nbw; done(ruinFloor, ruinTop, bunkerWall);
+    bPipe.count = nbp; bLamp.count = bLampG.count = nbl; bCrate.count = nbc; bMachine.count = nbm; bTank.count = bTankG.count = nbt; done(bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG);
     grass.count = ngr; flowers.count = nfl; bushes.count = nbu; cacti.count = nca; snowcap.count = nsc; voids.count = nvo; crystals.count = ncr;
     cars.count = ncar; barrels.count = nbar2; rubble.count = nrub; lamps.count = nlamp;
     done(trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, snowcap, voids, crystals, cars, barrels, rubble, lamps);
@@ -1448,6 +1500,7 @@
       if (nz >= MAXZ) break;
       const type = z.type, boss = type === 'boss', brute = type === 'brute', runner = type === 'runner';
       const rr = z.r / TS * K, x = z.x / TS, zz = z.y / TS, f = z.face || 0;
+      if (!inView(x, rr, zz, rr * 2 + 0.6)) continue;
       const w = phase('z' + z.id, x, zz, runner ? 4.2 : 3.2 / Math.max(0.6, rr));
       const ph = w.ph, mv = Math.max(w.mv, (Math.abs(z.vx || 0) + Math.abs(z.vy || 0)) > 2 ? 0.8 : 0);
       const lean = runner ? 0.45 : boss ? 0.15 : 0.25;
@@ -1548,7 +1601,6 @@
       o.rotation.y = p.danceT > 0 ? -at * 12 : -(p.face || 0);
       if (p.rageT > 0) glowAt(px, 0.6, pz, 1.6, '#ff5a2a', 0.5 + 0.2 * Math.sin(at * 10));
       u.legs[0].rotation.z = Math.sin(wp.ph) * 0.7 * mv; u.legs[1].rotation.z = -Math.sin(wp.ph) * 0.7 * mv;
-      if (p.drive) { o.position.y += 0.18; u.legs[0].rotation.z = u.legs[1].rotation.z = 1.3; const vv = (S.vehicles || []).find(q => q.id === p.drive); if (vv) o.rotation.y = -vv.face; }
       u.arms[0].rotation.z = -Math.sin(wp.ph) * 0.6 * mv;
       for (const k in u.tools) u.tools[k].visible = k === p.tool;
       const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
@@ -1708,7 +1760,7 @@
           .lit(TO(0.25, 0.04, 5, 14), '#9aa0a8', 0, 0.44, 0, Math.PI / 2, 0, 0).lit(BX(0.06, 0.9, 0.06), '#4a4a4e', 0.75, 0.6, 0.75).lit(BX(0.4, 0.3, 0.04), '#c8b070', 0.75, 1.0, 0.76);
         const m = new T.Mesh(ki.build().lit, matLit); m.castShadow = true; out.add(m); out.position.set(h.x / TS, 0, h.y / TS); scene.add(out);
         const inn = new T.Group(), ke = new Kit();
-        for (let s = 0; s < 6; s++) ke.lit(BX(0.6, 0.05, 0.05), '#8a8e96', 0, 0.3 + s * 0.4, 0);
+        for (let s = 0; s < 6; s++) ke.lit(BX(0.05, 0.05, 0.62), '#8a8e96', 0, 0.3 + s * 0.4, 0);
         ke.lit(BX(0.05, 2.4, 0.05), '#6a6e76', 0, 1.2, 0.3).lit(BX(0.05, 2.4, 0.05), '#6a6e76', 0, 1.2, -0.3).lit(CY(0.5, 0.5, 0.1, 12), '#4a4e56', 0, 2.45, 0);
         const m2 = new T.Mesh(ke.build().lit, matLit); inn.add(m2); inn.position.set(e.x / TS, 0, e.y / TS); scene.add(inn);
         hatchObjs.push({ h, e, o1: out, o2: inn });
@@ -1718,25 +1770,14 @@
       glowAt(hb.h.x / TS + 0.75, 1.0, hb.h.y / TS + 0.76, 0.9, '#ffcf6a', 0.35 + 0.2 * Math.sin(at * 3));
       glowAt(hb.e.x / TS, 2.5, hb.e.y / TS, 1.6, '#cfe8ff', 0.5);
     }
-    const vseen = new Set();
-    for (const v of S.vehicles || []) {
-      vseen.add(v.id);
-      let o = vehObjs.get(v.id); if (!o) { o = buggyModel(); vehObjs.set(v.id, o); }
-      const vx = v.x / TS, vz = v.y / TS, w = phase('v' + v.id, vx, vz, 16);
-      o.position.set(vx, terrainH(vx, vz), vz); o.rotation.y = -v.face;
-      for (const wh of o.userData.wheels) wh.rotation.z = -w.ph * 2.5;
-      if (v.driver >= 0 && w.mv > 0.3 && night > 0.3) { glowAt(vx + Math.cos(v.face) * 1.0, 0.5, vz + Math.sin(v.face) * 1.0, 1.4, '#fff2c8', 0.5); }
-    }
-    for (const [id, o] of vehObjs) if (!vseen.has(id)) { scene.remove(o); vehObjs.delete(id); }
-
-    // Truhen
+    // Beutebeutel
     const cseen = new Set();
     for (const c of S.chests) {
       cseen.add(c.id);
       let o = chestObjs.get(c.id);
-      if (!o) { o = chestModel(); if (c.dun !== undefined) o.scale.setScalar(1.5); chestObjs.set(c.id, o); }
-      o.position.set(c.x / TS, Math.sin(at * 3 + c.id) * 0.06, c.y / TS);
-      o.rotation.y = Math.sin(at * 0.7 + c.id) * 0.3;
+      if (!o) { o = lootModel(c.dun !== undefined); chestObjs.set(c.id, o); }
+      o.position.set(c.x / TS, 0, c.y / TS);
+      o.rotation.y = c.id * 1.7;
       glowAt(c.x / TS, 0.4, c.y / TS, 1.4, '#ffe27a', 0.35 + 0.25 * Math.sin(at * 4 + c.id));
     }
     for (const [id, o] of chestObjs) if (!cseen.has(id)) { scene.remove(o); chestObjs.delete(id); }
