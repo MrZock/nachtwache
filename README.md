@@ -15,7 +15,7 @@ Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz
 
 **Chat-Befehle:** `/afk` – AFK-Modus (kein Rauswurf, auch wenn der Tab im Hintergrund ist; Zombies ignorieren dich) · `/hilfe` – alle Befehle.
 
-**Neu:** große Welt (200×200) mit Karte (M), Tiere (Hirsch, Hase, Wildschwein), Stachelfallen, Blutmond jede 7. Nacht, 16 Erfolge,, Heilturm, Bomber-Zombies, Schatztruhen, Ingame-Chat, Markierungen für den Mitspieler.
+**Neu:** große Welt (200×200) mit Karte (M), Tiere (Hirsch, Hase, Wildschwein), Stachelfallen, Blutmond jede 7. Nacht, 16 Erfolge, Heilturm, Bomber-Zombies, Schatztruhen, Ingame-Chat, Markierungen für den Mitspieler.
 
 ## Aufbau
 
