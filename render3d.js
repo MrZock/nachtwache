@@ -87,7 +87,7 @@
   let fpView = null, fpTools = null, fpMetal = null, lastFp = null;
   let peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
-  let zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
+  let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
   let projArrow, projBall, parts, glows, rain;
   let boltLines, strikeLines, ghostMat, selBox, selRing, ghostRing;
   const ghostObjs = new Map();
@@ -240,23 +240,52 @@
       .build().lit, matInst, 600, true);
 
     // ---- Zombies: Körperteile (Maße für Radius 1, Blick nach +x)
-    zLeg = inst(new Kit().lit(BX(0.36, 0.9, 0.36), '#ffffff', 0, -0.45, 0).lit(BX(0.3, 0.12, 0.3), '#8a8a8a', 0, -0.62, 0.0)
-      .lit(BX(0.46, 0.16, 0.4), '#5a5a5a', 0.06, -0.98, 0).build().lit, matInst, MAXZ * 2, true);
-    zTorso = inst(new Kit()
-      .lit(BX(0.6, 0.95, 0.92), '#ffffff', 0, 0, 0)
-      .lit(BX(0.64, 0.14, 0.96), '#4a4a4a', 0, -0.42, 0)
-      .lit(BX(0.04, 0.22, 0.2), '#b0b0b0', 0.31, 0.12, 0.2, 0, 0, 0.3)
-      .lit(BX(0.04, 0.18, 0.16), '#9a9a9a', 0.31, -0.15, -0.22, 0, 0, -0.4)
-      .lit(SP(0.3, 7, 5), '#e8e8e8', 0, 0.38, 0.42).lit(SP(0.3, 7, 5), '#e8e8e8', 0, 0.38, -0.42)
-      .lit(BX(0.5, 0.1, 0.5), '#cfcfcf', 0, 0.5, 0).build().lit, matInst, MAXZ, true);
-    zHead = inst(new Kit()
-      .lit(BX(0.58, 0.6, 0.56), '#ffffff', 0, 0, 0)
-      .lit(BX(0.36, 0.14, 0.42), '#d8d8d8', 0.18, -0.33, 0, 0, 0, 0.25)
-      .lit(BX(0.04, 0.08, 0.3), '#2a1010', 0.3, -0.16, 0)
-      .lit(BX(0.6, 0.12, 0.58), '#6a6a6a', -0.04, 0.3, 0, 0, 0, 0, 1, 1, 1, 0.2)
-      .lit(BX(0.1, 0.14, 0.12), '#9a9a9a', 0.32, 0.0, 0).build().lit, matInst, MAXZ, true);
-    zArm = inst(new Kit().lit(BX(0.9, 0.24, 0.24), '#ffffff', 0.45, 0, 0).lit(BX(0.4, 0.3, 0.3), '#c0c0c0', 0.12, 0, 0)
-      .lit(BX(0.2, 0.28, 0.3), '#e0e0e0', 0.96, -0.02, 0).build().lit, matInst, MAXZ * 2, true);
+    // Bein: zerrissene Hose mit ausgefranstem Saum, Schienbein, kaputter Schuh
+    zLeg = inst(new Kit().lit(BX(0.38, 0.6, 0.38), '#ffffff', 0, -0.3, 0)
+      .lit(BX(0.13, 0.16, 0.03), '#e8e8e8', 0.12, -0.66, 0.17, 0, 0, 0.2).lit(BX(0.12, 0.2, 0.03), '#f0f0f0', -0.1, -0.68, 0.17, 0, 0, -0.15)
+      .lit(BX(0.03, 0.14, 0.12), '#e0e0e0', 0.19, -0.64, -0.08, 0.2, 0, 0).lit(BX(0.12, 0.12, 0.03), '#e8e8e8', 0.02, -0.65, -0.19, 0, 0, 0.25)
+      .lit(BX(0.26, 0.3, 0.26), '#8a8a8a', 0, -0.75, 0).lit(BX(0.2, 0.06, 0.2), '#707070', 0.02, -0.55, 0)
+      .lit(BX(0.48, 0.16, 0.4), '#4a4a4a', 0.07, -0.98, 0).lit(BX(0.14, 0.08, 0.3), '#3a3a3a', 0.28, -0.94, 0, 0, 0, -0.3)
+      .build().lit, matInst, MAXZ * 2, true);
+    // Oberkörper: zerfetztes Hemd mit herunterhängenden Fetzen, Buckel, eingesunkene Brust
+    { const k = new Kit()
+        .lit(BX(0.58, 0.8, 0.9), '#ffffff', 0, 0.06, 0).lit(BX(0.5, 0.2, 0.8), '#f2f2f2', -0.06, -0.42, 0)
+        .lit(BX(0.42, 0.34, 0.7), '#e6e6e6', -0.2, 0.32, 0, 0, 0, 0.3)
+        .lit(SP(0.29, 7, 5), '#e8e8e8', 0, 0.38, 0.43).lit(SP(0.29, 7, 5), '#dcdcdc', 0, 0.36, -0.43)
+        .lit(BX(0.46, 0.1, 0.46), '#cfcfcf', 0.02, 0.5, 0);
+      for (let i = 0; i < 7; i++) { const zz = -0.38 + i * 0.13, len = 0.16 + ((i * 37) % 5) * 0.05; k.lit(BX(0.04, len, 0.1), i % 2 ? '#f0f0f0' : '#d8d8d8', 0.27, -0.52 - len / 2 + 0.08, zz, 0, 0, ((i * 13) % 5 - 2) * 0.08); }
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) k.lit(BX(0.12, 0.14 + i * 0.05, 0.04), '#e0e0e0', -0.18 + i * 0.16, -0.58 - i * 0.02, s * 0.44, 0, 0, 0.1 * s);
+      zTorso = inst(k.build().lit, matInst, MAXZ, true); }
+    // Wunden & Knochen (eigene Farben, werden nicht eingefärbt)
+    zGore = inst(new Kit()
+      .lit(BX(0.04, 0.3, 0.3), '#4a0e0e', 0.3, -0.02, 0.18, 0, 0, 0.05).lit(BX(0.045, 0.2, 0.18), '#7a1a14', 0.3, 0.02, 0.2)
+      .lit(BX(0.05, 0.04, 0.24), '#e8dcc0', 0.31, 0.1, 0.18).lit(BX(0.05, 0.04, 0.22), '#d8ccb0', 0.31, 0.0, 0.19).lit(BX(0.05, 0.04, 0.18), '#e8dcc0', 0.31, -0.1, 0.2)
+      .lit(BX(0.03, 0.26, 0.04), '#5a1010', 0.3, -0.2, -0.24).lit(BX(0.03, 0.12, 0.08), '#6a1410', 0.3, 0.25, -0.2)
+      .lit(BX(0.1, 0.07, 0.06), '#c8bca0', -0.32, 0.36, 0).lit(BX(0.1, 0.07, 0.06), '#c8bca0', -0.3, 0.22, 0).lit(BX(0.1, 0.07, 0.06), '#b8ac90', -0.3, 0.08, 0)
+      .build().lit, matInst, MAXZ, true);
+    // Kopf: eingefallene Augenhöhlen, offener Kiefer mit Zähnen, Haarbüschel, Ohr
+    { const k = new Kit()
+        .lit(BX(0.56, 0.5, 0.54), '#ffffff', 0, 0.04, 0)
+        .lit(BX(0.06, 0.16, 0.18), '#3a3a3a', 0.27, 0.06, 0.13).lit(BX(0.06, 0.16, 0.18), '#3a3a3a', 0.27, 0.06, -0.13)
+        .lit(BX(0.1, 0.12, 0.08), '#bdbdbd', 0.3, -0.05, 0)
+        .lit(BX(0.08, 0.14, 0.42), '#1e0a0a', 0.25, -0.22, 0)
+        .lit(BX(0.44, 0.1, 0.46), '#d0d0d0', 0.1, -0.36, 0, 0, 0, 0.32)
+        .lit(BX(0.06, 0.06, 0.4), '#ffffff', 0.29, -0.17, 0);
+      for (let i = 0; i < 4; i++) k.lit(BX(0.05, 0.06, 0.05), '#f4f4e8', 0.33, -0.27 - (i % 2) * 0.02, -0.14 + i * 0.095, 0, 0, 0.3);
+      for (const [x, z, h] of [[-0.05, 0.12, 0.14], [-0.15, -0.1, 0.18], [0.05, -0.16, 0.1], [-0.2, 0.15, 0.12]]) k.lit(BX(0.1, h, 0.08), '#5a5a5a', x, 0.3 + h / 2 - 0.02, z, 0.2, 0, -0.3, 1, 1, 1, 0.1);
+      k.lit(BX(0.08, 0.14, 0.05), '#d8d8d8', -0.04, 0.02, 0.29).lit(BX(0.06, 0.1, 0.05), '#c8c8c8', -0.04, 0.02, -0.29, 0, 0, 0.5);
+      zHead = inst(k.build().lit, matInst, MAXZ, true); }
+    // Schädel-Riss und Blut am Kinn (nicht eingefärbt)
+    zSkull = inst(new Kit()
+      .lit(BX(0.2, 0.06, 0.18), '#e8dcc0', 0.02, 0.3, -0.12, 0, 0.3, 0).lit(BX(0.12, 0.04, 0.1), '#c87a8a', 0.02, 0.33, -0.12, 0, 0.3, 0)
+      .lit(BX(0.03, 0.18, 0.06), '#6a0e0e', 0.3, -0.38, 0.06).lit(BX(0.03, 0.1, 0.05), '#7a1410', 0.3, -0.36, -0.1)
+      .build().lit, matInst, MAXZ, true);
+    // Arm: zerrissener Ärmel, dürrer Unterarm, Hand mit Krallen
+    zArm = inst(new Kit().lit(BX(0.42, 0.32, 0.32), '#a8a8a8', 0.12, 0, 0).lit(BX(0.1, 0.12, 0.33), '#909090', 0.34, -0.08, 0, 0, 0, 0.3)
+      .lit(BX(0.62, 0.2, 0.2), '#ffffff', 0.62, 0, 0).lit(BX(0.08, 0.22, 0.22), '#e0e0e0', 0.62, 0, 0)
+      .lit(BX(0.2, 0.24, 0.28), '#e8e8e8', 0.98, -0.02, 0)
+      .lit(CO(0.035, 0.2, 4), '#f0f0e0', 1.16, -0.04, -0.09, 0, 0, -Math.PI / 2 - 0.3).lit(CO(0.035, 0.22, 4), '#f0f0e0', 1.18, -0.04, 0, 0, 0, -Math.PI / 2 - 0.3)
+      .lit(CO(0.035, 0.2, 4), '#f0f0e0', 1.16, -0.04, 0.09, 0, 0, -Math.PI / 2 - 0.3).build().lit, matInst, MAXZ * 2, true);
     zEye = inst(BX(1, 1, 1), new T.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), MAXZ * 2, false);
     zHorn = inst(new Kit().lit(CO(0.14, 0.62, 6), '#ffffff', 0, 0.31, 0).build().lit, matInst, MAXZ, true);
     zBarrel = inst(new Kit()
@@ -676,23 +705,38 @@
     const mesh = (g, parent, x, y, z, m) => { const o = new T.Mesh(g, m || mat); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; (parent || body).add(o); return o; };
     const dark = '#' + col.set(pc).offsetHSL(0, 0, -0.12).getHexString();
     const hair = ['#5a3a1a', '#2a1a10', '#c8902a', '#8a3a1a'][p.id % 4];
-    const legG = new Kit().lit(BX(0.13, 0.32, 0.14), '#3a3f4a', 0, -0.16, 0).lit(BX(0.2, 0.12, 0.15), '#4a3020', 0.03, -0.38, 0).build().lit;
+    // Bein: Cargohose mit Knieschoner, schwere Stiefel
+    const legG = new Kit().lit(BX(0.13, 0.32, 0.14), '#3a3f4a', 0, -0.16, 0).lit(BX(0.04, 0.08, 0.06), '#2e323a', 0.0, -0.1, 0.075)
+      .lit(BX(0.04, 0.09, 0.11), '#6a6e76', 0.07, -0.2, 0).lit(BX(0.15, 0.1, 0.16), '#4a3020', 0.01, -0.32, 0)
+      .lit(BX(0.22, 0.09, 0.16), '#3a2618', 0.035, -0.39, 0).lit(BX(0.23, 0.03, 0.17), '#151010', 0.035, -0.44, 0).build().lit;
     const legs = [];
     for (const s of [-1, 1]) { const g = new T.Group(); g.position.set(0, 0.45, s * 0.09); body.add(g); mesh(legG, g); legs.push(g); }
+    // Jacke, Schal, Gürtel mit Taschen, Schulterpanzer, Rucksack mit Schlafsack und Funkantenne
     mesh(new Kit()
-      .lit(BX(0.24, 0.4, 0.38), pc, 0, 0.66, 0).lit(BX(0.26, 0.07, 0.4), '#4a3020', 0, 0.48, 0).lit(BX(0.02, 0.05, 0.07), '#ffd36b', 0.135, 0.48, 0)
-      .lit(BX(0.2, 0.05, 0.26), dark, 0.01, 0.87, 0).lit(SP(0.085, 7, 5), dark, 0, 0.82, 0.2).lit(SP(0.085, 7, 5), dark, 0, 0.82, -0.2)
-      .lit(BX(0.14, 0.3, 0.28), '#6b4a2a', -0.19, 0.66, 0).lit(BX(0.15, 0.06, 0.3), '#4a3020', -0.19, 0.6, 0)
-      .lit(CY(0.065, 0.065, 0.32, 8), '#a03a2a', -0.2, 0.85, 0, Math.PI / 2, 0, 0).build().lit);
+      .lit(BX(0.24, 0.4, 0.38), pc, 0, 0.66, 0).lit(BX(0.012, 0.34, 0.03), dark, 0.122, 0.67, 0).lit(BX(0.02, 0.1, 0.1), dark, 0.122, 0.62, 0.12)
+      .lit(BX(0.26, 0.07, 0.4), '#4a3020', 0, 0.48, 0).lit(BX(0.02, 0.05, 0.07), '#c8a040', 0.135, 0.48, 0)
+      .lit(BX(0.08, 0.1, 0.08), '#5a4a2e', 0.1, 0.47, 0.15).lit(BX(0.08, 0.1, 0.08), '#5a4a2e', 0.1, 0.47, -0.15).lit(BX(0.06, 0.12, 0.06), '#4a3e28', -0.02, 0.46, 0.2)
+      .lit(BX(0.26, 0.08, 0.3), '#b0402a', 0.01, 0.89, 0).lit(BX(0.03, 0.2, 0.07), '#9a3422', 0.12, 0.78, 0.09, 0.15, 0, 0.1)
+      .lit(BX(0.18, 0.07, 0.15), '#6a5e52', 0, 0.88, 0.2, -0.35, 0, 0).lit(BX(0.18, 0.07, 0.15), '#6a5e52', 0, 0.88, -0.2, 0.35, 0, 0)
+      .lit(BX(0.19, 0.03, 0.16), '#8a4a2a', 0, 0.84, 0.215, -0.35, 0, 0).lit(BX(0.19, 0.03, 0.16), '#8a4a2a', 0, 0.84, -0.215, 0.35, 0, 0)
+      .lit(BX(0.16, 0.32, 0.3), '#5a4a2a', -0.2, 0.68, 0).lit(BX(0.17, 0.09, 0.31), '#4a3a20', -0.2, 0.82, 0).lit(BX(0.04, 0.12, 0.2), '#4a3a20', -0.29, 0.6, 0)
+      .lit(CY(0.075, 0.075, 0.36, 8), '#7a3a2a', -0.22, 0.93, 0, Math.PI / 2, 0, 0).lit(CY(0.078, 0.078, 0.03, 8), '#2a2018', -0.22, 0.93, 0.1, Math.PI / 2, 0, 0)
+      .lit(CY(0.008, 0.008, 0.42, 4), '#2a2a2a', -0.27, 1.08, 0.11).build().lit);
+    mesh(new Kit().glow(SP(0.022, 5, 4), '#ff3a2a', -0.27, 1.3, 0.11).build().glow, body, 0, 0, 0, matGlow);
     const head = new T.Group(); head.position.set(0, 1.03, 0); body.add(head);
     mesh(new Kit()
       .lit(BX(0.27, 0.27, 0.27), '#f0c9a0', 0, 0, 0).lit(BX(0.29, 0.09, 0.29), hair, -0.01, 0.13, 0).lit(BX(0.1, 0.22, 0.29), hair, -0.1, 0.03, 0)
       .lit(BX(0.02, 0.05, 0.04), '#1a1a2a', 0.136, 0.02, 0.06).lit(BX(0.02, 0.05, 0.04), '#1a1a2a', 0.136, 0.02, -0.06)
-      .lit(BX(0.04, 0.05, 0.04), '#e0b088', 0.15, -0.03, 0).lit(BX(0.02, 0.015, 0.06), '#a06a50', 0.137, -0.08, 0).build().lit, head);
+      .lit(BX(0.04, 0.05, 0.04), '#e0b088', 0.15, -0.03, 0).lit(BX(0.02, 0.015, 0.06), '#a06a50', 0.137, -0.08, 0)
+      .lit(BX(0.285, 0.035, 0.285), '#2a2622', 0, 0.065, 0)
+      .lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, 0.065, 0.065, 0, 0, Math.PI / 2).lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, 0.065, -0.065, 0, 0, Math.PI / 2)
+      .build().lit, head);
+    mesh(new Kit().glow(CY(0.038, 0.038, 0.012, 8), '#ffb347', 0.176, 0.065, 0.065, 0, 0, Math.PI / 2).glow(CY(0.038, 0.038, 0.012, 8), '#ffb347', 0.176, 0.065, -0.065, 0, 0, Math.PI / 2).build().glow, head, 0, 0, 0, matGlow);
     const helm = mesh(new Kit().add('metal', SP(0.17, 10, 6, 0, TAU, 0, Math.PI / 2), '#ffffff', 0, 0.06, 0).add('metal', BX(0.36, 0.03, 0.36), '#ffffff', 0, 0.05, 0)
       .lit(CO(0.03, 0.14, 5), '#c0392b', 0, 0.26, 0).build().metal, head, 0, 0, 0, metal);
     const arms = [];
-    const armG = new Kit().lit(BX(0.1, 0.28, 0.1), pc, 0, -0.14, 0).lit(BX(0.1, 0.1, 0.1), '#f0c9a0', 0, -0.32, 0).build().lit;
+    const armG = new Kit().lit(BX(0.1, 0.2, 0.1), pc, 0, -0.1, 0).lit(BX(0.115, 0.1, 0.115), '#6a5e52', 0, -0.22, 0).lit(BX(0.118, 0.02, 0.118), '#8a4a2a', 0, -0.2, 0)
+      .lit(BX(0.11, 0.1, 0.11), '#3a2a1a', 0, -0.32, 0).build().lit;
     for (const s of [-1, 1]) { const g = new T.Group(); g.position.set(0, 0.82, s * 0.25); body.add(g); mesh(armG, g); arms.push(g); }
     const tool = new T.Group(); tool.position.set(0.28, 0.52, 0.28); body.add(tool);
     const tools = {};
@@ -1162,9 +1206,13 @@
       // Körper
       part(zTorso, nz, lean * 0.3, 1.5, 0, 0, 0, -lean, wide, boss ? 1.1 : 1, wide);
       zTorso.setColorAt(nz, tint(shirt));
+      part(zGore, nz, lean * 0.3, 1.5, 0, 0, 0, -lean, wide, boss ? 1.1 : 1, wide);
+      zGore.setColorAt(nz, flash ? WHITE : frozen ? FROST : z.golden ? GOLD : WHITE);
       const hx = 0.18 + lean * 0.55, tiltX = Math.sin(z.id * 1.7) * 0.22 + Math.sin(at * 2 + z.id) * 0.05;
       part(zHead, nz, hx, 2.24 + (boss ? 0.08 : 0), 0, tiltX, Math.sin(z.id) * 0.2, -0.1, boss ? 1.15 : 1);
       zHead.setColorAt(nz, tint(skin));
+      part(zSkull, nz, hx, 2.24 + (boss ? 0.08 : 0), 0, tiltX, Math.sin(z.id) * 0.2, -0.1, boss ? 1.15 : 1);
+      zSkull.setColorAt(nz, flash ? WHITE : frozen ? FROST : z.golden ? GOLD : WHITE);
       // Arme: nach vorne gestreckt, beim Zuschlagen hoch
       const lunge = z.lunge > 0 ? 1 : 0;
       for (const s of [-1, 1]) {
@@ -1172,8 +1220,8 @@
         part(zArm, na, 0.12 + lean * 0.4, 1.92, s * 0.55 * wide, s * 0.1, -s * 0.12, -0.18 + swing + lunge * 0.55 + (type === 'spitter' ? 0.2 : 0), brute ? 1.15 : boss ? 0.8 : 1, brute ? 1.5 : 1, brute ? 1.5 : 1);
         zArm.setColorAt(na, tint(skin)); na++;
         // Augen
-        const ex = hx + 0.3, ey = 2.28 + (boss ? 0.08 : 0);
-        part(zEye, ne, ex, ey, s * 0.13, 0, 0, 0, 0.08, 0.07, 0.1);
+        const ex = hx + 0.3, ey = 2.32 + (boss ? 0.08 : 0);
+        part(zEye, ne, ex - 0.02, ey - 0.02, s * 0.13, 0, 0, 0, 0.06, 0.07, 0.09);
         const ec = boss ? '#ffde3a' : type === 'shaman' || type === 'shade' ? '#d8b4ff' : '#ff3a3a';
         zEye.setColorAt(ne, col2.set(ec)); ne++;
         if (night > 0.25 || type === 'shade') { const p = worldOf(ex + 0.05, ey, s * 0.13); glowAt(p.x, p.y, p.z, 0.22 * rr * 2.2, ec, Math.max(night, type === 'shade' ? 1 : 0) * 0.7); }
@@ -1201,7 +1249,7 @@
       }
       nz++;
     }
-    for (const [m, n] of [[zLeg, nl], [zTorso, nz], [zHead, nz], [zArm, na], [zEye, ne], [zHorn, nh], [zBarrel, nbar], [zHelm, nhelm], [zPlate, nplate], [zHat, nhat], [zStaff, nstaff], [zSack, nsack]]) { m.count = n; done(m); }
+    for (const [m, n] of [[zGore, nz], [zSkull, nz], [zLeg, nl], [zTorso, nz], [zHead, nz], [zArm, na], [zEye, ne], [zHorn, nh], [zBarrel, nbar], [zHelm, nhelm], [zPlate, nplate], [zHat, nhat], [zStaff, nstaff], [zSack, nsack]]) { m.count = n; done(m); }
 
     // Tiere
     const aseen = new Set();
