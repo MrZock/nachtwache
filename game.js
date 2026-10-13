@@ -31,6 +31,9 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
+// Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
+const NET_VER = 31;
+const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -2405,7 +2408,8 @@ function serverWsUrl() {
 const ONLINE_URL = serverWsUrl();
 const INVITE = (() => { try { return (new URLSearchParams(location.search).get('join') || '').toUpperCase(); } catch (e) { return ''; } })();
 function inviteLink(code) {
-  const u = new URL(location.href);
+  // Aus der Windows-App (oder lokalen Datei) immer auf die Web-Version verlinken, damit Freunde direkt im Browser beitreten können
+  const u = new URL(DESKTOP || location.protocol === 'file:' ? WEB_URL : location.href);
   u.search = '';
   if (/\.github\.io$/i.test(location.hostname) || location.protocol === 'file:') { /* Server-Adresse steckt im Spiel */ }
   try { const s = new URLSearchParams(location.search).get('server'); if (s) u.searchParams.set('server', s); } catch (e) {}
@@ -2495,7 +2499,7 @@ async function unpackU8(s) {
 function sendWorldTo(q) {
   const res = S.res.slice(), rhp = S.rhp.slice(), seed = S.seed, tgt = S.resTarget.slice();
   Promise.all([packU8(res), packU8(rhp)]).then(([r, h]) => {
-    netSendTo(q, { t: 'M', you: q.id, seed, res: r, rhp: h, tgt });
+    netSendTo(q, { t: 'M', you: q.id, seed, res: r, rhp: h, tgt, ver: NET_VER });
     NET.bDirty = true; NET.bT = 1;
   });
 }
@@ -2974,6 +2978,10 @@ function netOnMessage(m, gid) {
   }
 }
 async function clientInitMap(m) {
+  if ((m.ver || 0) !== NET_VER) {
+    netClose('Andere Spielversion als der Host (' + (m.ver || 'alt') + ' / deine: ' + NET_VER + '). ' + (DESKTOP ? 'Starte die App mit Internet neu' : 'Lade die Seite neu (Strg+F5)') + ' – beide brauchen den gleichen Stand.');
+    return;
+  }
   const res = await unpackU8(m.res), rhp = await unpackU8(m.rhp);
   newGame({ localId: m.you || 1, noMap: true });
   S.isClient = true;
