@@ -49,6 +49,8 @@ Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Sp
 
 - Vollbild ohne Browser-Leisten (F11 oder Alt+Enter schaltet um), eigener „Beenden“-Knopf im Menü
 - Online-Modus läuft über denselben Server wie die Web-Version – Web- und Windows-Spieler können zusammen spielen
+- Mit Internet lädt die App immer die aktuelle Web-Version (gleicher Stand für alle, Updates ohne Neuinstallation); ohne Internet startet die mitgelieferte Version
+- Einladungslinks aus der App zeigen auf die Web-Version; beim Beitreten wird die Spielversion geprüft (`NET_VER` in `game.js`)
 
 Selbst bauen (Node.js nötig):
 
