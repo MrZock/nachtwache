@@ -5,10 +5,12 @@
   "portsAttributes": {
     "8080": {
       "label": "Nachtwache",
-      "onAutoForward": "notify"
+      "onAutoForward": "silent"
     }
   },
-  "postStartCommand": "bash .devcontainer/start.sh",
+  "postAttachCommand": {
+    "spielserver": "bash .devcontainer/start.sh"
+  },
   "customizations": {
     "codespaces": {
       "openFiles": ["README.md"]
