@@ -733,46 +733,99 @@
     }
     return (toolCache[id] = k.build());
   }
-  function makePlayer(p) {
-    const pc = G.PLAYER_COL[p.id % G.PLAYER_COL.length] || G.PLAYER_COL[0];
+  // Spielermodell nach Skin bauen (Blick nach +x). Gibt eine Gruppe zurück, ohne sie in die Szene zu hängen.
+  function buildPlayer(p) {
+    const sk = G.skinParse(p.skin || ''), O = G.SKIN_OPTS, pick = id => { const d = O.find(o => o.id === id); return (d.colors || d.list)[sk[id]]; };
+    const J = pick('c'), SKN = pick('s'), HC = pick('hc'), LENS = pick('v'), PN = pick('p'), hair = sk.h, gear = sk.g, back = sk.b;
+    const Jd = '#' + col.set(J).offsetHSL(0, 0, -0.12).getHexString(), Jl = '#' + col.set(J).offsetHSL(0, 0, 0.08).getHexString();
+    const SKd = '#' + col.set(SKN).offsetHSL(0, 0, -0.1).getHexString();
     const grp = new T.Group(), body = new T.Group(); grp.add(body);
     const mat = matLit.clone(), metal = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: '#dfe6ee', emissive: '#1a1a1a' });
-    const mesh = (g, parent, x, y, z, m) => { const o = new T.Mesh(g, m || mat); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; (parent || body).add(o); return o; };
-    const dark = '#' + col.set(pc).offsetHSL(0, 0, -0.12).getHexString();
-    const hair = ['#5a3a1a', '#2a1a10', '#c8902a', '#8a3a1a'][p.id % 4];
-    // Bein: Cargohose mit Knieschoner, schwere Stiefel
-    const legG = new Kit().lit(BX(0.13, 0.32, 0.14), '#3a3f4a', 0, -0.16, 0).lit(BX(0.04, 0.08, 0.06), '#2e323a', 0.0, -0.1, 0.075)
-      .lit(BX(0.04, 0.09, 0.11), '#6a6e76', 0.07, -0.2, 0).lit(BX(0.15, 0.1, 0.16), '#4a3020', 0.01, -0.32, 0)
-      .lit(BX(0.22, 0.09, 0.16), '#3a2618', 0.035, -0.39, 0).lit(BX(0.23, 0.03, 0.17), '#151010', 0.035, -0.44, 0).build().lit;
+    const steel = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: '#9aa0a8', emissive: '#151515' });
+    const mesh = (g, parent, x, y, z, m) => { if (!g) return null; const o = new T.Mesh(g, m || mat); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; (parent || body).add(o); return o; };
+    // Beine: Hose, Knieschoner, Stiefel
+    const legG = new Kit().lit(BX(0.14, 0.2, 0.15), PN, 0, -0.1, 0).lit(BX(0.125, 0.16, 0.135), PN, 0.005, -0.26, 0)
+      .lit(BX(0.04, 0.08, 0.06), '#2a2a2e', 0.0, -0.08, 0.078).lit(BX(0.045, 0.09, 0.11), '#6a6e76', 0.07, -0.2, 0)
+      .lit(BX(0.15, 0.05, 0.15), '#4a3020', 0.01, -0.335, 0).lit(BX(0.21, 0.09, 0.16), '#3a2618', 0.035, -0.39, 0).lit(BX(0.22, 0.03, 0.17), '#151010', 0.035, -0.44, 0).build().lit;
     const legs = [];
-    for (const s of [-1, 1]) { const g = new T.Group(); g.position.set(0, 0.45, s * 0.09); body.add(g); mesh(legG, g); legs.push(g); }
-    // Jacke, Schal, Gürtel mit Taschen, Schulterpanzer, Rucksack mit Schlafsack und Funkantenne
-    mesh(new Kit()
-      .lit(BX(0.24, 0.4, 0.38), pc, 0, 0.66, 0).lit(BX(0.012, 0.34, 0.03), dark, 0.122, 0.67, 0).lit(BX(0.02, 0.1, 0.1), dark, 0.122, 0.62, 0.12)
-      .lit(BX(0.26, 0.07, 0.4), '#4a3020', 0, 0.48, 0).lit(BX(0.02, 0.05, 0.07), '#c8a040', 0.135, 0.48, 0)
-      .lit(BX(0.08, 0.1, 0.08), '#5a4a2e', 0.1, 0.47, 0.15).lit(BX(0.08, 0.1, 0.08), '#5a4a2e', 0.1, 0.47, -0.15).lit(BX(0.06, 0.12, 0.06), '#4a3e28', -0.02, 0.46, 0.2)
-      .lit(BX(0.26, 0.08, 0.3), '#b0402a', 0.01, 0.89, 0).lit(BX(0.03, 0.2, 0.07), '#9a3422', 0.12, 0.78, 0.09, 0.15, 0, 0.1)
-      .lit(BX(0.18, 0.07, 0.15), '#6a5e52', 0, 0.88, 0.2, -0.35, 0, 0).lit(BX(0.18, 0.07, 0.15), '#6a5e52', 0, 0.88, -0.2, 0.35, 0, 0)
-      .lit(BX(0.19, 0.03, 0.16), '#8a4a2a', 0, 0.84, 0.215, -0.35, 0, 0).lit(BX(0.19, 0.03, 0.16), '#8a4a2a', 0, 0.84, -0.215, 0.35, 0, 0)
-      .lit(BX(0.16, 0.32, 0.3), '#5a4a2a', -0.2, 0.68, 0).lit(BX(0.17, 0.09, 0.31), '#4a3a20', -0.2, 0.82, 0).lit(BX(0.04, 0.12, 0.2), '#4a3a20', -0.29, 0.6, 0)
-      .lit(CY(0.075, 0.075, 0.36, 8), '#7a3a2a', -0.22, 0.93, 0, Math.PI / 2, 0, 0).lit(CY(0.078, 0.078, 0.03, 8), '#2a2018', -0.22, 0.93, 0.1, Math.PI / 2, 0, 0)
-      .lit(CY(0.008, 0.008, 0.42, 4), '#2a2a2a', -0.27, 1.08, 0.11).build().lit);
-    mesh(new Kit().glow(SP(0.022, 5, 4), '#ff3a2a', -0.27, 1.3, 0.11).build().glow, body, 0, 0, 0, matGlow);
+    for (const s of [-1, 1]) { const gl = new T.Group(); gl.position.set(0, 0.45, s * 0.09); body.add(gl); mesh(legG, gl); legs.push(gl); }
+    // Oberkörper: Brust breiter als Taille, Kragen, Reißverschluss, Gürtel mit Taschen, Schulterpanzer, Hals
+    const tk = new Kit()
+      .lit(BX(0.2, 0.16, 0.33), J, 0, 0.55, 0).lit(BX(0.25, 0.26, 0.41), J, 0, 0.72, 0).lit(BX(0.27, 0.06, 0.36), Jl, 0, 0.84, 0)
+      .lit(BX(0.012, 0.36, 0.03), Jd, 0.128, 0.67, 0).lit(BX(0.02, 0.09, 0.09), Jd, 0.128, 0.66, 0.12).lit(BX(0.02, 0.06, 0.07), Jd, 0.128, 0.76, -0.12)
+      .lit(BX(0.22, 0.07, 0.26), Jd, -0.005, 0.89, 0).lit(BX(0.04, 0.09, 0.08), Jd, 0.1, 0.9, 0.1, 0, 0, 0.3).lit(BX(0.04, 0.09, 0.08), Jd, 0.1, 0.9, -0.1, 0, 0, 0.3)
+      .lit(BX(0.24, 0.07, 0.36), '#4a3020', 0, 0.48, 0).lit(BX(0.02, 0.05, 0.07), '#c8a040', 0.125, 0.48, 0)
+      .lit(BX(0.08, 0.1, 0.08), '#5a4a2e', 0.09, 0.47, 0.14).lit(BX(0.08, 0.1, 0.08), '#5a4a2e', 0.09, 0.47, -0.14).lit(BX(0.06, 0.12, 0.06), '#4a3e28', -0.03, 0.46, 0.19)
+      .lit(BX(0.18, 0.07, 0.15), '#6a5e52', 0, 0.88, 0.21, -0.38, 0, 0).lit(BX(0.18, 0.07, 0.15), '#6a5e52', 0, 0.88, -0.21, 0.38, 0, 0)
+      .lit(BX(0.19, 0.025, 0.16), '#8a4a2a', 0, 0.845, 0.225, -0.38, 0, 0).lit(BX(0.19, 0.025, 0.16), '#8a4a2a', 0, 0.845, -0.225, 0.38, 0, 0)
+      .lit(CY(0.06, 0.07, 0.08, 8), SKN, 0, 0.94, 0);
+    const gk = new Kit();
+    if (back === 0) {   // Rucksack mit Schlafsack und Funkantenne
+      tk.lit(BX(0.16, 0.32, 0.3), '#5a4a2a', -0.2, 0.68, 0).lit(BX(0.17, 0.09, 0.31), '#4a3a20', -0.2, 0.82, 0).lit(BX(0.04, 0.12, 0.2), '#4a3a20', -0.29, 0.6, 0)
+        .lit(CY(0.075, 0.075, 0.36, 8), '#7a3a2a', -0.22, 0.93, 0, Math.PI / 2, 0, 0).lit(CY(0.078, 0.078, 0.03, 8), '#2a2018', -0.22, 0.93, 0.1, Math.PI / 2, 0, 0)
+        .lit(CY(0.008, 0.008, 0.42, 4), '#2a2a2a', -0.27, 1.08, 0.11);
+      gk.glow(SP(0.022, 5, 4), LENS, -0.27, 1.3, 0.11);
+    } else if (back === 1) {   // Jetpack: zwei Tanks mit Düsen
+      for (const s of [-1, 1]) tk.lit(CY(0.07, 0.07, 0.34, 10), '#8a8e96', -0.2, 0.7, s * 0.08).lit(SP(0.07, 8, 5, 0, TAU, 0, Math.PI / 2), '#a8acb4', -0.2, 0.87, s * 0.08)
+        .lit(CY(0.05, 0.035, 0.07, 8), '#3a3a3e', -0.2, 0.5, s * 0.08).lit(BX(0.02, 0.3, 0.02), '#c84a2a', -0.27, 0.7, s * 0.08);
+      tk.lit(BX(0.06, 0.24, 0.26), '#4a4e56', -0.15, 0.7, 0);
+      for (const s of [-1, 1]) gk.glow(CO(0.03, 0.09, 6), LENS, -0.2, 0.43, s * 0.08, Math.PI, 0, 0);
+    } else if (back === 2) {   // Schwert-Halfter quer über dem Rücken
+      tk.lit(BX(0.04, 0.62, 0.07), '#3a2a1a', -0.16, 0.74, 0, 0.75, 0, 0).lit(BX(0.05, 0.05, 0.12), '#c8a040', -0.17, 0.95, 0.2, 0.75, 0, 0)
+        .lit(CY(0.022, 0.022, 0.14, 6), '#5a3a1a', -0.17, 1.02, 0.28, 0.75, 0, 0).lit(BX(0.26, 0.03, 0.03), '#4a3020', 0, 0.72, 0, 0.75, 0, 0);
+    }
+    mesh(tk.build().lit);
+    const gg = gk.build().glow; if (gg) mesh(gg, body, 0, 0, 0, matGlow);
+    // Kopf
     const head = new T.Group(); head.position.set(0, 1.03, 0); body.add(head);
-    mesh(new Kit()
-      .lit(BX(0.27, 0.27, 0.27), '#f0c9a0', 0, 0, 0).lit(BX(0.29, 0.09, 0.29), hair, -0.01, 0.13, 0).lit(BX(0.1, 0.22, 0.29), hair, -0.1, 0.03, 0)
-      .lit(BX(0.02, 0.05, 0.04), '#1a1a2a', 0.136, 0.02, 0.06).lit(BX(0.02, 0.05, 0.04), '#1a1a2a', 0.136, 0.02, -0.06)
-      .lit(BX(0.04, 0.05, 0.04), '#e0b088', 0.15, -0.03, 0).lit(BX(0.02, 0.015, 0.06), '#a06a50', 0.137, -0.08, 0)
-      .lit(BX(0.285, 0.035, 0.285), '#2a2622', 0, 0.065, 0)
-      .lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, 0.065, 0.065, 0, 0, Math.PI / 2).lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, 0.065, -0.065, 0, 0, Math.PI / 2)
-      .build().lit, head);
-    mesh(new Kit().glow(CY(0.038, 0.038, 0.012, 8), '#ffb347', 0.176, 0.065, 0.065, 0, 0, Math.PI / 2).glow(CY(0.038, 0.038, 0.012, 8), '#ffb347', 0.176, 0.065, -0.065, 0, 0, Math.PI / 2).build().glow, head, 0, 0, 0, matGlow);
-    const helm = mesh(new Kit().add('metal', SP(0.17, 10, 6, 0, TAU, 0, Math.PI / 2), '#ffffff', 0, 0.06, 0).add('metal', BX(0.36, 0.03, 0.36), '#ffffff', 0, 0.05, 0)
-      .lit(CO(0.03, 0.14, 5), '#c0392b', 0, 0.26, 0).build().metal, head, 0, 0, 0, metal);
+    const hk = new Kit()
+      .lit(BX(0.26, 0.27, 0.26), SKN, 0, 0, 0).lit(BX(0.04, 0.06, 0.04), SKd, 0.145, -0.02, 0)
+      .lit(BX(0.04, 0.07, 0.04), SKd, -0.01, 0, 0.135).lit(BX(0.04, 0.07, 0.04), SKd, -0.01, 0, -0.135)
+      .lit(BX(0.015, 0.04, 0.055), '#f4f4f4', 0.131, 0.02, 0.058).lit(BX(0.015, 0.04, 0.055), '#f4f4f4', 0.131, 0.02, -0.058)
+      .lit(BX(0.018, 0.035, 0.028), '#1a1a2a', 0.135, 0.018, 0.064).lit(BX(0.018, 0.035, 0.028), '#1a1a2a', 0.135, 0.018, -0.064)
+      .lit(BX(0.016, 0.018, 0.07), HC, 0.133, 0.06, 0.058, 0.15, 0, 0).lit(BX(0.016, 0.018, 0.07), HC, 0.133, 0.06, -0.058, -0.15, 0, 0)
+      .lit(BX(0.014, 0.014, 0.07), '#8a4a3a', 0.131, -0.075, 0);
+    const hood = gear === 3, helmet = gear === 0, mask = gear === 2;
+    // Haare (unter Helm/Kapuze nur das, was herausschaut)
+    if (!hood) {
+      if (hair === 0 || hair === 4 || hair === 5) { if (!helmet) hk.lit(BX(0.28, 0.07, 0.28), HC, -0.005, 0.13, 0); hk.lit(BX(0.08, 0.2, 0.28), HC, -0.105, 0.04, 0).lit(BX(0.06, 0.08, 0.02), HC, 0.03, 0.09, 0.135).lit(BX(0.06, 0.08, 0.02), HC, 0.03, 0.09, -0.135); }
+      if (hair === 1 && !helmet) for (let i = 0; i < 5; i++) hk.lit(BX(0.06, 0.08 + (i === 2 ? 0.04 : i % 2 ? 0.03 : 0), 0.05), HC, 0.1 - i * 0.055, 0.17 + (i === 2 ? 0.02 : 0), 0);
+      if (hair === 2) { if (!helmet) hk.lit(BX(0.28, 0.07, 0.28), HC, -0.005, 0.13, 0); hk.lit(BX(0.08, 0.36, 0.28), HC, -0.11, -0.04, 0).lit(BX(0.09, 0.24, 0.03), HC, -0.02, -0.02, 0.14).lit(BX(0.09, 0.24, 0.03), HC, -0.02, -0.02, -0.14); }
+      if (hair === 4 && !helmet) for (let i = 0; i < 6; i++) hk.lit(CO(0.045, 0.14, 4), HC, 0.06 - (i % 3) * 0.08, 0.2, (i < 3 ? 1 : -1) * 0.06, (i < 3 ? 0.3 : -0.3), 0, (i % 3 - 1) * 0.3);
+      if (hair === 5) hk.lit(CY(0.035, 0.02, 0.22, 6), HC, -0.19, -0.02, 0, 0, 0, -0.6).lit(SP(0.04, 6, 4), '#8a2a1a', -0.15, 0.04, 0);
+    }
+    // Kopfbedeckung
+    const goggles = !mask && gear !== 5 && gear !== 2;
+    const gogY = helmet ? 0.15 : 0.085;
+    if (helmet) {
+      hk.add('metal', SP(0.17, 10, 6, 0, TAU, 0, Math.PI / 2), '#ffffff', 0, 0.07, 0).add('metal', BX(0.36, 0.03, 0.36), '#ffffff', 0, 0.065, 0)
+        .lit(BX(0.04, 0.05, 0.37), '#8a4a2a', 0, 0.08, 0).lit(CO(0.03, 0.14, 5), '#c0392b', -0.02, 0.27, 0);
+    } else if (gear === 1) {
+      hk.lit(BX(0.29, 0.07, 0.29), Jd, -0.005, 0.16, 0).lit(BX(0.27, 0.05, 0.27), Jd, -0.005, 0.2, 0).lit(BX(0.13, 0.02, 0.24), Jd, 0.19, 0.13, 0).lit(BX(0.02, 0.05, 0.06), Jl, 0.146, 0.17, 0);
+    } else if (mask) {
+      hk.lit(BX(0.29, 0.035, 0.29), '#2a2622', 0, 0.06, 0).lit(BX(0.07, 0.16, 0.22), '#3a3e40', 0.13, -0.04, 0)
+        .lit(CY(0.06, 0.07, 0.08, 8), '#5a5e60', 0.2, -0.08, 0, 0, 0, Math.PI / 2).lit(CY(0.062, 0.062, 0.02, 8), '#2a2a2a', 0.24, -0.08, 0, 0, 0, Math.PI / 2)
+        .lit(CY(0.05, 0.05, 0.04, 8), '#4a4e50', 0.15, 0.04, 0.065, 0, 0, Math.PI / 2).lit(CY(0.05, 0.05, 0.04, 8), '#4a4e50', 0.15, 0.04, -0.065, 0, 0, Math.PI / 2);
+    } else if (hood) {
+      hk.lit(BX(0.31, 0.08, 0.31), Jd, -0.01, 0.15, 0).lit(BX(0.1, 0.32, 0.31), Jd, -0.12, 0.0, 0).lit(BX(0.26, 0.3, 0.03), Jd, 0.0, 0.0, 0.15).lit(BX(0.26, 0.3, 0.03), Jd, 0.0, 0.0, -0.15)
+        .lit(BX(0.1, 0.14, 0.2), Jd, -0.14, -0.14, 0, 0, 0, 0.4);
+    } else if (gear === 4) {
+      hk.lit(BX(0.28, 0.04, 0.28), '#b0402a', 0, 0.075, 0).lit(BX(0.03, 0.12, 0.04), '#9a3422', -0.15, 0.02, 0.04, 0.3, 0, -0.3).lit(BX(0.03, 0.1, 0.04), '#9a3422', -0.15, 0.03, -0.03, -0.3, 0, -0.4);
+    }
+    if (goggles) hk.lit(BX(0.285, 0.035, 0.285), '#2a2622', 0, gogY, 0)
+      .lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, gogY, 0.065, 0, 0, Math.PI / 2).lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, gogY, -0.065, 0, 0, Math.PI / 2);
+    const hb = hk.build();
+    mesh(hb.lit, head); const helm = mesh(hb.metal, head, 0, 0, 0, steel);
+    const lk = new Kit();
+    if (goggles) lk.glow(CY(0.038, 0.038, 0.012, 8), LENS, 0.176, gogY, 0.065, 0, 0, Math.PI / 2).glow(CY(0.038, 0.038, 0.012, 8), LENS, 0.176, gogY, -0.065, 0, 0, Math.PI / 2);
+    if (mask) lk.glow(CY(0.04, 0.04, 0.01, 8), LENS, 0.172, 0.04, 0.065, 0, 0, Math.PI / 2).glow(CY(0.04, 0.04, 0.01, 8), LENS, 0.172, 0.04, -0.065, 0, 0, Math.PI / 2);
+    const lg = lk.build().glow; if (lg) mesh(lg, head, 0, 0, 0, matGlow);
+    // Arme: Ärmel, Ellbogen, Armschiene, Handschuh
     const arms = [];
-    const armG = new Kit().lit(BX(0.1, 0.2, 0.1), pc, 0, -0.1, 0).lit(BX(0.115, 0.1, 0.115), '#6a5e52', 0, -0.22, 0).lit(BX(0.118, 0.02, 0.118), '#8a4a2a', 0, -0.2, 0)
-      .lit(BX(0.11, 0.1, 0.11), '#3a2a1a', 0, -0.32, 0).build().lit;
-    for (const s of [-1, 1]) { const g = new T.Group(); g.position.set(0, 0.82, s * 0.25); body.add(g); mesh(armG, g); arms.push(g); }
+    const armG = new Kit().lit(BX(0.1, 0.17, 0.1), J, 0, -0.085, 0).lit(BX(0.105, 0.05, 0.105), Jd, 0, -0.17, 0)
+      .lit(BX(0.115, 0.1, 0.115), '#6a5e52', 0, -0.23, 0).lit(BX(0.118, 0.02, 0.118), '#8a4a2a', 0, -0.2, 0)
+      .lit(BX(0.11, 0.09, 0.11), '#3a2a1a', 0, -0.32, 0).lit(BX(0.04, 0.05, 0.05), '#3a2a1a', 0.05, -0.33, 0.03).build().lit;
+    for (const s of [-1, 1]) { const ga = new T.Group(); ga.position.set(0, 0.82, s * 0.255); body.add(ga); mesh(armG, ga); arms.push(ga); }
     const tool = new T.Group(); tool.position.set(0.28, 0.52, 0.28); body.add(tool);
     const tools = {};
     for (const id of ['pick', 'sword', 'bow', 'spear', 'axe', 'staff']) {
@@ -782,10 +835,38 @@
     }
     const sh = new T.Mesh(geo('shadowDisc', () => new T.CircleGeometry(0.3, 16).rotateX(-Math.PI / 2)), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.25, depthWrite: false }));
     sh.position.y = 0.02; grp.add(sh);
-    scene.add(grp);
-    grp.userData = { body, legs, arms, head, helm, tool, tools, mat, metal };
+    grp.userData = { body, legs, arms, head, helm, tool, tools, mat, metal, skin: p.skin || '' };
     return grp;
   }
+  function makePlayer(p) { const grp = buildPlayer(p); scene.add(grp); return grp; }
+
+  // Vorschau für den Skin-Editor im Hauptmenü (eigener kleiner Renderer)
+  let pvR = null, pvScene = null, pvCam = null, pvObj = null, pvKey = '';
+  R3.skinPreview = function (skin, ang) {
+    if (!R3.ready) return null;
+    if (!pvR) {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 320;
+      pvR = new T.WebGLRenderer({ canvas: c, alpha: true, antialias: true, preserveDrawingBuffer: true });
+      pvR.setPixelRatio(1); pvR.setSize(256, 320, false); pvR.toneMapping = T.ACESFilmicToneMapping; pvR.toneMappingExposure = 1.2;
+      pvScene = new T.Scene();
+      pvScene.add(new T.HemisphereLight(0xfff4e8, 0x40342c, 1.6));
+      const d = new T.DirectionalLight(0xffffff, 2.2); d.position.set(3, 5, 4); pvScene.add(d);
+      const r = new T.DirectionalLight(0xff8a40, 1.4); r.position.set(-4, 2, -3); pvScene.add(r);
+      pvCam = new T.PerspectiveCamera(30, 256 / 320, 0.1, 50); pvCam.position.set(2.6, 1.25, 0); pvCam.lookAt(0, 0.66, 0);
+    }
+    if (pvKey !== skin) {
+      if (pvObj) pvScene.remove(pvObj);
+      pvObj = buildPlayer({ id: 0, skin }); pvKey = skin;
+      for (const k in pvObj.userData.tools) pvObj.userData.tools[k].visible = k === 'sword';
+      pvObj.userData.tool.rotation.y = 0.9; pvObj.userData.arms[1].rotation.z = 0.75; pvObj.userData.arms[1].rotation.x = -0.35;
+      pvObj.children[1].visible = false;
+      pvScene.add(pvObj);
+    }
+    pvObj.rotation.y = ang;
+    pvObj.userData.head.rotation.y = Math.sin(ang * 1.7) * 0.15;
+    pvR.setClearColor(0x000000, 0); pvR.clear(); pvR.render(pvScene, pvCam);
+    return pvR.domElement;
+  };
 
   // Waffe in der Hand (Ego-Perspektive)
   function updateFpView(p, at) {
@@ -874,62 +955,68 @@
 
   // ---------------------------------------------------------------- Tier-Modelle
   function makeAnimal(an) {
-    // Modelle in Einheiten des Tier-Radius gebaut, dann skaliert. Blick nach +x.
+    // Rundere Low-Poly-Tiere: Körper aus Ellipsoiden, verjüngte Beine mit Gelenk, Blick nach +x
     const D = G.ADEF[an.type], grp = new T.Group(), s = an.r / G.TS;
     const body = new T.Group(); body.scale.setScalar(s * 1.15); grp.add(body);
     const mat = matLit.clone(), fc = D.color;
-    const c = new T.Color(fc), lt = '#' + c.clone().offsetHSL(0, -0.05, 0.14).getHexString(), dk = '#' + c.clone().offsetHSL(0, 0, -0.12).getHexString();
+    const c = new T.Color(fc), lt = '#' + c.clone().offsetHSL(0, -0.05, 0.16).getHexString(), dk = '#' + c.clone().offsetHSL(0, 0, -0.13).getHexString();
     const add = (geom, parent, x, y, z) => { const o = new T.Mesh(geom, mat); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; (parent || body).add(o); return o; };
     const legs = [];
-    const leg = (x, z, L, w, hoof) => {
+    // Bein mit Oberschenkel, Gelenk und Huf/Pfote; hind = Hinterbein (Knie nach hinten)
+    const leg = (x, z, L, w, foot, hind) => {
       const pv = new T.Group(); pv.position.set(x, L, z); body.add(pv);
-      add(new Kit().lit(BX(w, L * 0.55, w), fc, 0, -L * 0.27, 0).lit(BX(w * 0.8, L * 0.45, w * 0.8), dk, 0, -L * 0.75, 0).lit(BX(w * 1.05, L * 0.1, w * 1.1), hoof, w * 0.08, -L * 0.96, 0).build().lit, pv);
-      legs.push(pv);
+      const k = new Kit().lit(SP(w * 0.75, 7, 5), fc, 0, -w * 0.2, 0, 0, 0, 0, 1.1, 1.5, 1)
+        .lit(CY(w * 0.5, w * 0.32, L * 0.5, 6), fc, hind ? -w * 0.25 : w * 0.05, -L * 0.3, 0, 0, 0, hind ? 0.25 : -0.05)
+        .lit(SP(w * 0.3, 6, 4), dk, hind ? -w * 0.42 : w * 0.08, -L * 0.55, 0)
+        .lit(CY(w * 0.3, w * 0.24, L * 0.42, 6), dk, hind ? -w * 0.25 : w * 0.05, -L * 0.76, 0, 0, 0, hind ? -0.2 : 0.03)
+        .lit(CY(w * 0.3, w * 0.36, L * 0.09, 6), foot, w * 0.02, -L * 0.96, 0);
+      add(k.build().lit, pv); legs.push(pv);
     };
     const k = new Kit();
     let L;
     if (an.type === 'deer') {
       L = 1.3;
-      k.lit(BX(1.6, 0.68, 0.7), fc, 0, L + 0.36, 0, 0, 0, 0, 1, 1, 1, 0.03).lit(BX(1.3, 0.2, 0.56), '#e8d8b8', 0.05, L + 0.05, 0)
-        .lit(BX(0.12, 0.42, 0.52), '#f0e4cc', -0.81, L + 0.38, 0).lit(BX(0.14, 0.26, 0.2), '#f4ead8', -0.88, L + 0.6, 0, 0, 0, -0.5)
-        .lit(BX(0.36, 0.86, 0.34), fc, 0.78, L + 0.82, 0, 0, 0, -0.5).lit(BX(0.2, 0.5, 0.3), '#e8d8b8', 0.95, L + 0.68, 0, 0, 0, -0.5)
-        .lit(BX(0.56, 0.36, 0.36), fc, 1.12, L + 1.22, 0).lit(BX(0.28, 0.24, 0.28), dk, 1.45, L + 1.14, 0).lit(BX(0.06, 0.1, 0.14), '#141414', 1.6, L + 1.16, 0)
-        .lit(BX(0.04, 0.07, 0.07), '#111', 1.3, L + 1.3, 0.18).lit(BX(0.04, 0.07, 0.07), '#111', 1.3, L + 1.3, -0.18);
+      k.lit(SP(0.5, 10, 7), fc, 0.05, L + 0.38, 0, 0, 0, 0, 1.75, 0.75, 0.72).lit(SP(0.36, 8, 6), fc, 0.45, L + 0.45, 0, 0, 0, 0.2, 1.1, 1, 0.95)
+        .lit(SP(0.38, 8, 6), fc, -0.48, L + 0.42, 0, 0, 0, 0, 1.1, 0.95, 0.9).lit(SP(0.42, 8, 6), lt, 0.05, L + 0.14, 0, 0, 0, 0, 1.6, 0.42, 0.62)
+        .lit(SP(0.26, 7, 5), '#f4ead8', -0.82, L + 0.42, 0, 0, 0, 0, 0.4, 1, 1.1).lit(CO(0.1, 0.24, 6), '#f4ead8', -0.88, L + 0.62, 0, 0, 0, 0.9)
+        .lit(CY(0.15, 0.21, 0.82, 8), fc, 0.78, L + 0.85, 0, 0, 0, -0.55).lit(CY(0.08, 0.13, 0.6, 7), lt, 0.88, L + 0.74, 0, 0, 0, -0.55)
+        .lit(SP(0.2, 8, 6), fc, 1.1, L + 1.22, 0, 0, 0, 0, 1.25, 0.95, 0.9).lit(CY(0.09, 0.14, 0.32, 7), fc, 1.36, L + 1.14, 0, 0, 0, Math.PI / 2 + 0.3)
+        .lit(SP(0.08, 6, 4), '#1a1410', 1.52, L + 1.08, 0).lit(SP(0.035, 5, 4), '#0a0a0a', 1.2, L + 1.28, 0.16).lit(SP(0.035, 5, 4), '#0a0a0a', 1.2, L + 1.28, -0.16)
+        .lit(SP(0.012, 4, 3), '#ffffff', 1.225, L + 1.3, 0.17).lit(SP(0.012, 4, 3), '#ffffff', 1.225, L + 1.3, -0.15);
       for (const sd of [-1, 1]) {
-        k.lit(BX(0.1, 0.32, 0.16), fc, 0.95, L + 1.45, sd * 0.24, sd * 0.7, 0, 0).lit(BX(0.04, 0.24, 0.1), '#e8c0b0', 0.97, L + 1.45, sd * 0.25, sd * 0.7, 0, 0);
-        // Geweih mit Enden
-        k.lit(BX(0.06, 0.62, 0.06), '#d8c090', 0.98, L + 1.68, sd * 0.24, sd * 0.45, 0, 0.1)
-          .lit(BX(0.05, 0.3, 0.05), '#e0caa0', 1.12, L + 1.72, sd * 0.3, sd * 0.3, 0, -0.8).lit(BX(0.05, 0.3, 0.05), '#e0caa0', 0.86, L + 1.88, sd * 0.38, sd * 0.6, 0, 0.6)
-          .lit(BX(0.04, 0.24, 0.04), '#e8d4aa', 1.0, L + 2.0, sd * 0.42, sd * 0.9, 0, -0.2);
+        k.lit(SP(0.1, 6, 4), fc, 1.0, L + 1.42, sd * 0.2, sd * 0.6, 0, 0, 0.6, 1.6, 1.2).lit(SP(0.07, 6, 4), '#e8c0b0', 1.02, L + 1.42, sd * 0.215, sd * 0.6, 0, 0, 0.3, 1.4, 1);
+        // Geweih: Stange mit drei Enden, leicht nach hinten geschwungen
+        k.lit(CY(0.025, 0.04, 0.55, 5), '#d8c090', 0.98, L + 1.62, sd * 0.2, sd * 0.4, 0, 0.15)
+          .lit(CY(0.02, 0.03, 0.28, 5), '#e0caa0', 1.1, L + 1.66, sd * 0.27, sd * 0.25, 0, -0.85).lit(CY(0.02, 0.03, 0.3, 5), '#e0caa0', 0.88, L + 1.84, sd * 0.34, sd * 0.55, 0, 0.55)
+          .lit(CY(0.015, 0.025, 0.26, 5), '#e8d4aa', 1.0, L + 1.96, sd * 0.4, sd * 0.85, 0, -0.25).lit(CY(0.015, 0.02, 0.2, 5), '#e8d4aa', 0.82, L + 2.0, sd * 0.42, sd * 0.4, 0, 0.9);
       }
-      for (const [x, z] of [[-0.3, 0.2], [0.1, -0.22], [-0.5, -0.15], [0.35, 0.18]]) k.lit(BX(0.1, 0.03, 0.1), '#f0e0c0', x, L + 0.71, z);
-      for (const [x, z] of [[0.6, 0.22], [0.6, -0.22], [-0.58, 0.22], [-0.58, -0.22]]) leg(x, z, L, 0.15, '#2a2018');
+      for (const [x, z] of [[-0.3, 0.2], [0.1, -0.24], [-0.5, -0.12], [0.35, 0.18], [-0.1, 0.06], [0.2, -0.05]]) k.lit(SP(0.045, 5, 3), '#f4e8cc', x, L + 0.74, z, 0, 0, 0, 1, 0.4, 1);
+      leg(0.55, 0.2, L, 0.15, '#2a2018'); leg(0.55, -0.2, L, 0.15, '#2a2018'); leg(-0.55, 0.2, L, 0.17, '#2a2018', true); leg(-0.55, -0.2, L, 0.17, '#2a2018', true);
     } else if (an.type === 'rabbit') {
-      L = 0.32;
-      k.lit(SP(0.45, 8, 6), fc, -0.05, L + 0.36, 0, 0, 0, 0, 1.25, 0.95, 0.95).lit(SP(0.3, 8, 6), '#f0e8dc', 0.15, L + 0.22, 0, 0, 0, 0, 1.2, 0.7, 1)
-        .lit(SP(0.33, 8, 6), fc, 0.5, L + 0.72, 0).lit(SP(0.14, 6, 5), '#f4ece0', 0.76, L + 0.62, 0)
-        .lit(SP(0.05, 5, 4), '#e87a90', 0.86, L + 0.68, 0).lit(BX(0.05, 0.08, 0.06), '#111', 0.68, L + 0.82, 0.18).lit(BX(0.05, 0.08, 0.06), '#111', 0.68, L + 0.82, -0.18)
-        .lit(BX(0.02, 0.03, 0.03), '#fff', 0.705, L + 0.84, 0.19).lit(BX(0.02, 0.03, 0.03), '#fff', 0.705, L + 0.84, -0.17)
-        .lit(SP(0.17, 6, 5), '#ffffff', -0.62, L + 0.46, 0)
-        .lit(BX(0.42, 0.12, 0.16), dk, -0.25, 0.06, 0.24).lit(BX(0.42, 0.12, 0.16), dk, -0.25, 0.06, -0.24)
-        .lit(SP(0.24, 6, 5), fc, -0.3, L + 0.15, 0.26, 0, 0, 0, 1.1, 1, 0.6).lit(SP(0.24, 6, 5), fc, -0.3, L + 0.15, -0.26, 0, 0, 0, 1.1, 1, 0.6);
-      for (const sd of [-1, 1]) k.lit(BX(0.1, 0.62, 0.2), fc, 0.38, L + 1.2, sd * 0.13, sd * 0.25, 0, 0.25).lit(BX(0.02, 0.46, 0.12), '#f0a8b8', 0.43, L + 1.2, sd * 0.135, sd * 0.25, 0, 0.25);
-      for (const z of [0.16, -0.16]) leg(0.35, z, L, 0.11, '#f0e8dc');
+      L = 0.3;
+      k.lit(SP(0.45, 10, 7), fc, -0.08, L + 0.36, 0, 0, 0, 0.15, 1.25, 0.95, 0.95).lit(SP(0.32, 8, 6), lt, 0.12, L + 0.22, 0, 0, 0, 0, 1.2, 0.7, 1)
+        .lit(SP(0.3, 8, 6), fc, 0.5, L + 0.72, 0, 0, 0, 0, 1.1, 1, 0.95).lit(SP(0.15, 7, 5), lt, 0.74, L + 0.62, 0, 0, 0, 0, 1, 0.8, 1.3)
+        .lit(SP(0.05, 5, 4), '#e87a90', 0.86, L + 0.68, 0).lit(SP(0.06, 6, 4), '#0a0a0a', 0.68, L + 0.8, 0.17).lit(SP(0.06, 6, 4), '#0a0a0a', 0.68, L + 0.8, -0.17)
+        .lit(SP(0.018, 4, 3), '#ffffff', 0.72, L + 0.83, 0.19).lit(SP(0.018, 4, 3), '#ffffff', 0.72, L + 0.83, -0.15)
+        .lit(SP(0.17, 7, 5), '#ffffff', -0.62, L + 0.48, 0)
+        .lit(SP(0.26, 7, 5), fc, -0.3, L + 0.14, 0.26, 0, 0, 0, 1.2, 1, 0.6).lit(SP(0.26, 7, 5), fc, -0.3, L + 0.14, -0.26, 0, 0, 0, 1.2, 1, 0.6)
+        .lit(SP(0.14, 6, 4), lt, -0.12, 0.05, 0.26, 0, 0, 0, 2.2, 0.5, 0.9).lit(SP(0.14, 6, 4), lt, -0.12, 0.05, -0.26, 0, 0, 0, 2.2, 0.5, 0.9);
+      for (let i = 0; i < 3; i++) for (const sd of [-1, 1]) k.lit(BX(0.008, 0.008, 0.22), '#e8e8e8', 0.8, L + 0.66 + (i - 1) * 0.03, sd * 0.14, 0, sd * (i - 1) * 0.2, 0);
+      for (const sd of [-1, 1]) k.lit(SP(0.1, 7, 5), fc, 0.36, L + 1.18, sd * 0.13, sd * 0.25, 0, 0.3, 0.55, 3.2, 1.1).lit(SP(0.07, 6, 4), '#f0a8b8', 0.39, L + 1.18, sd * 0.135, sd * 0.25, 0, 0.3, 0.3, 2.8, 0.9);
+      leg(0.33, 0.15, L, 0.1, lt); leg(0.33, -0.15, L, 0.1, lt);
     } else {
       L = 0.55;
-      k.lit(BX(1.5, 0.8, 0.86), fc, -0.05, L + 0.42, 0, 0, 0, 0, 1, 1, 1, 0.04).lit(SP(0.5, 7, 5), fc, 0.25, L + 0.68, 0, 0, 0, 0, 1.4, 0.9, 1.1)
-        .lit(BX(1.2, 0.18, 0.7), dk, 0, L + 0.04, 0)
-        .lit(BX(0.62, 0.58, 0.6), fc, 0.86, L + 0.38, 0, 0, 0, -0.25).lit(CY(0.17, 0.2, 0.3, 8), '#8a6050', 1.26, L + 0.2, 0, 0, 0, Math.PI / 2 + 0.25)
-        .lit(CY(0.17, 0.17, 0.02, 8), '#5a3a30', 1.4, L + 0.16, 0, 0, 0, Math.PI / 2 + 0.25)
-        .lit(BX(0.03, 0.05, 0.05), '#1a0a0a', 1.41, L + 0.17, 0.06).lit(BX(0.03, 0.05, 0.05), '#1a0a0a', 1.41, L + 0.17, -0.06)
-        .lit(BX(0.05, 0.07, 0.08), '#ffcf4a', 1.05, L + 0.55, 0.22).lit(BX(0.05, 0.07, 0.08), '#ffcf4a', 1.05, L + 0.55, -0.22)
-        .lit(BX(0.05, 0.03, 0.08), '#1a0a0a', 1.08, L + 0.55, 0.22).lit(BX(0.05, 0.03, 0.08), '#1a0a0a', 1.08, L + 0.55, -0.22)
-        .lit(CY(0.03, 0.03, 0.3, 4), dk, -0.85, L + 0.62, 0, 0, 0, 0.8).lit(SP(0.05, 4, 3), '#2a1a10', -0.98, L + 0.74, 0);
-      for (const sd of [-1, 1]) {
-        k.lit(CO(0.045, 0.3, 5), '#f4ecd8', 1.28, L + 0.32, sd * 0.2, sd * 0.4, 0, -0.5).lit(CO(0.12, 0.24, 4), dk, 0.7, L + 0.78, sd * 0.25, sd * 0.5, 0, 0.3);
-      }
-      for (let i = 0; i < 9; i++) k.lit(CO(0.07, 0.22 + (i % 3) * 0.05, 4), '#2a1a10', -0.6 + i * 0.16, L + 0.88 + Math.sin(i * 0.6) * 0.08 + (i > 4 ? 0.06 : 0), 0, 0, i, -0.2);
-      for (const [x, z] of [[0.55, 0.26], [0.55, -0.26], [-0.55, 0.26], [-0.55, -0.26]]) leg(x, z, L, 0.2, '#1a1410');
+      k.lit(SP(0.52, 10, 7), fc, -0.05, L + 0.44, 0, 0, 0, 0, 1.55, 0.85, 0.85).lit(SP(0.48, 9, 6), fc, 0.35, L + 0.56, 0, 0, 0, 0, 1.1, 1.05, 1)
+        .lit(SP(0.44, 8, 6), dk, -0.05, L + 0.12, 0, 0, 0, 0, 1.4, 0.4, 0.75)
+        .lit(SP(0.3, 8, 6), fc, 0.86, L + 0.42, 0, 0, 0, -0.35, 1.35, 1, 0.95).lit(CY(0.13, 0.19, 0.3, 8), '#8a6050', 1.22, L + 0.26, 0, 0, 0, Math.PI / 2 + 0.35)
+        .lit(CY(0.13, 0.13, 0.02, 8), '#5a3a30', 1.37, L + 0.21, 0, 0, 0, Math.PI / 2 + 0.35)
+        .lit(SP(0.025, 4, 3), '#1a0a0a', 1.385, L + 0.22, 0.05).lit(SP(0.025, 4, 3), '#1a0a0a', 1.385, L + 0.22, -0.05)
+        .lit(SP(0.04, 5, 4), '#ffcf4a', 1.02, L + 0.58, 0.2).lit(SP(0.04, 5, 4), '#ffcf4a', 1.02, L + 0.58, -0.2)
+        .lit(SP(0.02, 4, 3), '#1a0a0a', 1.05, L + 0.58, 0.21).lit(SP(0.02, 4, 3), '#1a0a0a', 1.05, L + 0.58, -0.21)
+        .lit(CY(0.025, 0.015, 0.3, 4), dk, -0.85, L + 0.6, 0, 0, 0, 0.9).lit(SP(0.045, 4, 3), '#2a1a10', -0.97, L + 0.71, 0);
+      for (const sd of [-1, 1]) k.lit(CO(0.04, 0.3, 5), '#f4ecd8', 1.24, L + 0.36, sd * 0.17, sd * 0.4, 0, -0.55).lit(CO(0.11, 0.22, 4), dk, 0.74, L + 0.8, sd * 0.22, sd * 0.5, 0, 0.35);
+      for (let i = 0; i < 11; i++) k.lit(CO(0.06, 0.2 + (i % 3) * 0.06, 4), '#2a1a10', -0.62 + i * 0.13, L + 0.86 + Math.sin(i * 0.5) * 0.06 + (i > 5 ? 0.1 : 0), 0, 0, i, -0.25);
+      leg(0.5, 0.25, L, 0.21, '#1a1410'); leg(0.5, -0.25, L, 0.21, '#1a1410'); leg(-0.55, 0.25, L, 0.21, '#1a1410', true); leg(-0.55, -0.25, L, 0.21, '#1a1410', true);
     }
     add(k.build().lit);
     const sh = new T.Mesh(geo('shadowDisc', () => new T.CircleGeometry(0.3, 16).rotateX(-Math.PI / 2)), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.22, depthWrite: false }));
@@ -1340,6 +1427,7 @@
     for (const p of S.players) {
       pseen.add(p.id);
       let o = playerObjs.get(p.id);
+      if (o && o.userData.skin !== (p.skin || '')) { scene.remove(o); o = null; }
       if (!o) { o = makePlayer(p); playerObjs.set(p.id, o); }
       o.visible = p.dead <= 0 && !(fpOn && p === S.player);
       if (fpOn && p === S.player) updateFpView(p, at);
@@ -1360,11 +1448,8 @@
       u.arms[1].rotation.z = 0.75 + swp * 0.4; u.arms[1].rotation.x = -0.35;
       u.body.rotation.y = p.tool === 'axe' ? -swp * 0.5 : 0;
       u.head.rotation.y = Math.sin(at * 0.7 + p.id) * 0.1;
-      u.helm.visible = (p.lvl || 1) >= 5;
       const lv = (p.tl && p.tl[p.tool]) || 1;
       if (u.lv !== lv) { u.lv = lv; u.metal.color.set(G.TMET[Math.min(4, lv - 1)]); }
-      const hl = (p.lvl || 1) >= 15 ? 4 : (p.lvl || 1) >= 10 ? 2 : 1;
-      if (u.hl !== hl) { u.hl = hl; u.helm.material = u.metal; }
       u.mat.emissive.set(p.flash > 0 ? '#aa2020' : '#000000');
       if (p.tool === 'staff') { o.updateMatrixWorld(true); const g = u.tools.staff; v3.set(0.86, 0, 0).applyMatrix4(g.matrixWorld); glowAt(v3.x, v3.y, v3.z, 0.7, '#ffb347', 0.8 + 0.2 * Math.sin(at * 8)); }
       if (night > 0.3) glowAt(px, 0.9, pz, 1.4, '#ffcf8a', 0.18 * night);

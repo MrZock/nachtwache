@@ -257,6 +257,24 @@ let playerName = store.get(NAME_KEY, '') || ('Spieler' + randi(10, 99));
 const chatLog = [];   // { name, text, color, t }
 function cleanText(s, n) { return String(s || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n); }
 const PLAYER_COL = ['#3a6ea8', '#b8433f', '#3f9a4a', '#c9a227', '#8a4ac0', '#2aa8a8', '#d07a2a', '#c04a8a'];
+// ---------- Skin (im Hauptmenü einstellbar, wird online mitgeschickt)
+const SKIN_OPTS = [
+  { id: 'c', name: 'Jacke', colors: ['#3a6ea8', '#a83a32', '#3a7a42', '#c88a2a', '#6a4aa8', '#2a8a8a', '#5a5e66', '#7a4a2a', '#d8d0c0', '#1e1e22', '#c04a8a', '#8a9a3a'] },
+  { id: 's', name: 'Haut', colors: ['#f4d0b0', '#f0c9a0', '#e0b088', '#c88a60', '#a06a40', '#7a4a2a', '#5a3420', '#9ad08a'] },
+  { id: 'h', name: 'Frisur', list: ['Kurz', 'Irokese', 'Lang', 'Glatze', 'Stacheln', 'Zopf'] },
+  { id: 'hc', name: 'Haarfarbe', colors: ['#2a1a10', '#5a3a1a', '#8a5a2a', '#c8902a', '#e8d8a0', '#8a2a1a', '#d84a8a', '#3a8ad8', '#5ad86a', '#e8e8e8'] },
+  { id: 'g', name: 'Kopf', list: ['Helm', 'Kappe', 'Gasmaske', 'Kapuze', 'Stirnband', 'Nichts'] },
+  { id: 'v', name: 'Brille & Licht', colors: ['#ffb347', '#5ad8ff', '#7dff7a', '#ff4a5a', '#d87aff', '#ffffff'] },
+  { id: 'b', name: 'Rücken', list: ['Rucksack', 'Jetpack', 'Schwert-Halfter', 'Nichts'] },
+  { id: 'p', name: 'Hose', colors: ['#3a3f4a', '#4a3a2a', '#2a3a2a', '#5a5048', '#1e1e22', '#6a3a2a'] },
+];
+const SKIN_KEY = 'nachtwache.skin';
+function skinParse(str) { const a = String(str || '').split('.').map(n => parseInt(n, 10) || 0); const o = {}; SKIN_OPTS.forEach((d, i) => { const n = (d.colors || d.list).length; o[d.id] = ((a[i] || 0) % n + n) % n; }); return o; }
+function skinStr(o) { return SKIN_OPTS.map(d => o[d.id] | 0).join('.'); }
+let mySkin = skinParse(store.get(SKIN_KEY, ''));
+if (!store.get(SKIN_KEY, '')) { mySkin.c = randi(0, 5); mySkin.hc = randi(0, 3); mySkin.h = randi(0, 2); }
+let skinOpen = false;
+function skinSet(id, v) { mySkin[id] = v; store.set(SKIN_KEY, skinStr(mySkin)); if (S && S.player) S.player.skin = skinStr(mySkin); }
 
 // ---------- Level & Skills
 const SKILLS = [
@@ -375,6 +393,52 @@ function drawAchPopup(dt) {
   text(q.a.desc, x + 52, y + 38, 12, '#ddd', 'left', '600');
   ctx.globalAlpha = 1;
 }
+function drawSkinEditor() {
+  const small = VW < 760, w = Math.min(860, VW - 20), pvW = small ? 0 : Math.min(300, w * 0.36);
+  const rowH = small ? 46 : 52, h = Math.min(VH - 20, 84 + SKIN_OPTS.length * rowH + 54), x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.97);
+  ui.push({ x, y, w, h, fn: () => {} });
+  titleText('🎨 DEIN SKIN', x + 24 + (small ? 70 : 90), y + 30, small ? 20 : 24, '#ff8a3a');
+  text('×', x + w - 22, y + 28, 22, '#aaa', 'center');
+  ui.push({ x: x + w - 40, y: y + 8, w: 34, h: 34, fn: () => { skinOpen = false; } });
+  // 3D-Vorschau, dreht sich
+  if (pvW) {
+    const px = x + 16, py = y + 58, ph = h - 130;
+    const gr = ctx.createRadialGradient(px + pvW / 2, py + ph * 0.55, 10, px + pvW / 2, py + ph * 0.55, pvW * 0.75);
+    gr.addColorStop(0, 'rgba(255,140,60,0.28)'); gr.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = gr; rr(px, py, pvW, ph, 10); ctx.fill();
+    const im = R3 && R3.skinPreview ? R3.skinPreview(skinStr(mySkin), animT * 0.9) : null;
+    if (im) { const s = Math.min(pvW, ph * 0.8); ctx.drawImage(im, px + pvW / 2 - s / 2, py + ph / 2 - s * 0.62, s, s * 1.25); }
+    text(playerName, px + pvW / 2, py + ph - 16, 15, '#fff', 'center');
+  }
+  // Einstellungen
+  const ox = x + 16 + (pvW ? pvW + 18 : 0), ow = w - (ox - x) - 16;
+  SKIN_OPTS.forEach((d, i) => {
+    const ry = y + 60 + i * rowH, cur = mySkin[d.id];
+    text(d.name.toUpperCase(), ox, ry + 8, 11, '#c89a6a', 'left', '700');
+    if (d.colors) {
+      const n = d.colors.length, sw = Math.min(30, (ow - 4) / n - 5);
+      d.colors.forEach((c, k) => {
+        const sx = ox + k * (sw + 5), sy = ry + 18;
+        ctx.fillStyle = c; rr(sx, sy, sw, sw * 0.8, 5); ctx.fill();
+        ctx.strokeStyle = k === cur ? '#ffb070' : 'rgba(0,0,0,0.5)'; ctx.lineWidth = k === cur ? 3 : 1; ctx.stroke();
+        ui.push({ x: sx, y: sy, w: sw, h: sw * 0.8, fn: () => { skinSet(d.id, k); SFX.play('click'); } });
+      });
+    } else {
+      const n = d.list.length, bw2 = Math.min(110, (ow - 4) / n - 5);
+      d.list.forEach((l, k) => {
+        const sx = ox + k * (bw2 + 5), sy = ry + 18, on = k === cur;
+        ctx.fillStyle = on ? '#8a4a1e' : 'rgba(255,255,255,0.07)'; rr(sx, sy, bw2, 24, 5); ctx.fill();
+        ctx.strokeStyle = on ? '#ffb070' : 'rgba(170,100,60,0.4)'; ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+        text(l, sx + bw2 / 2, sy + 12, bw2 < 70 ? 10 : 12, on ? '#fff' : '#ccc', 'center', '600');
+        ui.push({ x: sx, y: sy, w: bw2, h: 24, fn: () => { skinSet(d.id, k); SFX.play('click'); } });
+      });
+    }
+  });
+  const by = y + h - 52;
+  button('🎲 ZUFALL', ox, by, 150, 38, () => { SKIN_OPTS.forEach(d => skinSet(d.id, randi(0, (d.colors || d.list).length - 1))); }, false, true);
+  button('✔ FERTIG', x + w - 186, by, 170, 38, () => { skinOpen = false; }, true, true);
+}
 function drawAchList() {
   const w = Math.min(640, VW - 24), cols = w > 520 ? 2 : 1, rowH = 44, rows = Math.ceil(ACHIEVEMENTS.length / cols);
   const h = 70 + rows * rowH, x = VW / 2 - w / 2, y = Math.max(20, VH / 2 - h / 2);
@@ -424,7 +488,7 @@ function newGame(opts) {
   S.players.push(mkPlayer(opts.localId || 0));
   S.player = S.players[0];
   S.clans = new Map(); S.eggUsed = {};
-  S.player.name = playerName;
+  S.player.name = playerName; S.player.skin = skinStr(mySkin);
   if (!opts.noMap) genMap();
   S.players.forEach((p, i) => {
     const f = findFreeNear((MAP / 2 | 0) + i * 2, MAP / 2 | 0, false);
@@ -2777,7 +2841,7 @@ function netHostTick(dt) {
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
         S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0)],
-    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0]),
+    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '']),
     ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
     tm: [...S.teams.values()].map(t => [t.id, r2(t.wood), r2(t.stone), r2(t.gold), r2(t.iron || 0), Math.floor(t.goldEarned || 0), t.name || '']),
@@ -2797,6 +2861,7 @@ function hostHandleClient(m, p) {
     if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
     p.inp.down = !!m.d; p.lastInput = S.t;
   } else if (m.t === 'name') {
+    if (m.skin && /^[0-9.]{1,40}$/.test(m.skin)) p.skin = skinStr(skinParse(m.skin));
     const old = p.name; p.name = cleanText(m.name, 16) || p.name;
     if (old && old !== p.name) { addChat('', old + ' heißt jetzt ' + p.name, '#aaa'); hostEv(['c', '', old + ' heißt jetzt ' + p.name, 101]); }
   } else if (m.t === 'chat') {
@@ -2871,7 +2936,7 @@ async function clientInitMap(m) {
   mode = 'play'; modeT = 0; menuMsg = null;
   SFX.init();
   banner('Verbunden!', 'Ihr baut gemeinsam – Ressourcen werden geteilt', '#7fd8ff');
-  netSendR({ t: 'name', name: playerName });
+  netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin) });
   addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit G.', '#8fe08f');
 }
 function clientBuildings(list) {
@@ -2907,6 +2972,7 @@ function clientSnapshot(m) {
     p.clan = a[18] || ''; p.ab = a[19] >= 0 ? ABIL[a[19]].id : null; p.abCd = a[20] || 0; p.rageT = a[21] || 0; if (a[22] && !(p.danceT > 0)) p.danceT = 1;
     p.hp = a[5]; p.maxHp = a[6]; p.dead = a[7]; if (a[9]) p.flash = 0.15;
     if (p !== S.player && a[11]) p.name = a[11];
+    if (p !== S.player && a[24]) p.skin = a[24];
     p.afk = !!a[16];
     if (a[12]) {
       if (p === S.player && a[12] > p.lvl) SFX.play('levelup', undefined, undefined, true);
@@ -4854,7 +4920,7 @@ function drawOverlays() {
       y += bh + 10;
       button('NAME: ' + playerName, cx - bw * 1.5 - 10, y, bw, 34, setName, false, true);
       button('🏆 ERFOLGE ' + achDone.size + '/' + ACHIEVEMENTS.length, cx - bw / 2, y, bw, 34, () => { achOpen = true; }, false, true);
-      button('DIREKT (OHNE SERVER)', cx + bw / 2 + 10, y, bw, 34, () => lobbyOpen('host'), false, true);
+      button('🎨 SKIN ANPASSEN', cx + bw / 2 + 10, y, bw, 34, () => { skinOpen = true; }, false, true);
       y += 46;
     } else {
       const bx = cx - bw / 2;
@@ -4864,7 +4930,8 @@ function drawOverlays() {
       button('DIREKT HOSTEN', bx, y, bw / 2 - 5, 34, () => lobbyOpen('host'), false, true);
       button('DIREKT BEITRETEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => lobbyOpen('join'), false, true); y += 44;
       button('NAME: ' + playerName + '  ✎', bx, y, bw / 2 - 5, 34, setName, false, true);
-      button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 48;
+      button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
+      button('🎨 SKIN ANPASSEN', bx, y, bw, 34, () => { skinOpen = true; }, false, true); y += 48;
     }
     if (menuMsg) { text(menuMsg, cx, y, 15, '#ff9a8a', 'center'); y += 24; }
     const info = (highscore ? 'REKORD: ' + highscore.nights + ' NÄCHTE · ' + highscore.kills + ' KILLS   ·   ' : '') + '🥚 ' + eggsFound.size + '/' + EGGS.length;
@@ -4889,6 +4956,7 @@ function drawOverlays() {
       ctx.fillText(isTouch ? 'LINKER STICK LAUFEN · RECHTER STICK ANGREIFEN · ⚡ FÄHIGKEIT' : 'WASD LAUFEN · MAUS ANGREIFEN · 1–0 BAUEN · LEER SPRINGEN · SHIFT FÄHIGKEIT · T CHAT', cx, VH - 24);
     }
     if (achOpen) drawAchList();
+    if (skinOpen) drawSkinEditor();
   } else if (mode === 'paused') {
     titleText(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 60, '#e8dcd0');
     text('Nacht ' + S.night + ' · ' + S.kills + ' Kills · ' + S.buildings.length + ' Gebäude', cx, VH * 0.3 + 48, 17, '#ccc', 'center', '600');
@@ -4968,6 +5036,7 @@ if (!HEADLESS) {
     if (e.code === 'KeyN') { SFX.toggle(); if (S && mode === 'play') toast(SFX.muted ? 'Ton aus' : 'Ton an'); return; }
     if (e.code === 'KeyM' && mode === 'play') { mapOpen = !mapOpen; SFX.play('click'); return; }
     if (e.code === 'Escape' && achOpen) { achOpen = false; return; }
+    if (e.code === 'Escape' && skinOpen) { skinOpen = false; return; }
     if (mode === 'menu') { if (e.code === 'Enter' || e.code === 'Space') startSingle(); return; }
     if (mode === 'over') { if ((e.code === 'Enter' || e.code === 'Space') && modeT > 1 && NET.role !== 'client') startGame(); return; }
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
@@ -5158,7 +5227,7 @@ if (!HEADLESS) {
 }
 
 // Schnittstelle für automatisierte Tests
-ROOT.NW = { spawnZombie,
+ROOT.NW = { spawnZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
