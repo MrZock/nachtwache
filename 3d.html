@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nachtwache 2.0 – Zombie Survival in 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f0a; }
+  #game3d { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: crosshair; background: transparent; }
+</style>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game3d"></canvas>
+<canvas id="game"></canvas>
+<script src="three.min.js"></script>
+<script src="render3d.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

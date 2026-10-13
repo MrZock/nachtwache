@@ -4,6 +4,8 @@ Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz
 
 ## Spielen
 
+- **Version 2.0 in 3D:** `3d.html` (online: https://mrzock.github.io/nachtwache/3d.html). 2D- und 3D-Spieler können zusammen online spielen.
+
 - **Allein:** `index.html` im Browser öffnen → „Einzelspieler“.
 - **Zu zweit online:** Online-Version öffnen → einer klickt „Online hosten“ und bekommt einen **Raum-Code**, der andere klickt „Online beitreten“ und gibt den Code ein (oder öffnet den Einladungslink).
 
@@ -15,7 +17,12 @@ Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz
 
 | Datei | Zweck |
 |---|---|
-| `index.html` | Das komplette Spiel |
+| `index.html` | Klassische 2D-Version |
+| `3d.html` | Version 2.0 in 3D (three.js) |
+| `game.js` | Spiellogik, Netzwerk, HUD – von beiden Versionen genutzt |
+| `render3d.js` | 3D-Grafik der Version 2.0 |
+| `three.min.js` | 3D-Bibliothek three.js r158 (MIT-Lizenz) |
+| `style.css` | Stile für Chat & Lobby |
 | `server.js` | Spielserver: liefert das Spiel aus und leitet die Daten zwischen zwei Spielern weiter (WebSocket, Räume mit 4-stelligem Code). Reines Node.js, keine Pakete. |
 | `render.yaml` | Konfiguration für den kostenlosen Server auf [Render.com](https://render.com) |
 | `start-server.bat` | Startet den Server lokal (Heimnetz) |
