@@ -13,6 +13,8 @@ Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz
 
 **Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Jedes Level gibt einen Skillpunkt für Stärke, Schütze, Sammler, Ausdauer, Flinkheit oder Plünderer (je 5 Stufen, Menü mit K).
 
+**Handy:** im Querformat spielen. Links ziehen = laufen (Joystick), rechts tippen/halten = angreifen & abbauen, im Baumodus tippen/wischen = bauen. Knöpfe am rechten Rand für Menü, Karte, Skills, Chat und Markierung. Im Menü gibt es einen Vollbild-Knopf.
+
 **Chat-Befehle:** `/afk` – AFK-Modus (kein Rauswurf, auch wenn der Tab im Hintergrund ist; Zombies ignorieren dich) · `/hilfe` – alle Befehle.
 
 **Neu:** große Welt (200×200) mit Karte (M), Tiere (Hirsch, Hase, Wildschwein), Stachelfallen, Blutmond jede 7. Nacht, 16 Erfolge, Heilturm, Bomber-Zombies, Schatztruhen, Ingame-Chat, Markierungen für den Mitspieler.

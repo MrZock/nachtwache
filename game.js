@@ -1422,6 +1422,10 @@ function aimPoint() {
 function readLocalInput(p) {
   let mx = 0, my = 0;
   if (mode === 'play') { if (keys.left) mx--; if (keys.right) mx++; if (keys.up) my--; if (keys.down) my++; }
+  if (mode === 'play' && touch.joyId !== null) {
+    const dx = touch.kx - touch.jx, dy = touch.ky - touch.jy;
+    if (Math.hypot(dx, dy) > 8) { mx = dx; my = dy; }
+  }
   if (ROOT.__botMove) { const m = ROOT.__botMove(S); mx = m.x; my = m.y; }
   const a = aimPoint();
   p.inp.mx = mx; p.inp.my = my; p.inp.ax = a.x; p.inp.ay = a.y;
@@ -2294,6 +2298,12 @@ function lobbyOpen(kind, room) {
 // Rendering
 // =====================================================================
 let canvas = null, ctx = null, lightC = null, lctx = null, lightSprite = null, mmC = null;
+// Handy/Tablet: Touch-Steuerung + verkleinerte Oberfläche
+let isTouch = !HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+let uiS = 1;
+const touch = { joyId: null, jx: 0, jy: 0, kx: 0, ky: 0, atkId: null, placeId: null, pingMode: false };
+const JOY_R = 58;
+function calcUiScale() { uiS = isTouch ? clamp(Math.min(VW / 1050, VH / 620), 0.6, 1) : 1; }
 let ui = [];
 let hoverSlot = null;
 
@@ -2310,6 +2320,7 @@ function resize() {
   canvas.width = VW * DPR | 0; canvas.height = VH * DPR | 0;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   lightC.width = Math.max(1, Math.ceil(VW / 2)); lightC.height = Math.max(1, Math.ceil(VH / 2));
+  calcUiScale();
 }
 const MM_COL = ['rgb(58,84,48)', 'rgb(34,92,40)', 'rgb(120,120,128)', 'rgb(214,176,52)'];
 function buildMinimap() {
@@ -2634,8 +2645,7 @@ function render(dt) {
     if (!R3.ready) R3.init(ROOT.NW);
     R3.render(dt);
     R3.overlay(ctx);
-    drawHUD();
-    drawOverlays();
+    drawUI();
     return;
   }
   ctx.fillStyle = '#0b0f0a'; ctx.fillRect(0, 0, VW, VH);
@@ -2829,8 +2839,62 @@ function render(dt) {
   ctx.restore();
 
   drawLighting(cx, cy);
-  drawHUD();
-  drawOverlays();
+  drawUI();
+}
+// HUD & Menüs in "logischen" Koordinaten zeichnen (auf dem Handy verkleinert)
+function drawUI() {
+  const rw = VW, rh = VH, sx = input.sx, sy = input.sy;
+  if (uiS !== 1) { ctx.save(); ctx.scale(uiS, uiS); VW = rw / uiS; VH = rh / uiS; input.sx = sx / uiS; input.sy = sy / uiS; }
+  try {
+    drawHUD();
+    drawOverlays();
+    if (isTouch && rh > rw * 1.05) {
+      ctx.fillStyle = 'rgba(5,8,12,0.88)'; ctx.fillRect(0, 0, VW, VH);
+      text('📱 ↻', VW / 2, VH * 0.4, 60, '#ffd36b', 'center');
+      text('Bitte dreh dein Handy quer', VW / 2, VH * 0.4 + 70, 28, '#fff', 'center');
+      text('Das Spiel ist für das Querformat gemacht.', VW / 2, VH * 0.4 + 110, 18, '#bbb', 'center', '600');
+    }
+  } finally {
+    if (uiS !== 1) { ctx.restore(); VW = rw; VH = rh; input.sx = sx; input.sy = sy; }
+  }
+}
+// Touch-Bedienelemente (Joystick + Knöpfe)
+function drawTouchUI() {
+  if (!isTouch || mode !== 'play') return;
+  // Joystick
+  if (touch.joyId !== null) {
+    const jx = touch.jx / uiS, jy = touch.jy / uiS, kx = touch.kx / uiS, ky = touch.ky / uiS, R = JOY_R / uiS;
+    ctx.fillStyle = 'rgba(255,255,255,0.10)'; circle(jx, jy, R); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,226,122,0.55)'; circle(kx, ky, R * 0.45); ctx.fill();
+  } else {
+    const hx = 120, hy = VH - 250;
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; circle(hx, hy, 55); ctx.stroke();
+    text('Hier ziehen', hx, hy - 8, 13, '#fff', 'center', '600');
+    text('= laufen', hx, hy + 10, 13, '#fff', 'center', '600');
+    ctx.globalAlpha = 1;
+  }
+  // Knöpfe am rechten Rand
+  const btns = [
+    ['☰', 'Menü', () => { mode = 'paused'; }],
+    ['🗺', 'Karte', () => { mapOpen = !mapOpen; }],
+    ['★', 'Skills', () => { skillsOpen = !skillsOpen; }],
+    ['💬', 'Chat', () => chatOpen()],
+    ['📍', 'Markieren', () => { touch.pingMode = !touch.pingMode; if (touch.pingMode) toast('Tippe auf die Stelle, die du markieren willst', '#7fd8ff'); }],
+  ];
+  if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
+  if (S.sel && !S.sel.dead) btns.push(['✖', 'Schließen', () => { S.sel = null; }]);
+  const bs = 50, x = VW - bs - 12, y0 = S.hq ? 70 : 14;
+  btns.forEach((b, i) => {
+    const y = y0 + i * (bs + 10);
+    const on = (b[1] === 'Markieren' && touch.pingMode) || (b[1] === 'Karte' && mapOpen) || (b[1] === 'Skills' && skillsOpen);
+    ctx.fillStyle = on ? 'rgba(255,226,122,0.45)' : 'rgba(12,16,22,0.7)'; circle(x + bs / 2, y + bs / 2, bs / 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
+    text(b[0], x + bs / 2, y + bs / 2 + 1, 22, '#fff', 'center');
+    if (b[1] === 'Skills' && S.player.sp > 0) { ctx.fillStyle = '#ff5b5b'; circle(x + bs - 6, y + 8, 9); ctx.fill(); text(String(S.player.sp), x + bs - 6, y + 8, 11, '#fff', 'center'); }
+    ui.push({ x, y, w: bs, h: bs, fn: b[2] });
+  });
 }
 
 function drawLighting(cx, cy) {
@@ -3028,7 +3092,7 @@ function drawHUD() {
   // Pfeil zum Mitspieler, wenn er nicht im Bild ist
   for (const q of S.players) {
     if (q === S.player || q.dead > 0) continue;
-    const sx = q.x - camX, sy = q.y - camY;
+    const sx = (q.x - camX) / uiS, sy = (q.y - camY) / uiS;
     if (sx > 0 && sy > 0 && sx < VW && sy < VH) continue;
     const a = Math.atan2(sy - VH / 2, sx - VW / 2);
     const ex = clamp(VW / 2 + Math.cos(a) * VW, 40, VW - 40), ey = clamp(VH / 2 + Math.sin(a) * VH, 90, VH - 110);
@@ -3057,7 +3121,7 @@ function drawHUD() {
   }
   // Markierungen außerhalb des Bildes: Pfeil am Rand
   for (const pg of S.pings) {
-    const sx = pg.x - camX, sy = pg.y - camY;
+    const sx = (pg.x - camX) / uiS, sy = (pg.y - camY) / uiS;
     if (sx > 0 && sy > 0 && sx < VW && sy < VH) continue;
     const a = Math.atan2(sy - VH / 2, sx - VW / 2);
     const ex = clamp(VW / 2 + Math.cos(a) * VW, 50, VW - 50), ey = clamp(VH / 2 + Math.sin(a) * VH, 100, VH - 120);
@@ -3068,12 +3132,13 @@ function drawHUD() {
   }
   drawChat();
   // Steuerungshinweis
-  if (VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
+  if (!isTouch && VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
     const lines = [R3 ? 'WASD laufen · Maus zielen · Linksklick angreifen · Mausrad Zoom' : 'WASD laufen · Maus zielen · Linksklick angreifen', 'Q/E/R Werkzeug · 1–0 Bauen · G Markierung · T Chat', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
     lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
   }
   if (skillsOpen) drawSkills();
   if (mapOpen) drawBigMap();
+  drawTouchUI();
   drawAchPopup(1 / 60);
   // Niedrige HP Vignette
   if (p.dead <= 0 && p.hp / p.maxHp < 0.3) {
@@ -3223,7 +3288,7 @@ function drawBigMap() {
   const lg = [['#ffffff', 'Du'], ['#ffd36b', 'Goldspeicher'], ['#5fb0ff', 'Türme'], ['#ff4a4a', 'Zombies'], ['#ffe14a', 'Truhen'], ['#c8955a', 'Tiere'], ['rgb(214,176,52)', 'Golderz']];
   lg.forEach((l, i) => { ctx.fillStyle = l[0]; ctx.fillRect(x + 6 + i * 92, y + size - 18, 10, 10); text(l[1], x + 20 + i * 92, y + size - 13, 11, '#eee', 'left', '600'); });
   ui.push({ x: x - 8, y: y - 34, w: size + 16, h: size + 42, fn: () => {
-    const wx = (input.sx - x) / k, wy = (input.sy - y) / k;
+    const wx = (input.sx / uiS - x) / k, wy = (input.sy / uiS - y) / k;
     if (wx >= 0 && wy >= 0 && wx <= WORLD && wy <= WORLD) pingAt(wx, wy);
   } });
 }
@@ -3273,8 +3338,9 @@ function towerStats(type, L) {
 function drawBuildMenu(b) {
   const d = BDEF[b.type], c = bCenter(b);
   const w = 270, h = 172;
-  let x = c.x - camX + b.size * TS / 2 + 14, y = c.y - camY - h / 2;
-  if (x + w > VW - 8) x = c.x - camX - b.size * TS / 2 - 14 - w;
+  const scx = (c.x - camX) / uiS, scy = (c.y - camY) / uiS, half = b.size * TS / 2 / uiS;
+  let x = scx + half + 14, y = scy - h / 2;
+  if (x + w > VW - 70) x = scx - half - 14 - w;
   x = clamp(x, 8, VW - w - 8); y = clamp(y, x < 230 ? 196 : 80, Math.max(x < 230 ? 196 : 80, VH - h - 120));
   panel(x, y, w, h, 0.92);
   ui.push({ x, y, w, h, fn: () => {} });
@@ -3319,8 +3385,12 @@ function drawOverlays() {
   ctx.fillRect(0, 0, VW, VH);
   const cx = VW / 2;
   if (mode === 'menu') {
-    text(R3 ? 'NACHTWACHE 2.0' : 'NACHTWACHE', cx, VH * 0.2, Math.min(78, VW / (R3 ? 11 : 9)), '#ffd36b', 'center');
-    text(R3 ? 'Zombie-Survival mit Basisbau – jetzt in 3D' : 'Zombie-Survival mit Basisbau', cx, VH * 0.2 + 50, 20, '#ddd', 'center', '600');
+    // Von oben nach unten stapeln, damit es auch auf kleinen (Handy-)Bildschirmen passt
+    const small = VH < 700;
+    let y = small ? 52 : VH * 0.17;
+    text(R3 ? 'NACHTWACHE 2.0' : 'NACHTWACHE', cx, y, Math.min(small ? 60 : 78, VW / (R3 ? 11 : 9)), '#ffd36b', 'center');
+    y += small ? 40 : 50;
+    text(R3 ? 'Zombie-Survival mit Basisbau – jetzt in 3D' : 'Zombie-Survival mit Basisbau', cx, y, small ? 17 : 20, '#ddd', 'center', '600');
     // Zwischen 2D- und 3D-Version wechseln (gleicher Online-Modus, beide können zusammen spielen)
     button(R3 ? '◀ Klassische 2D-Version' : '3D-Version (2.0) ▶', VW - 250, 14, 236, 40, () => {
       location.href = (R3 ? 'index.html' : '3d.html') + location.search;
@@ -3329,25 +3399,36 @@ function drawOverlays() {
       'Tagsüber (90 s): Holz & Stein sammeln, Mauern und Türme bauen.',
       'Nachts (60 s): Zombies greifen aus allen Richtungen an.',
       'Schütze den Goldspeicher – fällt er, ist das Spiel vorbei.',
-      '',
-      'WASD laufen · Maus zielen · Linksklick angreifen / abbauen',
-      'Q Spitzhacke · E Schwert · R Bogen · 1–0 Gebäude · G Markierung · T Chat',
-      'M Karte · K Skills · /afk im Chat · Gebäude anklicken → U Upgrade / X Verkaufen · N Ton',
     ];
-    lines.forEach((l, i) => text(l, cx, VH * 0.36 + i * 26, 15, i < 3 ? '#e8e8e8' : '#aab', 'center', '600'));
-    if (highscore) text('Highscore: ' + highscore.nights + ' Nächte · ' + highscore.kills + ' Kills', cx, VH * 0.36 + 7 * 26 + 16, 16, '#ffd36b', 'center');
-    const by = Math.min(VH * 0.74, VH - 190), bw = Math.min(250, (VW - 60) / 3);
+    if (isTouch) lines.push('📱 Links ziehen = laufen · rechts tippen/halten = angreifen & abbauen · Knöpfe am Rand');
+    else if (!small) lines.push('', 'WASD laufen · Maus zielen · Linksklick angreifen / abbauen',
+      'Q Spitzhacke · E Schwert · R Bogen · 1–0 Gebäude · G Markierung · T Chat',
+      'M Karte · K Skills · /afk im Chat · Gebäude anklicken → U Upgrade / X Verkaufen · N Ton');
+    else lines.push('WASD laufen · Maus zielen & klicken · Q/E/R Werkzeuge · 1–0 Bauen · M Karte · K Skills · T Chat');
+    y += small ? 30 : 44;
+    const lh = small ? 21 : 26;
+    lines.forEach((l, i) => text(l, cx, y + i * lh, small ? 13 : 15, i < 3 ? '#e8e8e8' : (isTouch ? '#9fd0ff' : '#aab'), 'center', '600'));
+    y += lines.length * lh + (small ? 4 : 10);
+    if (highscore) { text('Highscore: ' + highscore.nights + ' Nächte · ' + highscore.kills + ' Kills', cx, y, small ? 14 : 16, '#ffd36b', 'center'); y += small ? 24 : 32; }
+    button('Name: ' + playerName + '  ✎', cx - 245, y, 240, 34, setName);
+    button('🏆 Erfolge ' + achDone.size + '/' + ACHIEVEMENTS.length, cx + 5, y, 240, 34, () => { achOpen = true; });
+    y += 34 + (small ? 14 : 24);
+    if (menuMsg) { text(menuMsg, cx, y, 15, '#ff9a8a', 'center'); y += 22; }
+    const by = Math.max(y, Math.min(VH * 0.74, VH - 190)), bw = Math.min(250, (VW - 60) / 3);
     button('Einzelspieler', cx - bw * 1.5 - 10, by, bw, 54, startSingle, true);
     button('Online hosten', cx - bw / 2, by, bw, 54, () => lanConnect('host'));
     button('Online beitreten', cx + bw / 2 + 10, by, bw, 54, () => lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info'));
     text('Direkt ohne Server (nicht im Schul-WLAN):', cx - 70, by + 82, 13, '#999', 'right', '600');
     button('Hosten', cx - 60, by + 66, 110, 32, () => lobbyOpen('host'));
     button('Beitreten', cx + 58, by + 66, 110, 32, () => lobbyOpen('join'));
-    text('ENTER = Einzelspieler' + (ONLINE_URL ? '' : '  ·  Online-Modus: Online-Version des Spiels öffnen'), cx, by + 122, 13, '#888', 'center', '600');
-    if (menuMsg) text(menuMsg, cx, by - 24, 15, '#ff9a8a', 'center');
-    const ny = Math.max(VH * 0.2 + 70, by - 82);
-    button('Name: ' + playerName + '  ✎', cx - 245, ny, 240, 34, setName);
-    button('🏆 Erfolge ' + achDone.size + '/' + ACHIEVEMENTS.length, cx + 5, ny, 240, 34, () => { achOpen = true; });
+    if (!isTouch) text('ENTER = Einzelspieler' + (ONLINE_URL ? '' : '  ·  Online-Modus: Online-Version des Spiels öffnen'), cx, by + 122, 13, '#888', 'center', '600');
+    if (isTouch) {
+      button(document.fullscreenElement ? 'Vollbild beenden' : '⛶ Vollbild', 14, 14, 170, 40, () => {
+        const el = document.documentElement;
+        if (document.fullscreenElement) document.exitFullscreen();
+        else if (el.requestFullscreen) el.requestFullscreen().then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e) {} }).catch(() => {});
+      });
+    }
     if (achOpen) drawAchList();
   } else if (mode === 'paused') {
     text(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 56, '#fff', 'center');
@@ -3400,6 +3481,7 @@ function tryPlaceAtAim(silent) {
 }
 const KEYMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
 function hitUI(x, y) {
+  x /= uiS; y /= uiS;
   for (let i = ui.length - 1; i >= 0; i--) { const u = ui[i]; if (x >= u.x && x <= u.x + u.w && y >= u.y && y <= u.y + u.h) return u; }
   return null;
 }
@@ -3467,6 +3549,52 @@ if (!HEADLESS) {
     input.down = true;
   });
   window.addEventListener('mouseup', () => { input.down = false; });
+  // Maus benutzt → wieder Desktop-Bedienung
+  window.addEventListener('mousemove', e => { if (isTouch && e.movementX + e.movementY !== 0 && !matchMedia('(pointer: coarse)').matches) { isTouch = false; calcUiScale(); } });
+
+  // ---------- Touch-Steuerung
+  const onTouchStart = t => {
+    const x = t.clientX, y = t.clientY;
+    const u = hitUI(x, y);
+    if (!u && mode === 'play' && !touch.pingMode && x < VW * 0.42 && touch.joyId === null) {
+      // linke Seite: Joystick (verändert das Ziel nicht)
+      touch.joyId = t.identifier; touch.jx = touch.kx = x; touch.jy = touch.ky = y; return;
+    }
+    input.sx = x; input.sy = y;
+    if (mode !== 'play') { if (u) { SFX.play('click'); u.fn(); } return; }
+    if (u) { u.fn(); return; }
+    if (touch.pingMode) { const a = aimPoint(); pingAt(a.x, a.y); touch.pingMode = false; return; }
+    if (S.place) { touch.placeId = t.identifier; tryPlaceAtAim(false); return; }
+    const wp = aimPoint(), b = buildingAtWorld(wp.x, wp.y);
+    if (b) { S.sel = S.sel === b ? null : b; SFX.play('click'); return; }
+    S.sel = null;
+    touch.atkId = t.identifier; input.down = true;
+  };
+  const onTouchMove = t => {
+    if (t.identifier === touch.joyId) {
+      let dx = t.clientX - touch.jx, dy = t.clientY - touch.jy;
+      const d = Math.hypot(dx, dy);
+      if (d > JOY_R) { dx = dx / d * JOY_R; dy = dy / d * JOY_R; }
+      touch.kx = touch.jx + dx; touch.ky = touch.jy + dy;
+    } else if (t.identifier === touch.atkId || t.identifier === touch.placeId) {
+      input.sx = t.clientX; input.sy = t.clientY;
+      if (t.identifier === touch.placeId && S.place && (S.place === 'wall' || S.place === 'door' || S.place === 'trap')) tryPlaceAtAim(true);
+    }
+  };
+  const onTouchEnd = t => {
+    if (t.identifier === touch.joyId) touch.joyId = null;
+    if (t.identifier === touch.atkId) { touch.atkId = null; input.down = false; }
+    if (t.identifier === touch.placeId) touch.placeId = null;
+  };
+  const touchOpts = { passive: false };
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault(); SFX.init();
+    if (!isTouch) { isTouch = true; calcUiScale(); }
+    for (const t of e.changedTouches) onTouchStart(t);
+  }, touchOpts);
+  canvas.addEventListener('touchmove', e => { e.preventDefault(); for (const t of e.changedTouches) onTouchMove(t); }, touchOpts);
+  canvas.addEventListener('touchend', e => { e.preventDefault(); for (const t of e.changedTouches) onTouchEnd(t); }, touchOpts);
+  canvas.addEventListener('touchcancel', e => { for (const t of e.changedTouches) onTouchEnd(t); });
   canvas.addEventListener('wheel', e => {
     if (R3) { R3.zoom(e.deltaY); return; }
     if (mode !== 'play') return;
@@ -3522,7 +3650,7 @@ ROOT.NW = {
   // für den 3D-Renderer
   get camX() { return camX; }, get camY() { return camY; }, get VW() { return VW; }, get VH() { return VH; },
   get animT() { return animT; }, get hoverSlot() { return hoverSlot; }, get netRole() { return NET.role; },
-  ADEF, get mapOpen() { return mapOpen; }, chat: t => chatSend(t), get chatLog() { return chatLog; },
+  ADEF, get mapOpen() { return mapOpen; }, get uiS() { return uiS; }, setTouch(on) { isTouch = on; calcUiScale(); }, chat: t => chatSend(t), get chatLog() { return chatLog; },
   darkness, LV_COL, TOWERS, PLAYER_COL, RES_HP, WORLD, footprintAt, bCenter, resScale, hpBar, text, aimPoint, clamp,
 };
 })();
