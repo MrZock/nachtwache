@@ -55,9 +55,9 @@ function wsControl(sock, opcode, payload) {
   sock.write(Buffer.concat([Buffer.from([0x80 | opcode, p.length]), p]));
 }
 
-// ---------- Räume: ein Host und bis zu 7 Mitspieler, verbunden über einen 4-stelligen Code
+// ---------- Räume: ein Host und bis zu 15 Mitspieler, verbunden über einen 4-stelligen Code
 // Mitspieler → Host: "~<id>|<json>"   Host → einzelner Mitspieler: "@<id>|<json>", sonst an alle
-const MAX_GUESTS = 7;
+const MAX_GUESTS = 15;
 const rooms = new Map();
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function newCode() {

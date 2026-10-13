@@ -9,7 +9,7 @@ const R3 = (!HEADLESS && ROOT.NW3D) || null;
 // Konstanten & Hilfsfunktionen
 // =====================================================================
 const TS = 40;            // Tile-Größe in Pixeln
-const MAP = 320;          // Karte: MAP x MAP Tiles
+const MAP = 512;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 90, NIGHT_LEN = 60;
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
@@ -230,19 +230,26 @@ const BIOME_NAME = ['Wiese', 'Wald', 'Wüste', 'Schneeland', 'Sumpf', 'Schattenr
 const DIM = { x0: MAP - 72, y0: 6, x1: MAP - 8, y1: 70 };   // Schattenreich: abgeschotteter Bereich in der Ecke
 const inDim = (tx, ty) => tx >= DIM.x0 && tx < DIM.x1 && ty >= DIM.y0 && ty < DIM.y1;
 const biomeAtW = (x, y) => { if (!S || !S.biome) return 0; const tx = clamp(Math.floor(x / TS), 0, MAP - 1), ty = clamp(Math.floor(y / TS), 0, MAP - 1); return S.biome[ty * MAP + tx]; };
+function genVariant() {
+  const sd = S.seed | 0;
+  for (let i = 0; i < MAP * MAP; i++) {
+    let h = Math.imul(i ^ sd, 2654435761) >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13;
+    S.variant[i] = h & 255;
+  }
+}
 function genBiomes() {
   S.biome = new Uint8Array(MAP * MAP);
   const sd = S.seed || 1, c = MAP / 2, a0 = (sd % 628) / 100;
-  const centers = [2, 3, 4].map((b, k) => ({ b, x: c + Math.cos(a0 + k * 2.09) * 108, y: c + Math.sin(a0 + k * 2.09) * 108 }));
+  const centers = [2, 3, 4, 2, 3, 4].map((b, k) => { const d = MAP * (k < 3 ? 0.27 : 0.4), a = a0 + k * 2.09 + (k >= 3 ? 1.05 : 0); return { b, x: c + Math.cos(a) * d, y: c + Math.sin(a) * d }; });
   const s1 = sd % 97, s2 = sd % 89, s3 = sd % 83;
   for (let y = 0; y < MAP; y++) for (let x = 0; x < MAP; x++) {
     const i = y * MAP + x;
     if (inDim(x, y)) { S.biome[i] = 5; continue; }
     const n = Math.sin(x * 0.07 + s1) * 7 + Math.sin(y * 0.061 + s2) * 7 + Math.sin((x + y) * 0.043 + s3) * 6 + Math.sin((x - y) * 0.12 + s1) * 3;
-    if (Math.hypot(x - c, y - c) + n < 52) continue;
+    if (Math.hypot(x - c, y - c) + n < MAP * 0.12) continue;
     let best = 0, bd = 1e9;
     for (const q of centers) { const d = Math.hypot(x - q.x, y - q.y) + n; if (d < bd) { bd = d; best = q.b; } }
-    S.biome[i] = bd < 92 ? best : 0;
+    S.biome[i] = bd < MAP * 0.2 ? best : 0;
   }
 }
 const NAME_KEY = 'nachtwache.name';
@@ -293,6 +300,7 @@ const ACHIEVEMENTS = [
   { id: 'hunter',  name: 'Jäger',             desc: 'Erlege 10 Tiere',                       ok: S => (S.animalKills || 0) >= 10 },
   { id: 'coop',    name: 'Zusammen stark',    desc: 'Überlebe 3 Nächte zu zweit',            ok: S => S.players.length > 1 && S.survived >= 3 },
   { id: 'squad',   name: 'Trupp',             desc: 'Überlebe 3 Nächte mit 4 Spielern',      ok: S => S.players.length >= 4 && S.survived >= 3 },
+  { id: 'crowd',   name: 'Volle Welt',        desc: 'Spiele mit 10 oder mehr Leuten',        ok: S => S.players.length >= 10 },
   { id: 'clan',    name: 'Clanchef',          desc: 'Gründe einen Clan oder tritt einem bei', ok: S => !!S.player.clan },
   { id: 'dim',     name: 'Dimensionsreisender', desc: 'Betritt das Schattenreich',          ok: S => (S.player.dimVisits || 0) >= 1 || (S.biome && S.biome[tileAt(S.player.x, S.player.y)] === 5) },
   { id: 'crystal', name: 'Kristallsammler',   desc: 'Baue 30 Schattenkristalle ab',          ok: S => (S.crystals || 0) >= 30 },
@@ -410,6 +418,9 @@ function newGame(opts) {
     weather: 0, strikes: [], strikeT: 4, stormSurvived: 0,
   };
   repathQ = [];
+  CT = null;
+  S.teams = new Map();
+  bindTeamProps(S);
   S.players.push(mkPlayer(opts.localId || 0));
   S.player = S.players[0];
   S.clans = new Map(); S.eggUsed = {};
@@ -467,7 +478,7 @@ function genMap() {
     const e = Math.min(x, y, MAP - 1 - x, MAP - 1 - y), w = 4 + Math.sin(x * 0.09 + y * 0.05 + S.seed % 7) * 1.5 + Math.sin((x - y) * 0.13) * 1.2;
     if (e < w && !nearDim(x, y)) R[y * MAP + x] = 6;
   }
-  for (let k = 0; k < 7; k++) {
+  for (let k = 0; k < Math.round(7 * MAP * MAP / 102400); k++) {
     const a = rand(0, TAU), d = rand(62, MAP / 2 - 20);
     let x = MAP / 2 + Math.cos(a) * d, y = MAP / 2 + Math.sin(a) * d, dir = rand(0, TAU);
     const len = randi(22, 46), wd = rand(1.4, 3);
@@ -497,10 +508,8 @@ function genMap() {
   // Startbereich in der Mitte etwas lichten
   const c = MAP / 2 | 0;
   for (let y = c - 3; y <= c + 3; y++) for (let x = c - 3; x <= c + 3; x++) R[y * MAP + x] = 0;
-  for (let i = 0; i < MAP * MAP; i++) {
-    S.variant[i] = (Math.random() * 256) | 0;
-    if (R[i]) { S.rhp[i] = RES_HP[R[i]]; S.resCount[R[i]]++; }
-  }
+  genVariant();
+  for (let i = 0; i < MAP * MAP; i++) if (R[i]) { S.rhp[i] = RES_HP[R[i]]; S.resCount[R[i]]++; }
   S.resTarget = S.resCount.slice();
   calcMountains();
 }
@@ -556,13 +565,14 @@ function mineRes(i, amt) {
 }
 // ---------- Schatztruhen: tauchen tagsüber auf, Beute für den, der sie zuerst erreicht
 function chestTick(dt) {
-  if (!S.started || !S.hq) return;
+  const hqs = allHQs();
+  if (!S.started || !hqs.length) return;
   if (S.phase === 'day') {
     S.chestT -= dt;
     if (S.chestT <= 0) {
-      S.chestT = rand(18, 30);
-      if (S.chests.length < 3) {
-        const hx = S.hq.tx + 1, hy = S.hq.ty + 1;
+      S.chestT = rand(18, 30) / Math.min(4, hqs.length);
+      if (S.chests.length < 3 * hqs.length) {
+        const hq = hqs[randi(0, hqs.length - 1)], hx = hq.tx + 1, hy = hq.ty + 1;
         for (let tries = 0; tries < 60; tries++) {
           const a = rand(0, TAU), d = rand(9, 32);
           const tx = Math.round(hx + Math.cos(a) * d), ty = Math.round(hy + Math.sin(a) * d);
@@ -581,7 +591,7 @@ function chestTick(dt) {
   for (const c of S.chests) {
     if (c.open) continue;
     const q = S.players.find(pl => pl.dead <= 0 && Math.hypot(pl.x - c.x, pl.y - c.y) < 34);
-    if (q) openChest(c, q);
+    if (q) withTeam(teamOf(q), () => openChest(c, q));
   }
   S.chests = S.chests.filter(c => !c.open);
 }
@@ -806,9 +816,14 @@ function tileCost(i) {
   return 1 + b.hp / 30;
 }
 function findPath(start) {
-  const hq = S.hq; if (!hq) return null;
-  const gx = hq.tx + 1, gy = hq.ty + 1;
-  const h = i => { const dx = Math.abs(i % MAP - gx), dy = Math.abs((i / MAP | 0) - gy); return Math.max(0, (dx > dy ? dx + 0.414 * dy : dy + 0.414 * dx) - 1.5); };
+  const hqs = allHQs(); if (!hqs.length) return null;
+  const goals = hqs.map(hq => [hq.tx + 1, hq.ty + 1]);
+  const h = i => {
+    const x = i % MAP, y = i / MAP | 0;
+    let best = 1e9;
+    for (const [gx, gy] of goals) { const dx = Math.abs(x - gx), dy = Math.abs(y - gy), v = (dx > dy ? dx + 0.414 * dy : dy + 0.414 * dx) - 1.5; if (v < best) best = v; }
+    return Math.max(0, best);
+  };
   aStamp++; heapI.length = 0; heapF.length = 0;
   aG[start] = 0; aSeen[start] = aStamp; aFrom[start] = -1;
   hpush(start, h(start));
@@ -882,7 +897,7 @@ function collideTiles(e, isPlayer, ignoreRes) {
       if (d2 < rr * rr) { const d = Math.sqrt(d2) || 0.01; e.x = cx + dx / d * rr; e.y = cy + dy / d * rr; }
     } else if (S.bmap[i]) {
       const btype = S.bById.get(S.bmap[i]).type;
-      if (btype === 'trap' || (isPlayer && btype === 'door')) continue;
+      if (btype === 'trap' || (isPlayer && btype === 'door' && S.bById.get(S.bmap[i]).team === tidOf(e))) continue;
       if (isPlayer && e.z > 24 && (btype === 'wall' || btype === 'door')) continue;   // über Mauern springen
       const rx = tx * TS, ry = ty * TS;
       const nx = clamp(e.x, rx, rx + TS), ny = clamp(e.y, ry, ry + TS);
@@ -967,6 +982,9 @@ function placeError(type, tx, ty) {
   if (type === 'hq' && S.hq) return 'Es gibt nur einen Reaktor';
   if (type === 'hq') {
     if (tx < 10 || ty < 10 || tx + sz > MAP - 10 || ty + sz > MAP - 10) return 'Zu nah am Kartenrand';
+    const me = (CT || homeTeam()).id;
+    for (const h of allHQs()) if (h.team !== me && Math.max(Math.abs(h.tx - tx), Math.abs(h.ty - ty)) < 80) return 'Zu nah an einer anderen Basis (mind. 80 Felder Abstand)';
+    if (inDim(tx, ty)) return 'Nicht im Schattenreich';
   } else {
     const hx = S.hq.tx + 1.5, hy = S.hq.ty + 1.5, cx = tx + sz / 2, cy = ty + sz / 2;
     if (Math.max(Math.abs(cx - hx), Math.abs(cy - hy)) > buildRange()) return 'Außerhalb des Baubereichs – Reaktor aufwerten vergrößert ihn';
@@ -997,6 +1015,7 @@ function placeBuilding(type, tx, ty, who) {
   const b = {
     id: S.nextId++, type, tx, ty, size: d.size, lvl: 1, hp: d.hp[0], maxHp: d.hp[0], cd: rand(0, 0.5),
     flash: 0, angle: -Math.PI / 2, spent: Object.assign({}, costFor(type, 1)), dead: false, acc: 0, nodes: { t: 0, r: 0 }, born: S.t,
+    team: (CT || homeTeam()).id,
   };
   S.buildings.push(b); S.bById.set(b.id, b);
   for (let y = ty; y < ty + d.size; y++) for (let x = tx; x < tx + d.size; x++) S.bmap[y * MAP + x] = b.id;
@@ -1026,6 +1045,7 @@ function countNodes(b) {
   return lists;
 }
 function upgradeError(b) {
+  if (b.team && b.team !== (CT || homeTeam()).id) return 'Gehört einer anderen Basis';
   if (b.lvl >= 5) return 'Maximale Stufe erreicht';
   if (b.type !== 'hq' && b.lvl >= hqLvl()) return 'Reaktor Stufe ' + (b.lvl + 1) + ' benötigt';
   const c = costFor(b.type, b.lvl + 1);
@@ -1054,6 +1074,7 @@ function upgradeBuilding(b, who) {
 function sellBuilding(b, who) {
   who = who || S.player;
   if (b.type === 'hq') { toastFor(who, 'Der Reaktor kann nicht verkauft werden', '#ff7b6b'); sfxFor(who, 'error'); return; }
+  if (b.team && b.team !== tidOf(who)) { toastFor(who, 'Gehört einer anderen Basis', '#ff7b6b'); sfxFor(who, 'error'); return; }
   const f = 0.5 * (b.hp / b.maxHp);
   S.wood += Math.floor(b.spent.w * f); S.stone += Math.floor(b.spent.s * f); S.gold += Math.floor(b.spent.g * f);
   const ce = bCenter(b);
@@ -1066,12 +1087,14 @@ function removeBuilding(b) {
   for (let y = b.ty; y < b.ty + b.size; y++) for (let x = b.tx; x < b.tx + b.size; x++) S.bmap[y * MAP + x] = 0;
   S.bById.delete(b.id);
   const i = S.buildings.indexOf(b); if (i >= 0) S.buildings.splice(i, 1);
-  S.counts[b.type]--;
+  const bt = S.teams.get(b.team); if (bt && bt.counts[b.type]) bt.counts[b.type]--;
   if (S.sel === b) S.sel = null;
   S.navVer++; NET.bDirty = true;
 }
 function damageBuilding(b, dmg) {
   if (b.dead) return;
+  const bt = S.teams.get(b.team);
+  if (bt && bt !== CT) { withTeam(bt, () => damageBuilding(b, dmg)); return; }
   b.hp -= dmg; b.flash = 0.12;
   const c = bCenter(b);
   burst(c.x + rand(-10, 10), c.y + rand(-10, 10), '#b8a890', 3, 90, 0.35, 2.5);
@@ -1088,8 +1111,15 @@ function damageBuilding(b, dmg) {
       burst(c.x, c.y, '#ffd36b', 120, 420, 1.4, 5);
       ring(c.x, c.y, 300, 0.8, '#ffb347');
       addShake(18, c.x, c.y); SFX.play('boom', c.x, c.y);
-      S.ending = 2.6;
-      banner('Der Reaktor ist gefallen!', '', '#ff5b5b');
+      if (!allHQs().length) { S.ending = 2.6; banner('Der Reaktor ist gefallen!', '', '#ff5b5b'); }
+      else if (bt) {
+        // Nur diese Basis ist verloren – das Team kann neu anfangen
+        dismantleTeam(bt, null);
+        bt.wood = Math.max(40, Math.floor(bt.wood * 0.5)); bt.stone = Math.max(40, Math.floor(bt.stone * 0.5)); bt.gold = Math.floor(bt.gold * 0.5);
+        const msg = '💥 Die Basis von ' + (bt.name || 'jemandem') + ' ist gefallen!';
+        addChat('', msg, '#ff8a6a'); hostEv(['c', '', msg, 101]);
+        for (const q of teamMembers(bt.id)) toastFor(q, 'Eure Basis ist gefallen! Baut einen neuen Reaktor (Taste 9) – Level & Skills bleiben.', '#ff7b6b');
+      }
     } else removeBuilding(b);
   }
 }
@@ -1107,7 +1137,9 @@ function nearestBuilding(x, y, range) {
 function buildingAtWorld(x, y) { const i = tileAt(x, y); return i >= 0 && S.bmap[i] ? S.bById.get(S.bmap[i]) : null; }
 
 function updBuildings(dt) {
+  const o0 = CT;
   for (const b of S.buildings) {
+    CT = S.teams.get(b.team) || o0;
     b.flash -= dt;
     if (S.phase === 'day' && b.hp < b.maxHp) b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.015 * dt);
     const d = BDEF[b.type], L = b.lvl - 1;
@@ -1155,13 +1187,13 @@ function updBuildings(dt) {
         const c = bCenter(b), R = d.radius[L] * TS, amt = d.heal[L];
         let fx = 0;
         for (const o of S.buildings) {
-          if (o === b || o.hp >= o.maxHp) continue;
+          if (o === b || o.hp >= o.maxHp || o.team !== b.team) continue;
           const oc = bCenter(o);
           if (Math.hypot(oc.x - c.x, oc.y - c.y) > R + o.size * TS * 0.5) continue;
           o.hp = Math.min(o.maxHp, o.hp + amt);
           if (fx++ < 4) burst(oc.x, oc.y, '#7dff9a', 3, 50, 0.6, 2.5, -40);
         }
-        for (const q of S.players) if (q.dead <= 0 && q.hp < q.maxHp && Math.hypot(q.x - c.x, q.y - c.y) < R) {
+        for (const q of S.players) if (q.dead <= 0 && q.hp < q.maxHp && tidOf(q) === b.team && Math.hypot(q.x - c.x, q.y - c.y) < R) {
           q.hp = Math.min(q.maxHp, q.hp + amt * 0.5);
           burst(q.x, q.y, '#7dff9a', 3, 50, 0.6, 2.5, -40);
         }
@@ -1195,7 +1227,7 @@ function updBuildings(dt) {
     b.cd = d.rate[L];
     const tAng = Math.atan2(z.y - c.y, z.x - c.x);
     b.angle = tAng;
-    const dmg = d.dmg[L];
+    const dmg = d.dmg[L], np0 = S.projs.length;
     if (b.type === 'arrow') {
       const sp = 760, dist = Math.hypot(z.x - c.x, z.y - c.y), tt = dist / sp;
       const ax = z.x + z.vx * tt, ay = z.y + z.vy * tt, a = Math.atan2(ay - c.y, ax - c.x);
@@ -1215,7 +1247,9 @@ function updBuildings(dt) {
       S.projs.push({ k: 'bomb', sx: c.x, sy: c.y, x: c.x, y: c.y, tx: ax, ty: ay, t: 0, T, dmg, splash: d.splash[L] * TS, h: 0 });
       SFX.play('cannon', c.x, c.y);
     }
+    for (let k = np0; k < S.projs.length; k++) S.projs[k].team = b.team;
   }
+  CT = o0;
 }
 function mageChain(x, y, first, dmg, jumps) {
   const hit = new Set(), pts = [[x, y]];
@@ -1290,18 +1324,23 @@ function edgePoint() {
 function startNight() {
   const N = S.night;
   S.phase = 'night'; S.phaseT = NIGHT_LEN; S.nightT = 0; S.hqWarned = false;
-  const plan = nightPlan(N);
   S.bloodMoon = N % 7 === 0;
-  if (S.bloodMoon) { const extra = Math.round(plan.length * 0.3); for (let k = 0; k < extra; k++) plan.push(plan[randi(0, plan.length - 1)]); }
-  const nPts = Math.min(6, 2 + Math.floor(N / 3));
-  S.spawnPts = [];
-  for (let i = 0; i < nPts; i++) S.spawnPts.push(edgePoint());
-  const dur = Math.min(40, 18 + N * 2);
-  S.spawnQueue = plan.map((type, i) => ({ type, at: (i / plan.length) * dur + rand(0, 1.5), pt: i % nPts }));
-  if (N % 5 === 0) {
-    const nb = Math.max(1, Math.floor(N / 10) + (N % 10 === 5 && N > 5 ? 1 : 0));
-    for (let i = 0; i < nb; i++) S.spawnQueue.push({ type: 'boss', at: 6 + i * 8, pt: i % nPts });
-  }
+  S.spawnPts = []; S.spawnQueue = [];
+  const dur = Math.min(40, 18 + N * 2), nPts = Math.min(6, 2 + Math.floor(N / 3));
+  for (const hq of allHQs()) withTeam(S.teams.get(hq.team), () => {
+    // jede Basis bekommt ihre eigene Welle (größer, wenn mehr Leute dazugehören)
+    const members = Math.max(1, teamMembers(hq.team).length);
+    const plan = nightPlan(N);
+    const f = (members <= 1 ? 1 : 1 + 0.35 * (members - 1)) * (S.bloodMoon ? 1.3 : 1), target = Math.round(plan.length * f);
+    while (plan.length < target) plan.push(plan[randi(0, plan.length - 1)]);
+    const base = S.spawnPts.length;
+    for (let i = 0; i < nPts; i++) S.spawnPts.push(edgePoint());
+    for (let i = 0; i < plan.length; i++) S.spawnQueue.push({ type: plan[i], at: (i / plan.length) * dur + rand(0, 1.5), pt: base + i % nPts });
+    if (N % 5 === 0) {
+      const nb = Math.max(1, Math.floor(N / 10) + (N % 10 === 5 && N > 5 ? 1 : 0));
+      for (let i = 0; i < nb; i++) S.spawnQueue.push({ type: 'boss', at: 6 + i * 8, pt: base + i % nPts });
+    }
+  });
   S.spawnQueue.sort((a, b) => a.at - b.at);
   if (S.bloodMoon) banner('🩸 BLUTMOND 🩸', 'Mehr und stärkere Zombies – dafür doppelt Gold und XP!', '#ff3a3a');
   else banner('NACHT ' + N, N % 5 === 0 ? '⚠ Ein Boss nähert sich! ⚠' : 'Verteidige den Reaktor!', '#ff6b6b');
@@ -1334,7 +1373,7 @@ function spawnZombie(type, pt) {
   if (type === 'normal' && N >= 2 && Math.random() < 0.025) { z.golden = true; z.spMul *= 1.5; z.hp = z.maxHp = z.maxHp * 1.5; }
   z.lx = z.x; z.ly = z.y;
   const st = tileAt(z.x, z.y);
-  if (st >= 0 && S.hq) { const r = getPath(st); z.path = r.path; z.ver = S.navVer; }
+  if (st >= 0 && allHQs().length) { const r = getPath(st); z.path = r.path; z.ver = S.navVer; }
   S.zombies.push(z);
   if (type === 'boss') banner('BOSS ERSCHEINT', 'Bring deine Türme in Stellung!', '#d87bff');
   if (type === 'shade') { z.hp = z.maxHp = D.hp * (1 + 0.1 * (N - 1)); }
@@ -1369,7 +1408,7 @@ function portalTick(p, dt) {
   } else toastFor(p, 'Zurück in der normalen Welt.', '#cfe8ff');
 }
 function dimTick(dt) {
-  if (S.hq && !S.portal) makePortal();
+  if (!S.portal) { const h0 = allHQs()[0]; if (h0) withTeam(S.teams.get(h0.team), makePortal); }
   if (!S.portal) return;
   const inside = S.players.filter(q => q.dead <= 0 && !q.afk && S.biome[tileAt(q.x, q.y)] === 5);
   S.shadeT = (S.shadeT || 2) - dt;
@@ -1451,7 +1490,7 @@ function spawnTick(dt) {
   if (S.phase !== 'night') return;
   S.nightT += dt;
   while (S.spawnQueue.length && S.spawnQueue[0].at <= S.nightT) {
-    if (S.zombies.length >= 380) break;
+    if (S.zombies.length >= 420 + 60 * Math.min(8, allHQs().length)) break;
     const q = S.spawnQueue.shift();
     spawnZombie(q.type, S.spawnPts[q.pt]);
   }
@@ -1544,7 +1583,8 @@ function giveXp(p, n) {
   }
 }
 function teamXp(n) { for (const p of S.players) giveXp(p, n); }
-function recalcMaxHp(p) {
+function recalcMaxHp(p) { withTeam(teamOf(p), () => recalcMaxHp0(p)); }
+function recalcMaxHp0(p) {
   const m = 100 + 25 * (hqLvl() - 1) + 15 * p.sk.vit;
   p.hp = Math.max(1, p.hp + m - p.maxHp); p.maxHp = m;
 }
@@ -1741,8 +1781,7 @@ function updZombie(z, dt) {
           wx = (ti % MAP + 0.5) * TS; wy = ((ti / MAP | 0) + 0.5) * TS;
         }
         tx = wx; ty = wy;
-      } else if (S.hq) { const c = bCenter(S.hq); tx = c.x; ty = c.y; }
-      else wantMove = false;
+      } else { const nh = nearestHQ(z.x, z.y); if (nh) { const c = bCenter(nh); tx = c.x; ty = c.y; } else wantMove = false; }
     }
   }
 
@@ -2036,8 +2075,10 @@ function playerAttack(p) {
 // Projektile & Effekte
 // =====================================================================
 function updProjs(dt) {
+  const o0 = CT;
   for (const pr of S.projs) {
     if (pr.dead) continue;
+    { const ow = pr.owner !== undefined ? pById(pr.owner) : null; CT = (ow ? teamOf(ow) : S.teams.get(pr.team)) || o0; }
     if (pr.k === 'bomb') {
       pr.t += dt;
       const f = Math.min(1, pr.t / pr.T);
@@ -2079,6 +2120,7 @@ function updProjs(dt) {
       pr.dead = true;
     } else if (pr.life <= 0) pr.dead = true;
   }
+  CT = o0;
   S.projs = S.projs.filter(p => !p.dead);
 }
 function updFx(dt) {
@@ -2117,7 +2159,7 @@ function update(dt) {
   animalTick(dt);
   buildHash();
   readLocalInput(S.player);
-  for (const p of S.players) updPlayer(p, dt);
+  for (const p of S.players) withTeam(teamOf(p), () => updPlayer(p, dt));
   processRepaths();
   for (let i = 0; i < S.zombies.length; i++) { const z = S.zombies[i]; if (!z.dead) updZombie(z, dt); }
   separate();
@@ -2136,6 +2178,7 @@ function update(dt) {
 }
 function followCam(dt) {
   biomeNotice();
+  if (S.started && mode === 'play' && !S.hq && !S.place) S.place = 'hq';
   const p = S.player;
   const tx = p.x - VW / 2, ty = p.y - VH / 2;
   const k = Math.min(1, dt * 8);
@@ -2147,7 +2190,7 @@ function startGame() {
   newGame({});
   mode = 'play'; modeT = 0;
   SFX.init();
-  banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Ihr baut gemeinsam – Ressourcen werden geteilt' : 'Linksklick auf eine freie Fläche', '#ffd36b');
+  banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Jeder baut seine eigene Basis – Clans (/clan) teilen sich eine' : 'Linksklick auf eine freie Fläche', '#ffd36b');
   if (NET.role === 'host') {
     const gids = [...NET.peers.keys()];
     NET.peers.clear();
@@ -2278,7 +2321,7 @@ function lanConnect(want, room, tries) {
       if (m.role === 'host') {
         NET.role = 'host'; NET.peer = false; NET.peers.clear(); NET.urls = m.urls || [];
         lobbyHide(); startGame();
-        banner('Raum-Code: ' + NET.room, 'Bis zu 7 Freunde klicken „Online beitreten“ und geben den Code ein', '#7fd8ff');
+        banner('Raum-Code: ' + NET.room, 'Bis zu 15 Freunde klicken „Online beitreten“ und geben den Code ein', '#7fd8ff');
       } else { NET.role = 'client'; lobbyStatus('Verbunden! Warte auf die Spieldaten vom Host …'); SFX.play('join', undefined, undefined, true); }
     } else if (m.t === '_peer') hostAddPeer(m.id || 1);
     else if (m.t === '_gone') { if (NET.role === 'host') hostPeerGone(m.id || 1); else netClose('Der Host hat das Spiel beendet.'); }
@@ -2302,17 +2345,41 @@ function lanConnect(want, room, tries) {
 function addRemotePlayer(gid) {
   let id = 1; while (S.players.some(q => q.id === id)) id++;
   const q = mkPlayer(id); q.remote = true; q.gid = gid; q.name = 'Spieler ' + (id + 1);
-  const base = S.player, a = id * 0.9;
-  q.x = base.x + Math.cos(a) * 34; q.y = base.y + Math.sin(a) * 34; q.lastInput = S.t; q.lastNet = performance.now();
+  const sp = farSpawn();
+  q.x = sp.x; q.y = sp.y; q.tp = 1; q.lastInput = S.t; q.lastNet = performance.now();
   recalcMaxHp(q); q.hp = q.maxHp;
   collideTiles(q, true, false);
   S.players.push(q);
   NET.peers.set(gid, id); NET.peer = true;
   return q;
 }
+// Startplatz weit weg von anderen Basen und Spielern (riesige Karte)
+function farSpawn() {
+  const others = [...allHQs().map(h => bCenter(h)), ...S.players.map(p => ({ x: p.x, y: p.y }))];
+  for (let need = 110; need >= 20; need -= 15) for (let tries = 0; tries < 120; tries++) {
+    const tx = randi(30, MAP - 31), ty = randi(30, MAP - 31), i = ty * MAP + tx;
+    if (S.res[i] || S.bmap[i] || inDim(tx, ty) || S.biome[i] === 5) continue;
+    const x = (tx + 0.5) * TS, y = (ty + 0.5) * TS;
+    if (others.every(o => Math.hypot(o.x - x, o.y - y) > need * TS)) return { x, y };
+  }
+  return { x: S.player.x + 60, y: S.player.y };
+}
+async function packU8(u8) {
+  if (typeof CompressionStream === 'undefined') return 'R' + u8ToB64(u8);
+  const buf = await new Response(new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer();
+  return 'Z' + u8ToB64(new Uint8Array(buf));
+}
+async function unpackU8(s) {
+  if (s[0] !== 'Z') return b64ToU8(s[0] === 'R' ? s.slice(1) : s);
+  const buf = await new Response(new Blob([b64ToU8(s.slice(1))]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer();
+  return new Uint8Array(buf);
+}
 function sendWorldTo(q) {
-  netSendTo(q, { t: 'M', you: q.id, seed: S.seed, res: u8ToB64(S.res), rhp: u8ToB64(S.rhp), v: u8ToB64(S.variant), tgt: S.resTarget });
-  NET.bDirty = true; NET.bT = 1;
+  const res = S.res.slice(), rhp = S.rhp.slice(), seed = S.seed, tgt = S.resTarget.slice();
+  Promise.all([packU8(res), packU8(rhp)]).then(([r, h]) => {
+    netSendTo(q, { t: 'M', you: q.id, seed, res: r, rhp: h, tgt });
+    NET.bDirty = true; NET.bT = 1;
+  });
 }
 function hostAddPeer(gid) {
   NET.lastRecv = performance.now();
@@ -2335,6 +2402,8 @@ function hostPeerGone(gid) {
   const msg = pName(q) + ' hat das Spiel verlassen.';
   addChat('', msg, '#ff9a7a'); hostEv(['c', '', msg, 101]);
   clanLeave(q, true);
+  const qt = S.teams.get(tidOf(q));
+  if (qt && qt.id.startsWith('p:') && qt !== homeTeam()) { dismantleTeam(qt, null); S.teams.delete(qt.id); }
   S.players = S.players.filter(o => o !== q);
   if (mode !== 'menu') toast(msg, '#ff9a7a');
 }
@@ -2350,6 +2419,47 @@ const CHAT_COL = ['#9fd0ff', '#ffb0a8', '#a8f0b0', '#ffe27a', '#d8b4ff', '#9ff0f
 const chatCol = i => i >= 100 ? ['#c8a8ff', '#aaa', '#ffe27a', '#8fe08f', '#7fffd0'][i - 100] || '#ddd' : CHAT_COL[i % CHAT_COL.length];
 const pingCol = pid => CHAT_COL[(pid || 0) % CHAT_COL.length];
 const pById = id => S.players.find(q => q.id === id);
+// ---------- Teams: jeder Spieler hat eine eigene Basis (Reaktor, Rohstoffe, Gebäude) – Clans teilen sich eine
+let CT = null;   // Team-Kontext: S.hq, S.wood … beziehen sich immer auf dieses Team
+const TEAM_KEYS = ['hq', 'wood', 'stone', 'gold', 'iron', 'goldEarned', 'counts', 'hqWarned'];
+function newTeam(id, name) { return { id, name, hq: null, wood: 40, stone: 40, gold: 0, iron: 0, goldEarned: 0, counts: {}, hqWarned: false }; }
+const tidOf = p => p.clan ? 'c:' + p.clan : 'p:' + p.id;
+function ensureTeam(id, name) { let t = S.teams.get(id); if (!t) { t = newTeam(id, name || id.slice(2)); S.teams.set(id, t); } return t; }
+function teamOf(p) { return ensureTeam(tidOf(p), p.clan || p.name); }
+function homeTeam() { return S && S.player ? teamOf(S.player) : null; }
+function withTeam(t, fn) { const o = CT; CT = t || o; try { return fn(); } finally { CT = o; } }
+function allHQs() { const r = []; if (S && S.teams) for (const t of S.teams.values()) if (t.hq && !t.hq.dead) r.push(t.hq); return r; }
+function nearestHQ(x, y) { let best = null, bd = Infinity; for (const h of allHQs()) { const c = bCenter(h), d = Math.hypot(c.x - x, c.y - y); if (d < bd) { bd = d; best = h; } } return best; }
+function teamMembers(id) { return S.players.filter(q => tidOf(q) === id); }
+function bindTeamProps(S) {
+  for (const k of TEAM_KEYS) {
+    delete S[k];
+    Object.defineProperty(S, k, {
+      get() { const t = CT || homeTeam(); return t ? t[k] : (k === 'counts' ? {} : k === 'hq' ? null : 0); },
+      set(v) { const t = CT || homeTeam(); if (t) t[k] = v; },
+      configurable: true, enumerable: false,
+    });
+  }
+}
+// Basis eines Teams auflösen (Gebäude weg, Teil der Kosten zurück an ein anderes Team oder verloren)
+function dismantleTeam(t, refundTo) {
+  for (const b of S.buildings.slice()) if (b.team === t.id) {
+    if (refundTo) { refundTo.wood += Math.floor(b.spent.w * 0.5); refundTo.stone += Math.floor(b.spent.s * 0.5); refundTo.gold += Math.floor(b.spent.g * 0.5); }
+    const c = bCenter(b); burst(c.x, c.y, '#a89878', 8 + b.size * 4, 140, 0.6, 3);
+    removeBuilding(b);
+  }
+  if (refundTo) { refundTo.wood += t.wood; refundTo.stone += t.stone; refundTo.gold += t.gold; refundTo.iron += t.iron || 0; }
+  t.hq = null;
+}
+// Team umbenennen (z. B. wenn aus einer Einzelbasis eine Clan-Basis wird)
+function retagTeam(t, newId, name) {
+  if (S.teams.get(newId)) return S.teams.get(newId);
+  S.teams.delete(t.id);
+  for (const b of S.buildings) if (b.team === t.id) b.team = newId;
+  t.id = newId; t.name = name || t.name;
+  S.teams.set(newId, t); NET.bDirty = true;
+  return t;
+}
 const pName = p => (p.clan ? '[' + p.clan + '] ' : '') + (p.name || ('Spieler ' + (p.id + 1)));
 function addChat(name, text, color) {
   chatLog.push({ name, text, color: color || '#ddd', t: performance.now() });
@@ -2439,16 +2549,24 @@ function clanMembers(c) { return S.players.filter(q => q.clan === c.name); }
 function clanSay(c, text, color) { for (const q of clanMembers(c)) sysMsg(q, text, color || '#7fffd0'); }
 function clanJoin(p, c) {
   if (p.clan) clanLeave(p, false);
+  const old = teamOf(p), ct = ensureTeam('c:' + c.name, c.name);
+  // eigene Basis wird zerlegt: Rohstoffe + halber Gebäudewert gehen an den Clan
+  if (old !== ct) { const had = old.hq || S.buildings.some(b => b.team === old.id); dismantleTeam(old, ct); S.teams.delete(old.id); if (had) sysMsg(p, 'Deine Basis wurde zerlegt – die Rohstoffe gehen an den Clan.'); }
   p.clan = c.name; c.invites.delete(p.id);
+  if (ct.hq) { const hc = bCenter(ct.hq); p.x = hc.x + rand(-60, 60); p.y = hc.y + 90; p.tp++; }
   clanSay(c, '🛡 ' + (p.name || 'Spieler') + ' ist dem Clan [' + c.name + '] beigetreten! (' + clanMembers(c).length + ' Mitglieder)');
 }
 function clanLeave(p, silent) {
   const c = p.clan ? S.clans.get(p.clan) : null;
+  const ct = c ? S.teams.get('c:' + c.name) : null;
   p.clan = '';
   if (!c) return;
   const rest = clanMembers(c);
+  if (ct && !rest.length) retagTeam(ct, 'p:' + p.id, p.name);   // letzter geht: Basis gehört wieder ihm
+  else if (!silent) sysMsg(p, 'Du startest jetzt eine eigene Basis – setz deinen Reaktor (Taste 9).');
   if (!silent) sysMsg(p, 'Du hast den Clan [' + c.name + '] verlassen.');
-  if (!rest.length) { S.clans.delete(c.name); return; }
+  if (!rest.length) { S.clans.delete(c.name); NET.bDirty = true; return; }
+  NET.bDirty = true;
   if (c.leader === p.id) { c.leader = rest[0].id; clanSay(c, '👑 ' + (rest[0].name || 'Spieler') + ' führt jetzt den Clan.'); }
   clanSay(c, (p.name || 'Spieler') + ' hat den Clan verlassen.');
 }
@@ -2462,7 +2580,8 @@ function runCommand(p, text) {
   const rest = args.join(' ');
   if (cmd === 'afk') setAfk(p, !p.afk);
   else if (cmd === 'hilfe' || cmd === 'help' || cmd === '?') {
-    sysMsg(p, 'Befehle: /afk · /full (Vollbild) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
+    sysMsg(p, 'Befehle: /afk · /full (Vollbild) · /heim (zur Basis) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
+    sysMsg(p, 'Jeder hat seine eigene Basis. Im Clan teilt ihr Reaktor, Rohstoffe und Gebäude.');
     sysMsg(p, 'Clans: /clan gründen <Name> · /clan einladen <Spieler> · /clan beitreten <Name> · /clan verlassen · /clan offen · /clan kick <Spieler> · /clan info');
     sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · G Markierung · N Ton · 3D: rechte Maus ziehen bzw. , . = Kamera drehen · O = Ego-Perspektive');
     sysMsg(p, '🥚 Psst … in diesem Spiel sind ' + EGGS.length + ' Easter Eggs versteckt. Viel Spaß beim Suchen!', '#ffe27a');
@@ -2488,7 +2607,9 @@ function runCommand(p, text) {
       if (findClan(name)) { sysMsg(p, 'Den Clan [' + name + '] gibt es schon.', '#ff9a7a'); return; }
       if (p.clan) clanLeave(p, false);
       const c = { name, leader: p.id, invites: new Set(), open: false };
-      S.clans.set(name, c); p.clan = name;
+      S.clans.set(name, c);
+      retagTeam(teamOf(p), 'c:' + name, name);   // deine Basis wird zur Clan-Basis
+      p.clan = name;
       const msg = '🛡 ' + (p.name || 'Spieler') + ' hat den Clan [' + name + '] gegründet!';
       addChat('', msg, '#7fffd0'); hostEv(['c', '', msg, 104]);
       sysMsg(p, 'Lade Leute ein mit /clan einladen <Name> oder öffne den Clan mit /clan offen. Clan-Bonus: +10 % Schaden in der Nähe von Clan-Mitgliedern.');
@@ -2528,6 +2649,13 @@ function runCommand(p, text) {
     }
   }
   // ---- Easter Eggs
+  else if (cmd === 'heim' || cmd === 'home' || cmd === 'base' || cmd === 'basis') {
+    const t = teamOf(p);
+    if (!t.hq) { sysMsg(p, 'Du hast noch keinen Reaktor.', '#ff9a7a'); return; }
+    if ((p.homeCd || 0) > S.t) { sysMsg(p, 'Noch ' + Math.ceil(p.homeCd - S.t) + ' s warten.', '#ff9a7a'); return; }
+    const c = bCenter(t.hq); p.x = c.x + rand(-40, 40); p.y = c.y + 100; p.tp++; p.homeCd = S.t + 30;
+    burst(p.x, p.y, '#7fd8ff', 24, 160, 0.6, 3); sysMsg(p, '🏠 Zurück an der Basis.');
+  }
   else if (cmd === 'tanzen' || cmd === 'dance' || cmd === 'tanz') {
     p.danceT = 3; hostEv(['D', p.id]);
     for (let i = 0; i < 6; i++) floatText(p.x + rand(-30, 30), p.y - 20 - i * 6, ['♪', '♫', '♬'][i % 3], ['#ffe27a', '#7fd8ff', '#ff8ad8'][i % 3], 18);
@@ -2634,7 +2762,7 @@ function netHostTick(dt) {
   NET.sendT = 0;
   if (NET.bDirty && NET.bT > 0.2) {
     NET.bDirty = false; NET.bT = 0;
-    netSendR({ t: 'B', b: S.buildings.map(b => [b.id, BTYPES.indexOf(b.type), b.tx, b.ty, b.lvl, Math.ceil(b.hp), b.maxHp, b.spent.w, b.spent.s, b.spent.g]) });
+    netSendR({ t: 'B', b: S.buildings.map(b => [b.id, BTYPES.indexOf(b.type), b.tx, b.ty, b.lvl, Math.ceil(b.hp), b.maxHp, b.spent.w, b.spent.s, b.spent.g, b.team]) });
   }
   if (NET.ev.length) { netSendR({ t: 'E', e: NET.ev }); NET.ev = []; }
   const bd = [];
@@ -2647,6 +2775,7 @@ function netHostTick(dt) {
     p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0]),
     ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
+    tm: [...S.teams.values()].map(t => [t.id, r2(t.wood), r2(t.stone), r2(t.gold), r2(t.iron || 0), Math.floor(t.goldEarned || 0), t.name || '']),
     an: (S.animals || []).map(a => [a.id, ATYPES.indexOf(a.type), a.x | 0, a.y | 0, r2(a.face), Math.round(100 * a.hp / a.maxHp), a.flash > 0 ? 1 : 0, a.vx | 0, a.vy | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0, z.frostT > 0 ? 1 : 0, z.golden ? 1 : 0]),
     pr: S.projs.map(q => [PKINDS.indexOf(q.k), q.x | 0, q.y | 0, q.k === 'bomb' ? ((q.tx - q.sx) / q.T) | 0 : q.vx | 0, q.k === 'bomb' ? ((q.ty - q.sy) / q.T) | 0 : q.vy | 0, q.h | 0]),
@@ -2708,13 +2837,13 @@ function netOnMessage(m, gid) {
     p.lastNet = performance.now();
     if (m.t === 'p') { netSendTo(p, { t: 'q', ts: m.ts }); return; }
     if (m.t === 'q') { p.ping = performance.now() - m.ts; NET.ping = p.ping; return; }
-    hostHandleClient(m, p); return;
+    withTeam(teamOf(p), () => hostHandleClient(m, p)); return;
   }
   if (m.t === 'p') { netSendR({ t: 'q', ts: m.ts }); return; }
   if (m.t === 'q') { NET.ping = performance.now() - m.ts; return; }
   if (NET.role !== 'client') return;
   switch (m.t) {
-    case 'M': clientInitMap(m); break;
+    case 'M': clientInitMap(m).catch(e => console.error(e)); break;
     case 'B': if (S && S.isClient) clientBuildings(m.b); break;
     case 'S': if (S && S.isClient) clientSnapshot(m); break;
     case 'E': if (S && S.isClient) for (const e of m.e) clientEvent(e); break;
@@ -2725,11 +2854,12 @@ function netOnMessage(m, gid) {
     case 'O': if (S) { finishResult(m.r); mode = 'over'; modeT = 0; S.sel = null; S.place = null; input.down = false; SFX.play('die', undefined, undefined, true); } break;
   }
 }
-function clientInitMap(m) {
+async function clientInitMap(m) {
+  const res = await unpackU8(m.res), rhp = await unpackU8(m.rhp);
   newGame({ localId: m.you || 1, noMap: true });
   S.isClient = true;
-  S.res = b64ToU8(m.res); S.rhp = b64ToU8(m.rhp); S.variant = b64ToU8(m.v);
-  S.resTarget = m.tgt; S.seed = m.seed || 1; genBiomes(); calcMountains();
+  S.res = res; S.rhp = rhp;
+  S.resTarget = m.tgt; S.seed = m.seed || 1; genVariant(); genBiomes(); calcMountains();
   S.place = null;
   if (!HEADLESS) buildMinimap();
   lobbyHide();
@@ -2741,15 +2871,17 @@ function clientInitMap(m) {
 }
 function clientBuildings(list) {
   const old = S.bById;
-  S.buildings = []; S.bById = new Map(); S.bmap.fill(0); S.counts = {}; S.hq = null;
+  S.buildings = []; S.bById = new Map(); S.bmap.fill(0);
+  for (const t of S.teams.values()) { t.counts = {}; t.hq = null; }
   for (const a of list) {
     const type = BTYPES[a[1]], d = BDEF[type];
     const b = old.get(a[0]) || { id: a[0], flash: 0, angle: -Math.PI / 2, nodes: { t: 0, r: 0, g: 0 } };
-    Object.assign(b, { type, tx: a[2], ty: a[3], size: d.size, lvl: a[4], hp: a[5], maxHp: a[6], spent: { w: a[7], s: a[8], g: a[9] }, dead: false });
+    Object.assign(b, { type, tx: a[2], ty: a[3], size: d.size, lvl: a[4], hp: a[5], maxHp: a[6], spent: { w: a[7], s: a[8], g: a[9] }, dead: false, team: a[10] || 'p:0' });
     S.buildings.push(b); S.bById.set(b.id, b);
     for (let y = b.ty; y < b.ty + b.size; y++) for (let x = b.tx; x < b.tx + b.size; x++) S.bmap[y * MAP + x] = b.id;
-    S.counts[type] = (S.counts[type] || 0) + 1;
-    if (type === 'hq') S.hq = b;
+    const bt = ensureTeam(b.team);
+    bt.counts[type] = (bt.counts[type] || 0) + 1;
+    if (type === 'hq') bt.hq = b;
     if (type === 'harv') countNodes(b);
   }
   for (const b of old.values()) if (!S.bById.has(b.id)) b.dead = true;
@@ -2759,9 +2891,9 @@ function clientBuildings(list) {
 function clientSnapshot(m) {
   const g = m.g;
   S.phase = g[1] ? 'night' : 'day'; S.phaseT = g[2]; S.night = g[3]; S.survived = g[4]; S.nightT = g[5]; S.kills = g[6];
-  S.wood = g[7]; S.stone = g[8]; S.gold = g[9]; S.started = !!g[10]; S.ending = g[11]; S.qLen = g[12]; S.goldEarned = g[14];
-  S.bossKills = g[15] || 0; S.chestsOpened = g[16] || 0; S.bloodMoon = !!g[17]; S.bloodSurvived = g[18] || 0; S.bomberKills = g[19] || 0; S.animalKills = g[20] || 0; S.weather = g[21] || 0; S.stormSurvived = g[22] || 0; S.iron = g[23] || 0;
-  if (!g[13]) S.hq = null;
+  S.started = !!g[10]; S.ending = g[11]; S.qLen = g[12];
+  S.bossKills = g[15] || 0; S.chestsOpened = g[16] || 0; S.bloodMoon = !!g[17]; S.bloodSurvived = g[18] || 0; S.bomberKills = g[19] || 0; S.animalKills = g[20] || 0; S.weather = g[21] || 0; S.stormSurvived = g[22] || 0;
+  if (m.tm) for (const a of m.tm) { const t = ensureTeam(a[0], a[6]); t.wood = a[1]; t.stone = a[2]; t.gold = a[3]; t.iron = a[4]; t.goldEarned = a[5]; t.name = a[6]; }
   const ids = new Set();
   for (const a of m.p) {
     ids.add(a[0]);
@@ -4025,7 +4157,7 @@ function drawHUD() {
     ctx.beginPath(); ctx.moveTo(cx - 11, cy); ctx.lineTo(cx - 4, cy); ctx.moveTo(cx + 4, cy); ctx.lineTo(cx + 11, cy); ctx.moveTo(cx, cy - 11); ctx.lineTo(cx, cy - 4); ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy + 11); ctx.stroke();
     ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = c; circle(cx, cy, 1.5); ctx.fill();
-    if (!isTouch && !mouseLocked()) text('Klicken, um die Maus zu fangen (Umsehen)', cx, cy + 34, 13, '#ffe27a', 'center', '600');
+    if (!isTouch && !mouseLocked()) text('Linksklick = Maus fangen · oder rechte Maustaste halten und bewegen = umsehen', cx, cy + 34, 13, '#ffe27a', 'center', '600');
   }
   // Ressourcen
   panel(12, 12, 200, 144);
@@ -4369,12 +4501,13 @@ function drawSkills() {
 let listOpen = false;
 function drawPlayerList() {
   const list = S.players.slice().sort((a, b) => (a.clan || '~').localeCompare(b.clan || '~') || a.id - b.id);
-  const w = Math.min(460, VW - 24), rowH = 30, h = 64 + list.length * rowH, x = VW / 2 - w / 2, y = 70;
-  panel(x, y, w, h, 0.92);
-  text('👥 Spieler (' + list.length + '/8)' + (NET.room ? ' · Raum ' + NET.room : ''), x + 16, y + 22, 16, '#ffe27a');
-  text('Clan · Name · Level', x + w - 16, y + 22, 11, '#999', 'right', '600');
+  const cols = list.length > 8 ? 2 : 1, colW = Math.min(440, (VW - 24) / cols), rowH = 28, rows = Math.ceil(list.length / cols);
+  const W = colW * cols, h = 64 + rows * rowH, X = VW / 2 - W / 2, y = 64;
+  panel(X, y, W, h, 0.92);
+  text('👥 Spieler (' + list.length + '/16)' + (NET.room ? ' · Raum ' + NET.room : ''), X + 16, y + 22, 16, '#ffe27a');
+  text('Clan · Name · Level', X + W - 16, y + 22, 11, '#999', 'right', '600');
   list.forEach((q, i) => {
-    const ry = y + 48 + i * rowH;
+    const x = X + Math.floor(i / rows) * colW, w = colW, ry = y + 48 + (i % rows) * rowH;
     if (q === S.player) { ctx.fillStyle = 'rgba(255,255,255,0.07)'; rr(x + 8, ry - 12, w - 16, rowH - 4, 6); ctx.fill(); }
     ctx.fillStyle = PLAYER_COL[q.id % 8]; circle(x + 22, ry + 2, 7); ctx.fill();
     text((q.clan ? '[' + q.clan + '] ' : '') + (q.name || 'Spieler'), x + 38, ry + 2, 14, q.clan && q.clan === S.player.clan ? '#7fffd0' : '#fff', 'left', '600');
@@ -4488,8 +4621,9 @@ function drawMinimap() {
     ctx.strokeStyle = 'rgba(255,230,140,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(x + (hx - R) * k, y + (hy - R) * k, 2 * R * k, 2 * R * k);
   }
   for (const b of S.buildings) {
-    ctx.fillStyle = b.type === 'hq' ? '#ffd36b' : TOWERS[b.type] ? '#5fb0ff' : '#c8b898';
-    const s = Math.max(2, b.size * TS * k);
+    const own = b.team === tidOf(S.player);
+    ctx.fillStyle = b.type === 'hq' ? (own ? '#ffd36b' : '#ff6a4a') : !own ? 'rgba(255,140,110,0.7)' : TOWERS[b.type] ? '#5fb0ff' : '#c8b898';
+    const s = Math.max(b.type === 'hq' ? 4 : 2, b.size * TS * k);
     ctx.fillRect(x + b.tx * TS * k, y + b.ty * TS * k, s, s);
   }
   for (const c of S.chests) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(x + c.x * k - 3, y + c.y * k - 3, 6, 6); }
@@ -4754,10 +4888,18 @@ if (!HEADLESS) {
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.down = false; if (mode === 'play' && !NET.role) mode = 'paused'; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   let rotDrag = null;
-  canvas.addEventListener('mousedown', e => { if (R3 && !R3.fp && e.button === 2) { rotDrag = e.clientX; e.preventDefault(); } });
-  window.addEventListener('mouseup', e => { if (e.button === 2) rotDrag = null; });
+  let fpDrag = false;
+  canvas.addEventListener('mousedown', e => {
+    if (R3 && !R3.fp && e.button === 2) { rotDrag = e.clientX; e.preventDefault(); }
+    if (R3 && R3.fp && e.button === 2 && !mouseLocked()) { fpDrag = true; e.preventDefault(); }
+  });
+  window.addEventListener('mouseup', e => { if (e.button === 2) { rotDrag = null; fpDrag = false; } });
+  document.addEventListener('pointerlockchange', () => { if (!mouseLocked()) { input.down = false; } });
   canvas.addEventListener('mousemove', e => {
-    if (mouseLocked()) { if (R3 && R3.fp && mode === 'play') R3.look(e.movementX, e.movementY); input.sx = VW / 2; input.sy = VH / 2; return; }
+    // Ego-Perspektive: mit gefangener Maus oder mit gedrückter rechter Maustaste umsehen
+    const mvx = clamp(e.movementX || 0, -250, 250), mvy = clamp(e.movementY || 0, -250, 250);   // Ausreißer mancher Browser abfangen
+    if (mouseLocked()) { if (R3 && R3.fp && mode === 'play') R3.look(mvx, mvy); input.sx = VW / 2; input.sy = VH / 2; return; }
+    if (fpDrag && R3 && R3.fp && mode === 'play') { R3.look(mvx, mvy); return; }
     if (rotDrag !== null && R3) { R3.rotate((e.clientX - rotDrag) * 0.008, true); rotDrag = e.clientX; }
     input.sx = e.clientX; input.sy = e.clientY;
     if (mode === 'play' && input.down && S.place && (S.place === 'wall' || S.place === 'door') && !hitUI(e.clientX, e.clientY)) tryPlaceAtAim(true);
@@ -4773,6 +4915,7 @@ if (!HEADLESS) {
     const u = mouseLocked() ? null : hitUI(e.clientX, e.clientY);
     if (mode !== 'play') { if (u && e.button === 0) { SFX.play('click'); u.fn(); } return; }
     if (e.button === 2) {
+      if (R3 && R3.fp && !mouseLocked()) return;
       if (S.place && S.hq) { S.place = null; return; }
       const wp = aimPoint(), b = buildingAtWorld(wp.x, wp.y);
       S.sel = b || null;
@@ -4895,7 +5038,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 ROOT.NW = {
-  jump, toggleView,
+  jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
   touch, joyHomes, get isTouch() { return isTouch; },

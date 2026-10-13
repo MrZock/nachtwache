@@ -336,7 +336,7 @@
 
   // ---------------------------------------------------------------- Boden-Textur
   function buildGround(S) {
-    const MAP = G.MAP, px = MAP > 260 ? 5 : 6;
+    const MAP = G.MAP, px = MAP > 400 ? 4 : MAP > 260 ? 5 : 6;
     // 1) grobe Farbflecken pro Feld, weich hochskaliert
     const small = document.createElement('canvas'); small.width = small.height = MAP;
     const sg = small.getContext('2d'), img = sg.createImageData(MAP, MAP);

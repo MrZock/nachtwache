@@ -2,24 +2,28 @@
 
 *Die Welt ist dunkel. Dein Reaktor ist das letzte Licht.*
 
-Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gold sammeln und eine Basis um deinen **Reaktor** bauen, nachts Zombiewellen abwehren. Allein oder mit bis zu **8 Spielern** online. (Früher hieß das Spiel „Nachtwache“.)
+Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gold sammeln und eine Basis um deinen **Reaktor** bauen, nachts Zombiewellen abwehren. Allein oder mit bis zu **16 Spielern** online – jeder baut seine **eigene Basis**, Clans teilen sich eine. (Früher hieß das Spiel „Nachtwache“.)
 
 ## Spielen
 
 - **Spielen:** https://mrzock.github.io/nachtwache/ (der alte Link `/3d.html` geht weiterhin)
-- **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 7 andere klicken „Online beitreten“ und geben den Code ein. 2D- und 3D-Spieler können zusammen spielen. Vorher den Spielserver (GitHub Codespace) starten.
+- **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 15 andere klicken „Online beitreten“ und geben den Code ein. 2D- und 3D-Spieler können zusammen spielen. Vorher den Spielserver (GitHub Codespace) starten.
 
-**Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** (3D) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
+**Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** · **O / F5 = Ego-Perspektive** (Linksklick fängt die Maus, oder rechte Maustaste halten zum Umsehen) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
 
 **Handy:** im Querformat spielen. **Zwei Joysticks:** links laufen, rechts zielen & angreifen (kurz antippen = automatisch auf den nächsten Zombie). Knöpfe am Rand: ⤒ Springen, Menü, Karte, Skills, Schmiede, ⚡ Fähigkeit, 🔄 Kamera drehen, ⛶ Vollbild, Chat, Markierung. Vollbild auch mit `/full` im Chat.
 
 ## Neu in 3.0
 
+- **Eigene Basen:** Jeder Spieler startet weit weg von den anderen auf einer **riesigen Karte (512×512)** und baut seinen eigenen Reaktor mit eigenen Rohstoffen. Im **Clan** teilt ihr Reaktor, Rohstoffe und Gebäude (beim Beitreten wird deine alte Basis zerlegt, die Rohstoffe gehen an den Clan). Fällt eine Basis, kann das Team neu anfangen – das Spiel endet erst, wenn kein Reaktor mehr steht. `/heim` bringt dich zurück zu deiner Basis.
+- **Ego-Perspektive** (O / F5, Handy 👁) zusätzlich zur normalen Ansicht.
+- **Icons aus den echten 3D-Modellen** in der Leiste.
+
 - **Neuer Name & Look:** BLACKOUT mit Rost-Logo, neues Hauptmenü, alles im Stil einer kaputten Zukunft: Reaktor statt Goldspeicher, Schrott-Barrikaden, Geschütz-, Tesla-, Mörser- und Kryotürme, Bohrturm, Recycler, Sanistation, Autowracks, Fässer, Ruinen und kaputte Laternen.
 - **Neue 3D-Modelle** für alles: Gebäude (jede Stufe sieht anders aus), Zombies mit Laufanimation, Spieler mit Ausrüstung, Waffen, Leuchteffekte bei Nacht.
 - **Riesige Karte (320×320)** mit **Biomen:** Wiese, Wüste (Kakteen, viel Gold), Schneeland (Schnee statt Regen), Sumpf (bremst) – und **Gebirge** rund um die Welt und mitten drin.
 - **Andere Dimension:** Ein **Portal** taucht in der Nähe des Reaktors auf und führt ins **Schattenreich** – dunkel, lila, voller Schattenkristalle (viel Gold & XP) und gefährlicher Schattenwesen.
-- **Bis zu 8 Spieler**, **Clans** und Team-Chat:
+- **Bis zu 16 Spieler**, **Clans** und Team-Chat:
   - `/clan gründen <Name>` · `/clan einladen <Spieler>` · `/clan beitreten <Name>` · `/clan offen` · `/clan kick <Spieler>` · `/clan verlassen` · `/clan info`
   - `/team <Text>` – nur dein Clan sieht die Nachricht · `/w <Name> <Text>` – flüstern · `/spieler`
   - Clan-Bonus: +10 % Schaden in der Nähe von Clan-Mitgliedern.
