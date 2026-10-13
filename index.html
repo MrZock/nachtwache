@@ -7,6 +7,8 @@
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f0a; }
   canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  #chatin { position: fixed; left: 14px; bottom: 140px; width: min(420px, calc(100vw - 28px)); box-sizing: border-box; display: none; z-index: 5;
+            padding: 9px 12px; background: rgba(12,16,22,0.92); color: #fff; border: 1px solid #ffd36b; border-radius: 8px; font: 600 14px "Segoe UI", Roboto, sans-serif; outline: none; }
   #lobby { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(5,8,12,0.78); z-index: 10; font-family: "Segoe UI", Roboto, sans-serif; }
   #lobby .lb-box { width: min(520px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: #141a22; border: 1px solid #2c3644; border-radius: 12px; padding: 20px 22px; color: #e6e6e6; box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
   #lobby h2 { margin: 0 0 10px; color: #ffd36b; font-size: 22px; }
@@ -34,7 +36,7 @@ const ROOT = typeof window !== 'undefined' ? window : globalThis;
 // Konstanten & Hilfsfunktionen
 // =====================================================================
 const TS = 40;            // Tile-Größe in Pixeln
-const MAP = 96;           // Karte: MAP x MAP Tiles
+const MAP = 140;          // Karte: MAP x MAP Tiles
 const WORLD = TS * MAP;
 const DAY_LEN = 90, NIGHT_LEN = 60;
 const BUILD_RANGE = 16;   // Bauradius um den Goldspeicher (Tiles, Chebyshev)
@@ -87,8 +89,13 @@ const BDEF = {
   harv:   { name: 'Erntemaschine', size: 2, hp: [300, 480, 720, 1050, 1500], cost: { w: 30, s: 30, g: 20 }, gup: 30, max: 4,
             rate: [0.08, 0.11, 0.15, 0.2, 0.27], radius: [4, 4.5, 5, 5.5, 6],
             desc: 'Erntet Holz & Stein von Bäumen/Felsen in der Nähe.' },
+  heal:   { name: 'Heilturm', size: 2, hp: [300, 480, 720, 1050, 1500], cost: { w: 25, s: 25, g: 50 }, gup: 40, max: 4,
+            heal: [10, 15, 22, 32, 45], radius: [4, 4.5, 5, 5.5, 6],
+            desc: 'Repariert Gebäude und heilt Spieler in der Nähe – auch nachts.' },
 };
 const BORDER = ['wall', 'door', 'mine', 'arrow', 'cannon', 'mage', 'bomb', 'harv', 'hq']; // Tasten 1..9
+const KEY_BUILD = { 1: 'wall', 2: 'door', 3: 'mine', 4: 'arrow', 5: 'cannon', 6: 'mage', 7: 'bomb', 8: 'harv', 9: 'hq', 0: 'heal' };
+const BAR_ORDER = [['wall', 1], ['door', 2], ['mine', 3], ['arrow', 4], ['cannon', 5], ['mage', 6], ['bomb', 7], ['harv', 8], ['heal', 0], ['hq', 9]];
 const TOWERS = { arrow: 1, cannon: 1, mage: 1, bomb: 1 };
 const LV_MULT = [1, 1.5, 2.4, 3.8, 6];
 const G_MULT = [0, 2, 5, 12, 26];
@@ -106,6 +113,7 @@ const ZDEF = {
   runner:  { name: 'Läufer',  hp: 24,   speed: 118, r: 10, dmg: 6,  bdmg: 7,   atk: 0.7, gold: 1,   color: '#b5d86a' },
   brute:   { name: 'Brute',   hp: 240,  speed: 38,  r: 20, dmg: 22, bdmg: 70,  atk: 1.5, gold: 4,   color: '#4f7a3e' },
   spitter: { name: 'Spucker', hp: 50,   speed: 52,  r: 13, dmg: 10, bdmg: 16,  atk: 2.2, gold: 2,   color: '#5cc8a0', range: 230 },
+  bomber:  { name: 'Bomber',  hp: 35,   speed: 80,  r: 13, dmg: 25, bdmg: 130, atk: 1.0, gold: 3,   color: '#d9622b' },
   boss:    { name: 'Boss',    hp: 2300, speed: 42,  r: 34, dmg: 40, bdmg: 110, atk: 1.6, gold: 150, color: '#9b3fb0' },
 };
 const hpScale = N => 1 + 0.13 * (N - 1) + 0.012 * (N - 1) * (N - 1);
@@ -185,10 +193,12 @@ const SFX = (() => {
     goldore(){ tone(rand(1300, 1500), 0.08, 'triangle', 0.08 * vf, 2200); noise(0.06, 0.12 * vf, 4000, 'highpass'); },
     rbreak() { noise(0.35, 0.28 * vf, 700, 'lowpass', 90); tone(rand(110, 140), 0.3, 'triangle', 0.18 * vf, 50); },
     join()   { [440, 554, 659, 880].forEach((f, i) => tone(f, 0.16, 'triangle', 0.09, null, i * 0.08)); },
+    ping()   { tone(1320, 0.09, 'sine', 0.12); tone(1760, 0.14, 'sine', 0.1, null, 0.09); },
+    chat()   { tone(980, 0.05, 'triangle', 0.07); tone(1300, 0.07, 'triangle', 0.05, null, 0.05); },
   };
   const gates = { chop: 60, mine: 60, swing: 80, bow: 60, hit: 40, tarrow: 70, cannon: 80, boom: 90, zap: 80, zdie: 50,
                   groan: 500, bhit: 80, bdestroy: 120, spit: 120, click: 30, hurt: 150, hqhit: 600, goldore: 60, rbreak: 100 };
-  const LOCAL_ONLY = { click: 1, error: 1, hurt: 1, die: 1, join: 1 };
+  const LOCAL_ONLY = { click: 1, error: 1, hurt: 1, die: 1, join: 1, ping: 1, chat: 1 };
   function play(name, x, y, noNet) {
     // Host: Sound an den Mitspieler weiterreichen (mit Position, er rechnet die Lautstärke selbst)
     if (!noNet && NET.role === 'host' && !LOCAL_ONLY[name]) NET.ev.push(['s', name, x === undefined ? null : x | 0, y === undefined ? null : y | 0]);
@@ -228,6 +238,10 @@ const keys = {};
 
 // Ressourcen: 1 = Baum, 2 = Fels, 3 = Golderz
 const RES_HP = [0, 30, 35, 24];
+const NAME_KEY = 'nachtwache.name';
+let playerName = store.get(NAME_KEY, '') || ('Spieler' + randi(10, 99));
+const chatLog = [];   // { name, text, color, t }
+function cleanText(s, n) { return String(s || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n); }
 const PLAYER_COL = ['#3a6ea8', '#b8433f'];
 
 function mkPlayer(id) {
@@ -249,12 +263,14 @@ function newGame(opts) {
     spawnQueue: [], spawnPts: [], qLen: 0,
     shake: 0, sel: null, place: 'hq', lastPlaceTile: -1, msg: null, banner: null, ending: 0,
     nextZid: 1, groanT: 3, goldEarned: 0,
+    chests: [], chestT: 25, nextChest: 1, pings: [],
   };
   repathQ = [];
   const n = opts.coop ? 2 : 1;
   for (let i = 0; i < n; i++) S.players.push(mkPlayer(i));
   if (opts.coop) S.players[1].remote = true;
   S.player = S.players[opts.localIdx || 0];
+  S.player.name = playerName;
   if (!opts.noMap) genMap();
   S.players.forEach((p, i) => {
     const f = findFreeNear((MAP / 2 | 0) + i * 2, MAP / 2 | 0, false);
@@ -278,11 +294,11 @@ function genMap() {
         }
     }
   };
-  blob(1, 60, 2, 5, 0.55);   // Wälder
-  blob(2, 45, 1, 3, 0.6);    // Felsen
-  blob(3, 16, 1, 1.6, 0.7);  // Golderz-Adern
+  blob(1, 128, 2, 5.5, 0.55);   // Wälder
+  blob(2, 96, 1, 3, 0.6);       // Felsen
+  blob(3, 36, 1, 1.7, 0.7);     // Golderz-Adern
   // vereinzelte Bäume / Felsen / Golderz
-  for (let i = 0; i < 280; i++) {
+  for (let i = 0; i < 600; i++) {
     const x = randi(2, MAP - 3), y = randi(2, MAP - 3), r = Math.random();
     R[y * MAP + x] = r < 0.62 ? 1 : r < 0.93 ? 2 : 3;
   }
@@ -324,6 +340,63 @@ function mineRes(i, amt) {
     SFX.play('rbreak', cx, cy);
   } else setRes(i, kind, left);
   return got;
+}
+// ---------- Schatztruhen: tauchen tagsüber auf, Beute für den, der sie zuerst erreicht
+function chestTick(dt) {
+  if (!S.started || !S.hq) return;
+  if (S.phase === 'day') {
+    S.chestT -= dt;
+    if (S.chestT <= 0) {
+      S.chestT = rand(18, 30);
+      if (S.chests.length < 3) {
+        const hx = S.hq.tx + 1, hy = S.hq.ty + 1;
+        for (let tries = 0; tries < 60; tries++) {
+          const a = rand(0, TAU), d = rand(9, 32);
+          const tx = Math.round(hx + Math.cos(a) * d), ty = Math.round(hy + Math.sin(a) * d);
+          if (tx < 2 || ty < 2 || tx >= MAP - 2 || ty >= MAP - 2) continue;
+          const i = ty * MAP + tx;
+          if (S.res[i] || S.bmap[i]) continue;
+          const c = { id: S.nextChest++, x: (tx + 0.5) * TS, y: (ty + 0.5) * TS };
+          S.chests.push(c);
+          burst(c.x, c.y, '#ffe27a', 16, 120, 0.7, 3);
+          toastAll('Eine Schatztruhe ist aufgetaucht! (gelb auf der Minimap)', '#ffe27a');
+          break;
+        }
+      }
+    }
+  }
+  for (const c of S.chests) {
+    if (c.open) continue;
+    const q = S.players.find(pl => pl.dead <= 0 && Math.hypot(pl.x - c.x, pl.y - c.y) < 34);
+    if (q) openChest(c, q);
+  }
+  S.chests = S.chests.filter(c => !c.open);
+}
+function openChest(c, q) {
+  c.open = true;
+  const m = 1 + 0.15 * (S.night - 1), r = Math.random();
+  let txt;
+  if (r < 0.32) { const n = Math.round(rand(30, 70) * m); S.wood += n; txt = '+' + n + ' Holz'; }
+  else if (r < 0.62) { const n = Math.round(rand(30, 70) * m); S.stone += n; txt = '+' + n + ' Stein'; }
+  else if (r < 0.9) { const n = Math.round(rand(60, 140) * m); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
+  else { for (const pl of S.players) pl.hp = pl.maxHp; const n = Math.round(30 * m); S.gold += n; S.goldEarned += n; txt = 'Heiltrank! Alle geheilt +' + n + ' Gold'; }
+  burst(c.x, c.y, '#ffe27a', 30, 200, 0.8, 3.5);
+  ring(c.x, c.y, 60, 0.4, '#ffe27a');
+  floatText(c.x, c.y - 24, txt, '#ffe27a', 16);
+  SFX.play('upgrade', c.x, c.y);
+  const who = q.name || ('Spieler ' + (q.id + 1));
+  toastAll(who + ' hat eine Truhe geöffnet: ' + txt, '#ffe27a');
+}
+// ---------- Markierung (Ping) für den Mitspieler
+function addPing(x, y, pid) {
+  S.pings.push({ x, y, pid, t: 4 });
+  if (S.pings.length > 6) S.pings.shift();
+  hostEv(['P', x | 0, y | 0, pid]);
+  SFX.play('ping', undefined, undefined, true);
+}
+function pingAt(x, y) {
+  if (NET.role === 'client') { netSendR({ t: 'pin', x: x | 0, y: y | 0 }); return; }
+  addPing(x, y, S.player.id);
 }
 function regrowTick(dt) {
   S.regrowT -= dt;
@@ -744,6 +817,26 @@ function updBuildings(dt) {
     if (S.phase === 'day' && b.hp < b.maxHp) b.hp = Math.min(b.maxHp, b.hp + b.maxHp * 0.015 * dt);
     const d = BDEF[b.type], L = b.lvl - 1;
     if (b.type === 'hq' || b.type === 'mine') { const g = d.gold[L] * dt; S.gold += g; S.goldEarned += g; continue; }
+    if (b.type === 'heal') {
+      b.acc += dt; b.angle += dt;
+      if (b.acc >= 1) {
+        b.acc -= 1;
+        const c = bCenter(b), R = d.radius[L] * TS, amt = d.heal[L];
+        let fx = 0;
+        for (const o of S.buildings) {
+          if (o === b || o.hp >= o.maxHp) continue;
+          const oc = bCenter(o);
+          if (Math.hypot(oc.x - c.x, oc.y - c.y) > R + o.size * TS * 0.5) continue;
+          o.hp = Math.min(o.maxHp, o.hp + amt);
+          if (fx++ < 4) burst(oc.x, oc.y, '#7dff9a', 3, 50, 0.6, 2.5, -40);
+        }
+        for (const q of S.players) if (q.dead <= 0 && q.hp < q.maxHp && Math.hypot(q.x - c.x, q.y - c.y) < R) {
+          q.hp = Math.min(q.maxHp, q.hp + amt * 0.5);
+          burst(q.x, q.y, '#7dff9a', 3, 50, 0.6, 2.5, -40);
+        }
+      }
+      continue;
+    }
     if (b.type === 'harv') {
       b.acc += dt; b.angle += dt * (2 + b.lvl);
       if (b.acc >= 1) {
@@ -840,18 +933,19 @@ function nightPlan(N) {
   const pRun = N >= 2 ? Math.min(0.3, 0.12 + 0.02 * N) : 0;
   const pBrute = N >= 3 ? Math.min(0.14, 0.04 + 0.01 * N) : 0;
   const pSpit = N >= 4 ? Math.min(0.15, 0.05 + 0.01 * N) : 0;
+  const pBomb = N >= 6 ? Math.min(0.1, 0.03 + 0.008 * N) : 0;
   const list = [];
   for (let i = 0; i < total; i++) {
     const r = Math.random();
-    list.push(r < pRun ? 'runner' : r < pRun + pBrute ? 'brute' : r < pRun + pBrute + pSpit ? 'spitter' : 'normal');
+    list.push(r < pRun ? 'runner' : r < pRun + pBrute ? 'brute' : r < pRun + pBrute + pSpit ? 'spitter' : r < pRun + pBrute + pSpit + pBomb ? 'bomber' : 'normal');
   }
   return list;
 }
 function edgePoint() {
-  for (let tries = 0; tries < 60; tries++) {
-    const side = randi(0, 3), pos = randi(4, MAP - 5);
-    const tx = side === 0 ? 1 : side === 1 ? MAP - 2 : pos;
-    const ty = side === 2 ? 1 : side === 3 ? MAP - 2 : pos;
+  const hx = S.hq ? S.hq.tx + 1 : MAP / 2, hy = S.hq ? S.hq.ty + 1 : MAP / 2;
+  for (let tries = 0; tries < 80; tries++) {
+    const a = rand(0, TAU), d = rand(44, 52);
+    const tx = clamp(Math.round(hx + Math.cos(a) * d), 1, MAP - 2), ty = clamp(Math.round(hy + Math.sin(a) * d), 1, MAP - 2);
     const i = ty * MAP + tx;
     if (!S.res[i] && !S.bmap[i]) return { tx, ty };
   }
@@ -915,7 +1009,26 @@ function hurtZombie(z, dmg, kb, silent) {
   if (!silent && !HEADLESS) floatText(z.x, z.y - z.r - 6, Math.round(dmg), '#fff', dmg > 60 ? 16 : 12);
   if (z.hp <= 0) killZombie(z);
 }
+// Bomber sprengt sich an Gebäuden/Spielern in die Luft
+function bomberBlast(z) {
+  if (z.dead) return;
+  z.dead = true;
+  const R = 1.9 * TS;
+  for (const b of S.buildings.slice()) { const c = bCenter(b); if (Math.hypot(c.x - z.x, c.y - z.y) < R + b.size * TS * 0.5) damageBuilding(b, z.bdmg); }
+  for (const q of S.players) if (q.dead <= 0 && Math.hypot(q.x - z.x, q.y - z.y) < R) hurtPlayer(q, z.dmg);
+  burst(z.x, z.y, '#ffb347', 30, 280, 0.6, 4.5); burst(z.x, z.y, '#ff4a1a', 16, 200, 0.5, 3.5);
+  ring(z.x, z.y, R, 0.35, '#ff8a3a'); lightFlash(z.x, z.y, R * 2.5, 0.3);
+  addShake(6, z.x, z.y); SFX.play('boom', z.x, z.y);
+}
 function killZombie(z) {
+  if (z.type === 'bomber' && !z.dead) {
+    // vorher erledigt: die Explosion trifft nur die Zombies drumherum
+    z.dead = true; S.kills++;
+    S.gold += ZDEF.bomber.gold; S.goldEarned += ZDEF.bomber.gold;
+    floatText(z.x, z.y - 20, 'BUMM!', '#ffb347', 16);
+    explode(z.x, z.y, 2 * TS, 70 * hpScale(S.night), true);
+    return;
+  }
   z.dead = true; S.kills++;
   const g = ZDEF[z.type].gold;
   S.gold += g; S.goldEarned += g;
@@ -1014,6 +1127,7 @@ function updZombie(z, dt) {
       tx = p.x; ty = p.y; z.chasing = true;
       if (dp < z.r + p.r + 5) {
         wantMove = false; z.face = Math.atan2(dyp, dxp);
+        if (z.type === 'bomber') { bomberBlast(z); return; }
         if (z.atkCd <= 0) { z.atkCd = D.atk; z.lunge = 0.18; hurtPlayer(p, z.dmg); }
       }
     } else {
@@ -1044,6 +1158,7 @@ function updZombie(z, dt) {
       probeHit = true;
       const b = S.bById.get(bid);
       z.vx = z.vy = 0;
+      if (z.type === 'bomber') { bomberBlast(z); return; }
       if (z.atkCd <= 0) { z.atkCd = D.atk; z.lunge = 0.18; damageBuilding(b, z.bdmg); }
     } else {
       const sp = D.speed * z.spMul;
@@ -1073,6 +1188,7 @@ function updZombie(z, dt) {
         const ti = tileAt(z.x + Math.cos(ang) * (z.r + 10), z.y + Math.sin(ang) * (z.r + 10));
         if (ti >= 0 && S.bmap[ti]) tb = S.bById.get(S.bmap[ti]);
       }
+      if (tb && z.type === 'bomber') { bomberBlast(z); return; }
       if (tb) { z.atkCd = D.atk; z.lunge = 0.18; damageBuilding(tb, z.bdmg); }
       else { z.path = null; z.x += rand(-6, 6); z.y += rand(-6, 6); }
     }
@@ -1257,6 +1373,8 @@ function updFx(dt) {
   S.flashes = S.flashes.filter(f => f.life > 0);
   for (const [k, w] of S.wobble) { w.t -= dt; if (w.t <= 0) S.wobble.delete(k); }
   for (const [k, v] of S.grow) { const n = v - dt; if (n <= 0) S.grow.delete(k); else S.grow.set(k, n); }
+  for (const pg of S.pings) pg.t -= dt;
+  S.pings = S.pings.filter(pg => pg.t > 0);
   S.shake = Math.max(0, S.shake - (S.shake * 5 + 3) * dt);
   if (S.msg) { S.msg.t -= dt; if (S.msg.t <= 0) S.msg = null; }
   if (S.banner) { S.banner.t -= dt; if (S.banner.t <= 0) S.banner = null; }
@@ -1273,6 +1391,7 @@ function update(dt) {
   }
   spawnTick(dt);
   regrowTick(dt);
+  chestTick(dt);
   buildHash();
   readLocalInput(S.player);
   for (const p of S.players) updPlayer(p, dt);
@@ -1453,11 +1572,13 @@ function hostAddPeer() {
     S.players.push(q);
   }
   toast('Dein Mitspieler ist beigetreten!', '#7fd8ff');
+  addChat('', 'Ein Mitspieler ist beigetreten. Chat mit T oder Enter!', '#8fe08f');
   netSendFull();
   if (mode === 'over' && lastResult) netSendR({ t: 'O', r: lastResult });
 }
 function hostPeerGone(msg) {
   NET.peer = false;
+  if (S && S.players[1]) addChat('', (S.players[1].name || 'Mitspieler') + ' hat das Spiel verlassen.', '#ff9a7a');
   if (S && S.players.length > 1) S.players.length = 1;
   if (S && mode !== 'menu') toast(msg, '#ff9a7a');
 }
@@ -1467,6 +1588,50 @@ function copyText(t) {
 function fallbackCopy(t) {
   const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove();
+}
+// ---------- Chat
+const CHAT_COL = ['#9fd0ff', '#ffb0a8', '#ffe27a'];
+function addChat(name, text, color) {
+  chatLog.push({ name, text, color: color || '#ddd', t: performance.now() });
+  if (chatLog.length > 40) chatLog.shift();
+}
+function chatSend(text) {
+  text = cleanText(text, 120);
+  if (!text || !S) return;
+  if (NET.role === 'client') { netSendR({ t: 'chat', text }); return; }
+  const me = S.player;
+  addChat(me.name || playerName, text, CHAT_COL[me.id]);
+  hostEv(['c', me.name || playerName, text, me.id]);
+  SFX.play('chat', undefined, undefined, true);
+}
+let chatEl = null;
+function chatOpen() {
+  if (HEADLESS) return;
+  if (!chatEl) {
+    chatEl = document.createElement('input');
+    chatEl.id = 'chatin'; chatEl.maxLength = 120; chatEl.autocomplete = 'off';
+    chatEl.placeholder = 'Nachricht … (Enter senden, ESC abbrechen)';
+    document.body.appendChild(chatEl);
+    chatEl.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { chatSend(chatEl.value); chatClose(); }
+      else if (e.key === 'Escape') chatClose();
+    });
+    chatEl.addEventListener('blur', () => setTimeout(chatClose, 0));
+  }
+  for (const k in keys) keys[k] = false;
+  input.down = false;
+  chatEl.value = ''; chatEl.style.display = 'block';
+  setTimeout(() => chatEl.focus(), 0);
+}
+function chatClose() { if (chatEl) { chatEl.style.display = 'none'; chatEl.blur(); } }
+function chatIsOpen() { return !!chatEl && chatEl.style.display === 'block'; }
+function setName() {
+  const n = cleanText(prompt('Wie soll dein Spielername lauten?', playerName), 16);
+  if (!n) return;
+  playerName = n; store.set(NAME_KEY, n);
+  if (S && S.player) S.player.name = n;
+  if (NET.role === 'client') netSendR({ t: 'name', name: n });
 }
 function leaveGame() { netClose(); mode = 'menu'; newGame(); }
 function startSingle() { netClose(); startGame(); }
@@ -1565,7 +1730,8 @@ function netHostTick(dt) {
     t: 'S',
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned)],
-    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp]),
+    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '']),
+    ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0]),
     pr: S.projs.map(q => [PKINDS.indexOf(q.k), q.x | 0, q.y | 0, q.k === 'bomb' ? ((q.tx - q.sx) / q.T) | 0 : q.vx | 0, q.k === 'bomb' ? ((q.ty - q.sy) / q.T) | 0 : q.vy | 0, q.h | 0]),
     bd,
@@ -1578,6 +1744,17 @@ function hostHandleClient(m) {
     if (mode !== 'over' && p.dead <= 0) { p.x = clamp(+m.x || 0, 0, WORLD); p.y = clamp(+m.y || 0, 0, WORLD); }
     p.face = +m.f || 0; p.tool = TOOLIDS[m.tool] || 'sword';
     p.inp.down = !!m.d; p.lastInput = S.t;
+  } else if (m.t === 'name') {
+    const old = p.name; p.name = cleanText(m.name, 16) || p.name;
+    if (old && old !== p.name) { addChat('', old + ' heißt jetzt ' + p.name, '#aaa'); hostEv(['c', '', old + ' heißt jetzt ' + p.name, 2]); }
+  } else if (m.t === 'chat') {
+    const text = cleanText(m.text, 120);
+    if (!text) return;
+    addChat(p.name || 'Spieler 2', text, CHAT_COL[1]);
+    hostEv(['c', p.name || 'Spieler 2', text, 1]);
+    SFX.play('chat', undefined, undefined, true);
+  } else if (m.t === 'pin') {
+    addPing(clamp(+m.x || 0, 0, WORLD), clamp(+m.y || 0, 0, WORLD), 1);
   } else if (m.t === 'C' && mode !== 'over') {
     if (m.c === 'place' && BDEF[m.type]) {
       const err = placeError(m.type, m.tx | 0, m.ty | 0);
@@ -1618,6 +1795,8 @@ function clientInitMap(m) {
   mode = 'play'; modeT = 0; menuMsg = null;
   SFX.init();
   banner('Verbunden!', 'Ihr baut gemeinsam – Ressourcen werden geteilt', '#7fd8ff');
+  netSendR({ t: 'name', name: playerName });
+  addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit G.', '#8fe08f');
 }
 function clientBuildings(list) {
   const old = S.bById;
@@ -1645,6 +1824,7 @@ function clientSnapshot(m) {
     const p = S.players[a[0]];
     if (!p) continue;
     p.hp = a[5]; p.maxHp = a[6]; p.dead = a[7]; if (a[9]) p.flash = 0.15;
+    if (p !== S.player && a[11]) p.name = a[11];
     if (p === S.player) {
       if (a[10] !== p.tp) { p.tp = a[10]; p.x = a[1]; p.y = a[2]; }
     } else {
@@ -1661,6 +1841,7 @@ function clientSnapshot(m) {
     return z;
   });
   S.projs = m.pr.map(a => ({ k: PKINDS[a[0]], x: a[1], y: a[2], vx: a[3], vy: a[4], h: a[5], r: 6 }));
+  if (m.ch) S.chests = m.ch.map(a => ({ id: a[0], x: a[1], y: a[2] }));
   for (const a of m.bd) {
     const b = S.bById.get(a[0]);
     if (b) { b.hp = a[1]; b.angle = a[2]; if (a[3]) b.flash = 0.12; }
@@ -1681,6 +1862,8 @@ function clientEvent(e) {
     case 'r': setRes(e[1], e[2], e[3], !!e[4]); break;
     case 'n': banner(e[1], e[2], e[3]); break;
     case 'm': toast(e[1], e[2]); break;
+    case 'c': addChat(e[1], e[2], CHAT_COL[e[3]] || '#ddd'); SFX.play('chat', undefined, undefined, true); break;
+    case 'P': S.pings.push({ x: e[1], y: e[2], pid: e[3], t: 4 }); SFX.play('ping', undefined, undefined, true); break;
   }
 }
 function clientUpdate(dt) {
@@ -1992,6 +2175,16 @@ function drawBuildingShape(type, lvl, w, ang, t, flash) {
       ctx.fillStyle = col; rr(w * 0.6, w * 0.1, w * 0.28, w * 0.28, 4); ctx.fill();
       break;
     }
+    case 'heal': {
+      base(col);
+      const pulse = 1 + Math.sin(t * 3) * 0.06;
+      ctx.fillStyle = '#e9f7ee'; circle(c, c, w * 0.3); ctx.fill();
+      ctx.strokeStyle = 'rgba(80,220,120,0.6)'; ctx.lineWidth = 2; circle(c, c, w * 0.36 * pulse); ctx.stroke();
+      ctx.fillStyle = '#2fbf5a';
+      ctx.fillRect(c - w * 0.07, c - w * 0.2, w * 0.14, w * 0.4);
+      ctx.fillRect(c - w * 0.2, c - w * 0.07, w * 0.4, w * 0.14);
+      break;
+    }
     case 'hq': {
       base('#6b5224');
       ctx.fillStyle = col; rr(w * 0.1, w * 0.1, w * 0.8, w * 0.8, 10); ctx.fill();
@@ -2033,6 +2226,11 @@ function drawZombie(z) {
   circle(0, 0, r); ctx.fill(); ctx.stroke();
   if (z.type === 'brute') { ctx.fillStyle = fl ? '#fff' : '#3a5a2e'; circle(-r * 0.15, -r * 0.65, r * 0.4); ctx.fill(); circle(-r * 0.15, r * 0.65, r * 0.4); ctx.fill(); }
   if (z.type === 'spitter') { ctx.fillStyle = '#9dffb8'; circle(r * 0.55, 0, r * 0.35); ctx.fill(); }
+  if (z.type === 'bomber') {
+    ctx.fillStyle = '#3a2a22'; circle(-r * 0.2, 0, r * 0.55); ctx.fill();
+    ctx.strokeStyle = '#c8a070'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r * 0.2, -r * 0.5); ctx.lineTo(-r * 0.5, -r * 1.1); ctx.stroke();
+    if (Math.sin(animT * 18 + z.id) > 0) { ctx.fillStyle = '#ffe14a'; circle(-r * 0.5, -r * 1.15, 3); ctx.fill(); }
+  }
   if (z.type === 'runner') { ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.3); ctx.lineTo(-r * 0.2, 0); ctx.lineTo(-r * 0.6, r * 0.3); ctx.stroke(); }
   ctx.fillStyle = z.type === 'boss' ? '#ffde3a' : '#ff3a3a';
   circle(r * 0.45, -r * 0.3, Math.max(1.8, r * 0.13)); ctx.fill();
@@ -2178,10 +2376,35 @@ function render(dt) {
     if (z.x < cx - 60 || z.y < cy - 60 || z.x > cx + VW + 60 || z.y > cy + VH + 60) continue;
     drawZombie(z);
   }
+  // Schatztruhen
+  for (const c of S.chests) {
+    const bob = Math.sin(t * 3 + c.id) * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(c.x + 2, c.y + 12, 15, 5, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#7a4a1e'; rr(c.x - 14, c.y - 8 + bob, 28, 18, 3); ctx.fill();
+    ctx.fillStyle = '#9a6028'; rr(c.x - 14, c.y - 14 + bob, 28, 9, 4); ctx.fill();
+    ctx.fillStyle = '#e6b83a'; ctx.fillRect(c.x - 14, c.y - 6 + bob, 28, 3); ctx.fillRect(c.x - 2.5, c.y - 9 + bob, 5, 8);
+    if (Math.sin(animT * 5 + c.id) > 0.6) { ctx.fillStyle = '#fff6c0'; circle(c.x + 9, c.y - 15 + bob, 2.2); ctx.fill(); }
+  }
   for (const q of S.players) drawPlayer(q);
   if (S.players.length > 1) {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 11px ' + FONT;
-    for (const q of S.players) if (q.dead <= 0) { ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText('P' + (q.id + 1), q.x + 1, q.y - 35); ctx.fillStyle = q === S.player ? '#cfe8ff' : '#ffb0a8'; ctx.fillText('P' + (q.id + 1), q.x, q.y - 36); }
+    for (const q of S.players) if (q.dead <= 0) {
+      const nm = q.name || ('P' + (q.id + 1));
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(nm, q.x + 1, q.y - 35);
+      ctx.fillStyle = q === S.player ? '#cfe8ff' : '#ffb0a8'; ctx.fillText(nm, q.x, q.y - 36);
+    }
+  }
+  // Markierungen (G)
+  for (const pg of S.pings) {
+    const k = (4 - pg.t) % 1, col = pg.pid === 0 ? '#7fd8ff' : '#ff8a80';
+    ctx.globalAlpha = clamp(pg.t, 0, 1);
+    ctx.strokeStyle = col; ctx.lineWidth = 3;
+    circle(pg.x, pg.y, 10 + k * 40); ctx.globalAlpha *= 1 - k; ctx.stroke();
+    ctx.globalAlpha = clamp(pg.t, 0, 1);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(pg.x, pg.y); ctx.lineTo(pg.x - 9, pg.y - 22); ctx.lineTo(pg.x + 9, pg.y - 22); ctx.closePath(); ctx.fill();
+    circle(pg.x, pg.y - 26, 9); ctx.fill();
+    ctx.fillStyle = '#fff'; circle(pg.x, pg.y - 26, 3.5); ctx.fill();
+    ctx.globalAlpha = 1;
   }
   // Projektile
   for (const pr of S.projs) {
@@ -2309,7 +2532,10 @@ function drawLighting(cx, cy) {
     if (b.type === 'hq') light(c.x, c.y, 330 * flick, 1);
     else if (TOWERS[b.type]) light(c.x, c.y, 170 * flick, 0.9);
     else if (b.type === 'mine' || b.type === 'harv') light(c.x, c.y, 110, 0.7);
+    else if (b.type === 'heal') light(c.x, c.y, 150 * flick, 0.85);
   }
+  for (const c of S.chests) light(c.x, c.y, 90, 0.8);
+  for (const pg of S.pings) light(pg.x, pg.y, 120, 0.7);
   for (const f of S.flashes) light(f.x, f.y, f.r, clamp(f.life / f.max, 0, 1));
   for (const pr of S.projs) if (pr.k === 'bomb' || pr.k === 'glob') light(pr.x, pr.y - (pr.h || 0), 50, 0.6);
   lctx.globalAlpha = 1;
@@ -2399,7 +2625,7 @@ function drawHUD() {
   // Werkzeug- & Bauleiste
   const slots = [];
   ['pick', 'sword', 'bow'].forEach(k => slots.push({ kind: 'tool', id: k }));
-  BORDER.forEach((k, i) => { if (k !== 'hq' || !S.hq) slots.push({ kind: 'build', id: k, key: i + 1 }); });
+  BAR_ORDER.forEach(([k, key]) => { if (k !== 'hq' || !S.hq) slots.push({ kind: 'build', id: k, key }); });
   const mmS = mmSize(), gap = 5;
   const areaR = VW - mmS - 28, areaL = VW > 1100 ? mmS + 28 : 12;
   const SW = Math.floor(clamp((areaR - areaL - 14) / slots.length - gap, 30, 50));
@@ -2491,9 +2717,21 @@ function drawHUD() {
     if (b.sub) text(b.sub, VW / 2, VH * 0.3 + 40, 18, '#e8e8e8', 'center', '600');
     ctx.globalAlpha = 1;
   }
+  // Markierungen außerhalb des Bildes: Pfeil am Rand
+  for (const pg of S.pings) {
+    const sx = pg.x - camX, sy = pg.y - camY;
+    if (sx > 0 && sy > 0 && sx < VW && sy < VH) continue;
+    const a = Math.atan2(sy - VH / 2, sx - VW / 2);
+    const ex = clamp(VW / 2 + Math.cos(a) * VW, 50, VW - 50), ey = clamp(VH / 2 + Math.sin(a) * VH, 100, VH - 120);
+    ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
+    ctx.globalAlpha = 0.6 + 0.4 * Math.sin(animT * 8);
+    ctx.fillStyle = pg.pid === 0 ? '#7fd8ff' : '#ff8a80'; ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-8, -11); ctx.lineTo(-8, 11); ctx.closePath(); ctx.fill();
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  drawChat();
   // Steuerungshinweis
-  if (VW > 1100 && VH > 600) {
-    const lines = ['WASD laufen · Maus zielen · Linksklick angreifen', 'Q/E/R Werkzeug · 1–9 Bauen · Rechtsklick abbrechen', 'Klick auf Gebäude: U Upgrade · X Verkaufen · ESC Pause · M Ton'];
+  if (VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
+    const lines = ['WASD laufen · Maus zielen · Linksklick angreifen', 'Q/E/R Werkzeug · 1–0 Bauen · G Markierung · T Chat', 'Klick auf Gebäude: U Upgrade · X Verkaufen · ESC Pause · M Ton'];
     lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
   }
   // Niedrige HP Vignette
@@ -2503,6 +2741,32 @@ function drawHUD() {
     g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, 'rgba(200,0,0,' + a + ')');
     ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
   }
+}
+function drawChat() {
+  const open = chatIsOpen(), now = performance.now();
+  const list = chatLog.filter(c => open || now - c.t < 12000).slice(open ? -10 : -6);
+  if (!list.length && !open) return;
+  const x = 14, w = Math.min(420, VW - 28), lh = 19, bottom = VH - (open ? 178 : 140);
+  ctx.font = '600 13px ' + FONT;
+  const rows = [];
+  for (const c of list) {
+    const head = c.name ? c.name + ': ' : '';
+    rows.push(...wrapLines(head + c.text, w - 20, '600 13px ' + FONT).map((l, i) => ({ l, c, first: i === 0, head })));
+  }
+  const shown = rows.slice(-12);
+  const h = shown.length * lh + 12;
+  if (open || shown.length) { ctx.globalAlpha = open ? 1 : 0.85; panel(x - 4, bottom - h, w, h, open ? 0.75 : 0.45); }
+  shown.forEach((r, i) => {
+    const age = now - r.c.t;
+    ctx.globalAlpha = open ? 1 : clamp((12000 - age) / 1500, 0, 1);
+    const y = bottom - h + 6 + i * lh + lh / 2;
+    if (r.first && r.head) {
+      text(r.head, x + 4, y, 13, r.c.color, 'left', 'bold');
+      ctx.font = 'bold 13px ' + FONT;
+      text(r.l.slice(r.head.length), x + 4 + ctx.measureText(r.head).width, y, 13, '#eee', 'left', '600');
+    } else text(r.l, x + 4, y, 13, r.c.name ? '#eee' : r.c.color, 'left', '600');
+  });
+  ctx.globalAlpha = 1;
 }
 function drawToolIcon(id, x, y, s) {
   ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI / 4); const k = s / 50; ctx.scale(k, k);
@@ -2567,6 +2831,8 @@ function drawMinimap() {
     const s = Math.max(2, b.size * TS * k);
     ctx.fillRect(x + b.tx * TS * k, y + b.ty * TS * k, s, s);
   }
+  for (const c of S.chests) { ctx.fillStyle = '#ffe14a'; ctx.fillRect(x + c.x * k - 3, y + c.y * k - 3, 6, 6); }
+  for (const pg of S.pings) if (Math.sin(animT * 10) > 0) { ctx.strokeStyle = pg.pid === 0 ? '#7fd8ff' : '#ff8a80'; ctx.lineWidth = 2; circle(x + pg.x * k, y + pg.y * k, 6); ctx.stroke(); }
   for (const z of S.zombies) {
     ctx.fillStyle = z.type === 'boss' ? '#e07bff' : '#ff4a4a';
     const s = z.type === 'boss' ? 5 : 2.5;
@@ -2586,6 +2852,7 @@ function towerStats(type, L) {
   }
   if (type === 'hq' || type === 'mine') return '+' + d.gold[L] + ' Gold/s';
   if (type === 'harv') return 'Ernte ' + d.rate[L] + '/s pro Baum/Fels · Radius ' + d.radius[L];
+  if (type === 'heal') return 'Heilt ' + d.heal[L] + ' HP/s · Radius ' + d.radius[L];
   return 'Max. HP ' + d.hp[L];
 }
 function drawBuildMenu(b) {
@@ -2641,11 +2908,11 @@ function drawOverlays() {
     text('Zombie-Survival mit Basisbau', cx, VH * 0.2 + 50, 20, '#ddd', 'center', '600');
     const lines = [
       'Tagsüber (90 s): Holz & Stein sammeln, Mauern und Türme bauen.',
-      'Nachts (60 s): Zombies greifen von allen Kartenrändern an.',
+      'Nachts (60 s): Zombies greifen aus allen Richtungen an.',
       'Schütze den Goldspeicher – fällt er, ist das Spiel vorbei.',
       '',
       'WASD laufen · Maus zielen · Linksklick angreifen / abbauen',
-      'Q Spitzhacke · E Schwert · R Bogen · 1–9 Gebäude · Rechtsklick abbrechen',
+      'Q Spitzhacke · E Schwert · R Bogen · 1–0 Gebäude · G Markierung · T Chat',
       'Gebäude anklicken → Upgrade (U) / Verkaufen (X) · ESC Pause · M Ton',
     ];
     lines.forEach((l, i) => text(l, cx, VH * 0.36 + i * 26, 15, i < 3 ? '#e8e8e8' : '#aab', 'center', '600'));
@@ -2659,6 +2926,7 @@ function drawOverlays() {
     button('Beitreten', cx + 58, by + 66, 110, 32, () => lobbyOpen('join'));
     text('ENTER = Einzelspieler' + (ONLINE_URL ? '' : '  ·  Online-Modus: Online-Version des Spiels öffnen'), cx, by + 122, 13, '#888', 'center', '600');
     if (menuMsg) text(menuMsg, cx, by - 24, 15, '#ff9a8a', 'center');
+    button('Name: ' + playerName + '  ✎', cx - 120, Math.max(VH * 0.2 + 70, by - 82), 240, 34, setName);
   } else if (mode === 'paused') {
     text(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 56, '#fff', 'center');
     text('Nacht ' + S.night + ' · ' + S.kills + ' Kills · ' + S.buildings.length + ' Gebäude', cx, VH * 0.3 + 48, 17, '#ccc', 'center', '600');
@@ -2722,6 +2990,7 @@ if (!HEADLESS) {
   window.addEventListener('keydown', e => {
     SFX.init();
     if (lobbyOpenNow()) { if (e.code === 'Escape') { netClose(); lobbyHide(); } return; }
+    if (chatIsOpen()) return;
     if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
     if (e.repeat) return;
@@ -2735,8 +3004,10 @@ if (!HEADLESS) {
       return;
     }
     if (e.code === 'KeyP') { mode = 'paused'; return; }
-    const dm = /^(Digit|Numpad)([1-9])$/.exec(e.code);
-    if (dm) { selectBuild(BORDER[+dm[2] - 1]); return; }
+    const dm = /^(Digit|Numpad)([0-9])$/.exec(e.code);
+    if (dm) { selectBuild(KEY_BUILD[dm[2]]); return; }
+    if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOpen(); return; }
+    if (e.code === 'KeyG') { const a = aimPoint(); pingAt(a.x, a.y); return; }
     if (e.code === 'KeyQ') selectTool('pick');
     else if (e.code === 'KeyE') selectTool('sword');
     else if (e.code === 'KeyR') selectTool('bow');
