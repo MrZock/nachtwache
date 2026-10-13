@@ -5324,7 +5324,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { SET, spawnZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { SET, lanConnect, spawnZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
