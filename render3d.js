@@ -21,7 +21,7 @@
 
   const R3 = window.NW3D = {
     ready: false, init, render, overlay, pick, zoomLevel: 1, yaw: 0, yawT: 0, fp: false, pitch: -0.12,
-    look(dx, dy) { R3.yaw -= dx * 0.0024; R3.yawT = R3.yaw; R3.pitch = Math.max(-1.25, Math.min(0.7, R3.pitch - dy * 0.0024)); },
+    look(dx, dy) { const k = 0.0024 * (R3.lookSens || 1); R3.yaw -= dx * k; R3.yawT = R3.yaw; R3.pitch = Math.max(-1.25, Math.min(0.7, R3.pitch - dy * k)); },
     rotate(d, instant, reset) { if (reset) { R3.yawT = Math.round(R3.yaw / TAU) * TAU; return; } R3.yawT += d; if (instant) R3.yaw = R3.yawT; },
     zoom(dy) { R3.zoomLevel = Math.min(1.8, Math.max(0.6, R3.zoomLevel * (dy > 0 ? 1.1 : 1 / 1.1))); },
   };
@@ -1079,14 +1079,21 @@
     m4.compose(v3.set(x, y, z), camera.quaternion, s3.set(s, s, s));
     glows.setMatrixAt(gN, m4); glows.setColorAt(gN, col2.set(c).multiplyScalar(a)); gN++;
   }
+  let quality = 2;
+  R3.setQuality = q => { quality = Math.max(0, Math.min(2, q | 0)); };
   function render(dt) {
     const S = G.S;
     iconBudget = 4;   // höchstens ein paar neue Icons pro Bild erzeugen
     if (!S) return;
     frameNo++;
     const TS = G.TS, MAP = G.MAP, at = G.animT;
-    const w = window.innerWidth, h = window.innerHeight, key = w + 'x' + h;
-    if (key !== lastSize) { lastSize = key; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    const w = window.innerWidth, h = window.innerHeight, key = w + 'x' + h + 'q' + quality;
+    if (key !== lastSize) {
+      lastSize = key;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, [0.75, 1, 1.5][quality]));
+      sun.castShadow = quality > 0;
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
     if (S !== lastS) {
       lastS = S; buildGround(S); walkPh.clear();
       for (const o of buildingObjs.values()) disposeGroup(o); buildingObjs.clear();
@@ -1101,7 +1108,7 @@
     const sy = Math.sin(R3.yaw), cyw = Math.cos(R3.yaw);
     const height = G.clamp(G.VW / TS * 0.72, 13, 24) * R3.zoomLevel;
     let shx = 0, shz = 0;
-    if (S.shake > 0.2 && G.mode === 'play') { shx = (Math.random() - 0.5) * S.shake * 0.03; shz = (Math.random() - 0.5) * S.shake * 0.03; }
+    if (S.shake > 0.2 && G.mode === 'play' && R3.shakeOn !== false) { shx = (Math.random() - 0.5) * S.shake * 0.03; shz = (Math.random() - 0.5) * S.shake * 0.03; }
     const fpOn = R3.fp && G.mode !== 'menu' && S.player && S.player.dead <= 0;
     if (fpOn !== lastFp) {
       lastFp = fpOn;
@@ -1664,7 +1671,7 @@
       const p = project(q.x, q.y, 1.6);
       if (!p.ok) continue;
       if (q.hp < q.maxHp) G.hpBar(p.x, p.y, 34, q.hp / q.maxHp, q === S.player ? '#4fc3f7' : '#ff8a80');
-      if (S.players.length > 1 || q.afk) {
+      if ((S.players.length > 1 || q.afk) && !(G.SET && G.SET.names === 0)) {
         const tag = q.clan ? '[' + q.clan + '] ' : '';
         G.text(tag + (q.name || ('P' + (q.id + 1))) + (q.afk ? ' 💤 AFK' : ''), p.x, p.y - 12, 12, q === S.player ? '#cfe8ff' : '#ffb0a8', 'center', 'bold');
       }

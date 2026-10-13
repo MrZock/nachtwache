@@ -109,7 +109,7 @@ const dmgScale = N => 1 + 0.07 * (N - 1);
 // =====================================================================
 let camX = 0, camY = 0, VW = 1280, VH = 720, DPR = 1;
 const SFX = (() => {
-  let ac = null, out = null, nb = null, muted = false, vf = 1;
+  let ac = null, out = null, nb = null, muted = false, vf = 1, level = 0.55;
   const last = {};
   function init() {
     if (HEADLESS) return;
@@ -119,7 +119,7 @@ const SFX = (() => {
     ac = new AC();
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -16; comp.ratio.value = 5;
-    out = ac.createGain(); out.gain.value = muted ? 0 : 0.55;
+    out = ac.createGain(); out.gain.value = muted ? 0 : level;
     out.connect(comp); comp.connect(ac.destination);
     nb = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
     const d = nb.getChannelData(0);
@@ -204,7 +204,8 @@ const SFX = (() => {
   }
   return {
     init, play,
-    toggle() { muted = !muted; if (out) out.gain.value = muted ? 0 : 0.55; return muted; },
+    toggle() { muted = !muted; if (out) out.gain.value = muted ? 0 : level; return muted; },
+    setLevel(v) { level = v; if (out) out.gain.value = muted ? 0 : level; },
     get muted() { return muted; }
   };
 })();
@@ -274,6 +275,52 @@ function skinStr(o) { return SKIN_OPTS.map(d => o[d.id] | 0).join('.'); }
 let mySkin = skinParse(store.get(SKIN_KEY, ''));
 if (!store.get(SKIN_KEY, '')) { mySkin.c = randi(0, 5); mySkin.hc = randi(0, 3); mySkin.h = randi(0, 2); }
 let skinOpen = false;
+// ---------- Einstellungen (werden im Browser gespeichert)
+const SET_KEY = 'nachtwache.settings';
+const SET_OPTS = [
+  { id: 'vol', name: 'Lautstärke', list: ['Aus', 'Leise', 'Mittel', 'Laut', 'Max'], val: [0, 0.2, 0.4, 0.55, 0.85] },
+  { id: 'q', name: 'Grafik', list: ['Niedrig', 'Mittel', 'Hoch'], hint: 'Niedrig = schneller auf schwachen Handys (ohne Schatten)' },
+  { id: 'shake', name: 'Bildschirm-Wackeln', list: ['Aus', 'An'] },
+  { id: 'sens', name: 'Umsehen (Ego-Perspektive)', list: ['Sehr langsam', 'Langsam', 'Normal', 'Schnell', 'Sehr schnell'], val: [0.45, 0.7, 1, 1.4, 2] },
+  { id: 'fps', name: 'FPS anzeigen', list: ['Aus', 'An'] },
+  { id: 'names', name: 'Namen über Spielern', list: ['Aus', 'An'] },
+  { id: 'ui', name: 'Größe der Knöpfe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.85, 1, 1.18] },
+  { id: 'joy', name: 'Joystick-Größe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.8, 1, 1.25] },
+];
+const SET = Object.assign({ vol: 3, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
+let settingsOpen = false, fpsAvg = 60;
+const setVal = id => { const d = SET_OPTS.find(o => o.id === id); return d.val ? d.val[SET[id]] : SET[id]; };
+function settingsApply() {
+  SFX.setLevel(setVal('vol'));
+  if (typeof R3 !== 'undefined' && R3) { if (R3.setQuality) R3.setQuality(SET.q); R3.lookSens = setVal('sens'); R3.shakeOn = !!SET.shake; }
+  if (typeof calcUiScale === 'function') calcUiScale();
+}
+function settingSet(id, v) { SET[id] = v; store.set(SET_KEY, SET); settingsApply(); }
+function drawSettings() {
+  const w = Math.min(760, VW - 20), rowH = 50, h = Math.min(VH - 20, 80 + SET_OPTS.length * rowH + 56), x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.97);
+  ui.push({ x, y, w, h, fn: () => {} });
+  titleText('⚙ EINSTELLUNGEN', x + 24, y + 30, 22, '#ff8a3a', 'left');
+  text('×', x + w - 22, y + 28, 22, '#aaa', 'center');
+  ui.push({ x: x + w - 40, y: y + 8, w: 34, h: 34, fn: () => { settingsOpen = false; } });
+  const lw = Math.min(250, w * 0.36), ox = x + 20 + lw, ow = w - lw - 40;
+  SET_OPTS.forEach((d, i) => {
+    const ry = y + 62 + i * rowH, cur = SET[d.id];
+    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)'; rr(x + 12, ry - 4, w - 24, rowH - 6, 6); ctx.fill();
+    text(d.name, x + 22, ry + 13, 14, '#e8dcd0', 'left', '600');
+    if (d.hint && w > 600) text(d.hint, x + 22, ry + 31, 10, '#888', 'left', '600');
+    const n = d.list.length, bw = Math.min(118, (ow - (n - 1) * 5) / n);
+    d.list.forEach((l, k) => {
+      const sx = ox + k * (bw + 5), sy = ry + 2, on = k === cur;
+      ctx.fillStyle = on ? '#8a4a1e' : 'rgba(255,255,255,0.07)'; rr(sx, sy, bw, 30, 5); ctx.fill();
+      ctx.strokeStyle = on ? '#ffb070' : 'rgba(170,100,60,0.4)'; ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+      text(l, sx + bw / 2, sy + 15, bw < 80 ? 11 : 13, on ? '#fff' : '#ccc', 'center', '600');
+      ui.push({ x: sx, y: sy - 4, w: bw, h: 38, fn: () => { settingSet(d.id, k); SFX.play('click'); } });
+    });
+  });
+  button('✔ FERTIG', x + w - 190, y + h - 50, 170, 38, () => { settingsOpen = false; }, true, true);
+  button('↺ STANDARD', x + 20, y + h - 50, 170, 38, () => { for (const k of ['vol', 'q', 'shake', 'sens', 'fps', 'names', 'ui', 'joy']) SET[k] = { vol: 3, q: isTouch ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }[k]; store.set(SET_KEY, SET); settingsApply(); }, false, true);
+}
 function skinSet(id, v) { mySkin[id] = v; store.set(SKIN_KEY, skinStr(mySkin)); if (S && S.player) S.player.skin = skinStr(mySkin); }
 
 // ---------- Level & Skills
@@ -2259,7 +2306,7 @@ function startGame() {
   newGame({});
   mode = 'play'; modeT = 0;
   SFX.init();
-  banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Jeder baut seine eigene Basis – Clans (/clan) teilen sich eine' : 'Linksklick auf eine freie Fläche', '#ffd36b');
+  banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Jeder baut seine eigene Basis – Clans (/clan) teilen sich eine' : (isTouch ? 'Tippe auf eine freie Fläche' : 'Linksklick auf eine freie Fläche'), '#ffd36b');
   if (NET.role === 'host') {
     const gids = [...NET.peers.keys()];
     NET.peers.clear();
@@ -3221,7 +3268,7 @@ const touch = { joyId: null, jx: 0, jy: 0, kx: 0, ky: 0, atkId: null, placeId: n
 let JOY_R = 58;
 // Feste Plätze der beiden Joysticks (Bildschirm-Pixel)
 function joyHomes() {
-  JOY_R = Math.max(48, 66 * uiS);
+  JOY_R = Math.max(40, 66 * uiS * setVal('joy'));
   // immer in echten Bildschirm-Pixeln rechnen (VW/VH sind beim HUD-Zeichnen skaliert)
   const W = typeof innerWidth !== 'undefined' ? innerWidth : VW, H = typeof innerHeight !== 'undefined' ? innerHeight : VH;
   const y = H - 205 * uiS;
@@ -3248,7 +3295,7 @@ function stickAim(p) {
   const a = touch.lastAng !== null ? touch.lastAng : p.face;
   return { x: p.x + Math.cos(a) * 220, y: p.y + Math.sin(a) * 220, down: true };
 }
-function calcUiScale() { uiS = isTouch ? clamp(Math.min(VW / 1050, VH / 620), 0.6, 1) : 1; }
+function calcUiScale() { uiS = isTouch ? clamp(Math.min(VW / 1050, VH / 620) * setVal('ui'), 0.5, 1.15) : 1; }
 let ui = [];
 let hoverSlot = null;
 
@@ -3981,6 +4028,7 @@ function drawUI() {
   try {
     drawHUD();
     drawOverlays();
+    if (SET.fps) text(Math.round(fpsAvg) + ' FPS', VW - 8, VH - 8, 11, fpsAvg > 45 ? '#8fe08f' : fpsAvg > 25 ? '#ffcf7a' : '#ff7b6b', 'right', '700');
     if (isTouch && rh > rw * 1.05) {
       ctx.fillStyle = 'rgba(5,8,12,0.88)'; ctx.fillRect(0, 0, VW, VH);
       text('📱 ↻', VW / 2, VH * 0.4, 60, '#ffd36b', 'center');
@@ -4010,39 +4058,68 @@ function drawTouchUI() {
     if (!active) text(label, bx, by + R + 14, 12, '#fff', 'center', '600');
     ctx.globalAlpha = 1;
   };
-  if (touch.joyId !== null) stick(touch.jx / uiS, touch.jy / uiS, touch.kx / uiS, touch.ky / uiS, true, '', '➤', '#ffe27a');
+  const modal = skillsOpen || forgeOpen || craftOpen || mapOpen || listOpen || touch.more;
+  if (modal) {}
+  else if (touch.joyId !== null) stick(touch.jx / uiS, touch.jy / uiS, touch.kx / uiS, touch.ky / uiS, true, '', '➤', '#ffe27a');
   else stick(H.lx / uiS, H.ly / uiS, H.lx / uiS, H.ly / uiS, false, 'Laufen', '➤', '#ffe27a');
   const atkCol = S.place ? '#7fd8ff' : '#ff8a6a';
-  if (touch.aimId !== null) stick(touch.ax / uiS, touch.ay / uiS, touch.akx / uiS, touch.aky / uiS, true, '', '⚔', atkCol);
+  if (modal) {}
+  else if (touch.aimId !== null) stick(touch.ax / uiS, touch.ay / uiS, touch.akx / uiS, touch.aky / uiS, true, '', '⚔', atkCol);
   else if (!S.place) stick(H.rx / uiS, H.ry / uiS, H.rx / uiS, H.ry / uiS, false, R3 && R3.fp ? 'Umsehen (rechts tippen = angreifen)' : 'Zielen & angreifen', R3 && R3.fp ? '👁' : '⚔', atkCol);
-  // Knöpfe am rechten Rand
+  // Rechts nur die wichtigsten Knöpfe – der Rest steckt im „Mehr“-Menü
   const btns = [
-    ['⤒', 'Springen', () => jump()],
-    ['☰', 'Menü', () => { mode = 'paused'; }],
-    ['🗺', 'Karte', () => { mapOpen = !mapOpen; }],
-    ['★', 'Skills', () => { skillsOpen = !skillsOpen; forgeOpen = false; }],
-    ['⚒', 'Schmiede', () => { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; }],
-    ['🛠', 'Bauen', () => toggleCraft()],
     ['⚡', 'Fähigkeit', () => actAbility()],
-    ...(R3 ? [['👁', 'Ansicht', () => toggleView()], ['🔄', 'Drehen', () => R3.rotate(Math.PI / 2)]] : []),
-    ['⛶', 'Vollbild', () => toggleFullscreen()],
-    ...(S.players.length > 1 ? [['👥', 'Spieler', () => { listOpen = !listOpen; }]] : []),
-    ['💬', 'Chat', () => chatOpen()],
-    ['📍', 'Markieren', () => { touch.pingMode = !touch.pingMode; if (touch.pingMode) toast('Tippe auf die Stelle, die du markieren willst', '#7fd8ff'); }],
+    ['⤒', 'Springen', () => jump()],
+    ['🛠', 'Bauen', () => toggleCraft()],
+    ['☰', 'Mehr', () => { touch.more = !touch.more; }],
   ];
   if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
   if (S.sel && !S.sel.dead) btns.push(['✖', 'Schließen', () => { S.sel = null; }]);
-  const bs = 50, y0 = S.hq ? 70 : 14, maxY = VH - mmSize() - 30;
-  const perCol = Math.max(3, Math.floor((maxY - y0) / (bs + 10)));
+  const bs = 54, y0 = S.hq ? 66 : 12;
   btns.forEach((b, i) => {
-    const col = Math.floor(i / perCol), x = VW - bs - 12 - col * (bs + 10), y = y0 + (i % perCol) * (bs + 10);
-    const on = (b[1] === 'Markieren' && touch.pingMode) || (b[1] === 'Karte' && mapOpen) || (b[1] === 'Skills' && skillsOpen) || (b[1] === 'Schmiede' && forgeOpen) || (b[1] === 'Bauen' && craftOpen) || (b[1] === 'Spieler' && listOpen);
+    const x = VW - bs - 12, y = y0 + i * (bs + 10);
+    const on = (b[1] === 'Bauen' && craftOpen) || (b[1] === 'Mehr' && touch.more);
     if (b[1] === 'Fähigkeit' && S.player.abCd > 0) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.moveTo(x + bs / 2, y + bs / 2); ctx.arc(x + bs / 2, y + bs / 2, bs / 2, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(S.player.abCd / ((ABIL.find(a => a.id === S.player.ab) || { cd: 1 }).cd), 0, 1)); ctx.fill(); ctx.restore(); }
-    ctx.fillStyle = on ? 'rgba(255,226,122,0.45)' : 'rgba(12,16,22,0.7)'; circle(x + bs / 2, y + bs / 2, bs / 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
-    text(b[0], x + bs / 2, y + bs / 2 + 1, 22, '#fff', 'center');
-    if (b[1] === 'Skills' && S.player.sp > 0) { ctx.fillStyle = '#ff5b5b'; circle(x + bs - 6, y + 8, 9); ctx.fill(); text(String(S.player.sp), x + bs - 6, y + 8, 11, '#fff', 'center'); }
-    ui.push({ x, y, w: bs, h: bs, fn: b[2] });
+    ctx.fillStyle = on ? 'rgba(255,170,90,0.55)' : 'rgba(20,16,14,0.72)'; circle(x + bs / 2, y + bs / 2, bs / 2); ctx.fill();
+    ctx.strokeStyle = on ? '#ffb070' : 'rgba(255,180,120,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); if (b[1] === 'Fähigkeit' && !S.player.ab) ctx.globalAlpha = 0.4;
+    text(b[0], x + bs / 2, y + bs / 2 + 1, 24, '#fff', 'center'); ctx.restore();
+    if (b[1] === 'Mehr' && S.player.sp > 0) { ctx.fillStyle = '#ff5b5b'; circle(x + bs - 6, y + 8, 9); ctx.fill(); text(String(S.player.sp), x + bs - 6, y + 8, 11, '#fff', 'center'); }
+    ui.push({ x: x - 4, y: y - 4, w: bs + 8, h: bs + 8, fn: b[2] });
+  });
+  if (touch.more) drawTouchMore();
+}
+// „Mehr“-Menü auf dem Handy: alle übrigen Funktionen als große Kacheln
+function drawTouchMore() {
+  const close = f => () => { touch.more = false; f(); };
+  const items = [
+    ['🗺', 'Karte', close(() => { mapOpen = !mapOpen; })],
+    ['★', 'Skills' + (S.player.sp > 0 ? ' +' + S.player.sp : ''), close(() => { skillsOpen = !skillsOpen; forgeOpen = false; craftOpen = false; })],
+    ['⚒', 'Schmiede', close(() => { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; })],
+    ...(R3 ? [['👁', R3.fp ? 'Normale Ansicht' : 'Ego-Ansicht', close(() => toggleView())], ['🔄', 'Kamera drehen', close(() => R3.rotate(Math.PI / 2))]] : []),
+    ['💬', 'Chat', close(() => chatOpen())],
+    ['📍', 'Markieren', close(() => { touch.pingMode = !touch.pingMode; if (touch.pingMode) toast('Tippe auf die Stelle, die du markieren willst', '#7fd8ff'); })],
+    ...(S.players.length > 1 ? [['👥', 'Spieler', close(() => { listOpen = !listOpen; })]] : []),
+    ['⛶', document.fullscreenElement ? 'Vollbild aus' : 'Vollbild', close(() => toggleFullscreen())],
+    ['⚙', 'Einstellungen', close(() => { settingsOpen = true; mode = 'paused'; })],
+    ['⏸', 'Pause / Menü', close(() => { mode = 'paused'; })],
+  ];
+  const cols = Math.min(4, Math.max(3, Math.floor((VW - 160) / 150))), tw = 140, th = 92, gap = 10, rows = Math.ceil(items.length / cols);
+  const w = cols * tw + (cols - 1) * gap + 28, h = rows * th + (rows - 1) * gap + 58, x = VW / 2 - w / 2, y = Math.max(8, VH / 2 - h / 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, VW, VH);
+  ui.push({ x: 0, y: 0, w: VW, h: VH, fn: () => { touch.more = false; } });
+  panel(x, y, w, h, 0.96);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('Mehr', x + 16, y + 22, 16, '#ffe27a', 'left');
+  text('×', x + w - 20, y + 21, 22, '#aaa', 'center');
+  ui.push({ x: x + w - 40, y: y + 2, w: 40, h: 38, fn: () => { touch.more = false; } });
+  items.forEach((it, i) => {
+    const tx = x + 14 + (i % cols) * (tw + gap), ty = y + 44 + Math.floor(i / cols) * (th + gap);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; rr(tx, ty, tw, th, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(200,110,50,0.45)'; ctx.lineWidth = 1.5; ctx.stroke();
+    text(it[0], tx + tw / 2, ty + 34, 30, '#fff', 'center');
+    text(it[1], tx + tw / 2, ty + 72, 13, '#e8dcd0', 'center', '600');
+    ui.push({ x: tx, y: ty, w: tw, h: th, fn: it[2] });
   });
 }
 
@@ -4248,7 +4325,7 @@ function drawHUD() {
   panel(px, 10, pw, 62);
   if (!S.started) {
     text('Platziere deinen Reaktor', VW / 2, 32, 18, '#ffd36b', 'center');
-    text('Taste 9 · Linksklick zum Bauen', VW / 2, 55, 13, '#aaa', 'center', '600');
+    text(isTouch ? 'Tippe auf eine freie Fläche' : 'Taste 9 · Linksklick zum Bauen', VW / 2, 55, 13, '#aaa', 'center', '600');
   } else if (S.phase === 'day') {
     text('☀ TAG ' + S.night, VW / 2, 30, 20, '#ffe27a', 'center');
     const urgent = S.phaseT < 15;
@@ -4370,7 +4447,7 @@ function drawHUD() {
       drawBuildingShape(s.id, 1, sz * TS, -Math.PI / 4, animT, false);
     }
     ctx.restore();
-    { const kl = s.kind === 'craft' ? 'I' : s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key);
+    if (!isTouch) { const kl = s.kind === 'craft' ? 'I' : s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key);
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(x + 2, y + 2, 13, 13, 3); ctx.fill();
       ctx.font = '10px ' + FONT_P; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = sel ? '#ffb070' : '#e8dcd0'; ctx.fillText(kl, x + 8.5, y + 9); }
     if (s.kind === 'tool' && p.tl[s.id] > 1) text(String(p.tl[s.id]), x + SW - 5, y + SW - 8, 11, TMET[p.tl[s.id] - 1], 'right');
@@ -4610,15 +4687,17 @@ function toggleCraft() {
 function drawCraft() {
   const p = S.player, w = Math.min(940, VW - 24), side = w >= 700;
   const invW = side ? 230 : w - 28, gx0 = side ? 14 + invW + 14 : 14;
-  const gw = w - gx0 - 14, cols = Math.max(2, Math.floor(gw / 150)), cw = Math.floor((gw - (cols - 1) * 8) / cols), ch = 118;
+  const gw = w - gx0 - 14, cols = Math.max(2, Math.floor(gw / 150)), cw = Math.floor((gw - (cols - 1) * 8) / cols);
   const cats = S.hq ? CRAFT_CATS : [['⚛ Zuerst den Reaktor bauen', ['hq']]];
+  let nRows = 0; for (const [, ids] of cats) nRows += Math.ceil(ids.length / cols);
+  const ch = Math.floor(clamp((VH - 24 - 64 - (side ? 0 : 76) - 40 - cats.length * 26) / Math.max(1, nRows) - 8, 74, 118)), cs = ch / 118;
   let rowsH = 0; for (const [, ids] of cats) rowsH += 26 + Math.ceil(ids.length / cols) * (ch + 8);
   const invH = side ? 0 : 76;
   const h = Math.min(VH - 24, Math.max(side ? 470 : 0, 64 + invH + rowsH + 40)), x = VW / 2 - w / 2, y = Math.max(12, VH / 2 - h / 2 - 30);
   panel(x, y, w, h, 0.96);
   ui.push({ x, y, w, h, fn: () => {} });
   text('🛠 Inventar & Bauen', x + 18, y + 24, 20, '#ffe27a');
-  if (w > 620) text('Gebäude anklicken → platzieren · I / ESC = schließen', x + w - 50, y + 24, 12, '#999', 'right', '600');
+  if (w > 620 && !isTouch) text('Gebäude anklicken → platzieren · I / ESC = schließen', x + w - 50, y + 24, 12, '#999', 'right', '600');
   text('×', x + w - 20, y + 23, 20, '#aaa', 'center');
   ui.push({ x: x + w - 34, y: y + 6, w: 30, h: 30, fn: () => { craftOpen = false; } });
   // --- Inventar
@@ -4664,22 +4743,22 @@ function drawCraft() {
       ctx.fillStyle = gr; rr(cx, yy, cw, ch, 8); ctx.fill();
       ctx.strokeStyle = sel ? '#ff9a3a' : hov ? '#c88a4a' : 'rgba(170,100,60,0.4)'; ctx.lineWidth = sel || hov ? 2 : 1; ctx.stroke();
       ctx.save(); if (!ok) ctx.globalAlpha = 0.4;
-      const im = R3 && R3.icon ? R3.icon('b', id, 1) : null, isz = 62, bob = hov ? Math.sin(animT * 4) * 2 : 0;
+      const im = R3 && R3.icon ? R3.icon('b', id, 1) : null, isz = 62 * cs, bob = hov ? Math.sin(animT * 4) * 2 : 0;
       if (im) ctx.drawImage(im, cx + cw / 2 - isz / 2, yy + 4 + bob, isz, isz);
       ctx.restore();
       const kk = buildKey(id);
-      if (kk) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(cx + 5, yy + 5, 16, 16, 3); ctx.fill(); text(kk, cx + 13, yy + 13, 10, '#e8dcd0', 'center', '700'); }
+      if (kk && !isTouch) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(cx + 5, yy + 5, 16, 16, 3); ctx.fill(); text(kk, cx + 13, yy + 13, 10, '#e8dcd0', 'center', '700'); }
       if (id !== 'hq') text(cnt + '/' + d.max, cx + cw - 6, yy + 13, 10, full ? '#ff7b6b' : '#aaa', 'right', '600');
-      text(d.name, cx + cw / 2, yy + 76, 13, ok ? '#fff' : '#bbb', 'center');
+      text(d.name, cx + cw / 2, yy + 76 * cs, 13, ok ? '#fff' : '#bbb', 'center');
       // Kosten: rot = davon hast du zu wenig
       const parts = [['w', c.w, S.wood], ['s', c.s, S.stone], ['g', c.g, S.gold], ['i', c.i || 0, S.iron || 0]].filter(e => e[1]);
       const pw = 44, px0 = cx + cw / 2 - parts.length * pw / 2;
       parts.forEach(([k, v, have], j) => {
         const qx = px0 + j * pw;
-        ctx.save(); ctx.translate(qx + 9, yy + 98); ctx.scale(0.62, 0.62); resIcon(k, 0, 0); ctx.restore();
-        text(String(v), qx + 19, yy + 98, 11, have >= v ? '#e8e0d0' : '#ff6b5b', 'left', '700');
+        ctx.save(); ctx.translate(qx + 9, yy + ch - 20); ctx.scale(0.62, 0.62); resIcon(k, 0, 0); ctx.restore();
+        text(String(v), qx + 19, yy + ch - 20, 11, have >= v ? '#e8e0d0' : '#ff6b5b', 'left', '700');
       });
-      if (!parts.length) text('kostenlos', cx + cw / 2, yy + 98, 11, '#8fe08f', 'center', '600');
+      if (!parts.length) text('kostenlos', cx + cw / 2, yy + ch - 20, 11, '#8fe08f', 'center', '600');
       if (hov) craftHover = { id, full };
       ui.push({ x: cx, y: yy, w: cw, h: ch, fn: () => { craftOpen = false; selectBuild(id); } });
     });
@@ -4920,7 +4999,8 @@ function drawOverlays() {
       y += bh + 10;
       button('NAME: ' + playerName, cx - bw * 1.5 - 10, y, bw, 34, setName, false, true);
       button('🏆 ERFOLGE ' + achDone.size + '/' + ACHIEVEMENTS.length, cx - bw / 2, y, bw, 34, () => { achOpen = true; }, false, true);
-      button('🎨 SKIN ANPASSEN', cx + bw / 2 + 10, y, bw, 34, () => { skinOpen = true; }, false, true);
+      button('🎨 SKIN', cx + bw / 2 + 10, y, bw / 2 - 3, 34, () => { skinOpen = true; }, false, true);
+      button('⚙ EINSTELL.', cx + bw + 17, y, bw / 2 - 7, 34, () => { settingsOpen = true; }, false, true);
       y += 46;
     } else {
       const bx = cx - bw / 2;
@@ -4931,7 +5011,8 @@ function drawOverlays() {
       button('DIREKT BEITRETEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => lobbyOpen('join'), false, true); y += 44;
       button('NAME: ' + playerName + '  ✎', bx, y, bw / 2 - 5, 34, setName, false, true);
       button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
-      button('🎨 SKIN ANPASSEN', bx, y, bw, 34, () => { skinOpen = true; }, false, true); y += 48;
+      button('🎨 SKIN ANPASSEN', bx, y, bw / 2 - 5, 34, () => { skinOpen = true; }, false, true);
+      button('⚙ EINSTELLUNGEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { settingsOpen = true; }, false, true); y += 48;
     }
     if (menuMsg) { text(menuMsg, cx, y, 15, '#ff9a8a', 'center'); y += 24; }
     const info = (highscore ? 'REKORD: ' + highscore.nights + ' NÄCHTE · ' + highscore.kills + ' KILLS   ·   ' : '') + '🥚 ' + eggsFound.size + '/' + EGGS.length;
@@ -4957,13 +5038,15 @@ function drawOverlays() {
     }
     if (achOpen) drawAchList();
     if (skinOpen) drawSkinEditor();
+    if (settingsOpen) drawSettings();
   } else if (mode === 'paused') {
     titleText(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 60, '#e8dcd0');
     text('Nacht ' + S.night + ' · ' + S.kills + ' Kills · ' + S.buildings.length + ' Gebäude', cx, VH * 0.3 + 48, 17, '#ccc', 'center', '600');
     if (NET.role) text('Online-Spiel – das Spiel läuft im Hintergrund weiter!', cx, VH * 0.3 + 76, 15, '#ffb07a', 'center', '600');
     button('Fortsetzen (ESC)', cx - 120, VH * 0.48, 240, 50, () => { mode = 'play'; }, true);
-    button(SFX.muted ? 'Ton an (N)' : 'Ton aus (N)', cx - 120, VH * 0.48 + 62, 240, 44, () => SFX.toggle());
+    button('⚙ Einstellungen', cx - 120, VH * 0.48 + 62, 240, 44, () => { settingsOpen = true; });
     button(NET.role ? 'Spiel verlassen' : 'Hauptmenü', cx - 120, VH * 0.48 + 116, 240, 44, leaveGame);
+    if (settingsOpen) drawSettings();
   } else if (mode === 'over') {
     const r = lastResult;
     titleText('BLACKOUT', cx, VH * 0.2, Math.min(80, VW / 9), '#ff5b2a');
@@ -5039,6 +5122,7 @@ if (!HEADLESS) {
     if (e.code === 'Escape' && skinOpen) { skinOpen = false; return; }
     if (mode === 'menu') { if (e.code === 'Enter' || e.code === 'Space') startSingle(); return; }
     if (mode === 'over') { if ((e.code === 'Enter' || e.code === 'Space') && modeT > 1 && NET.role !== 'client') startGame(); return; }
+    if (e.code === 'Escape' && settingsOpen) { settingsOpen = false; return; }
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
     if (mode !== 'play') return;
     if (e.code === 'Escape') {
@@ -5213,6 +5297,7 @@ if (!HEADLESS) {
   const frame = now => {
     const dt = Math.min(0.05, (now - lastT) / 1000 || 0);
     lastT = now; modeT += dt;
+    if (dt > 0) fpsAvg = fpsAvg * 0.94 + (1 / Math.max(0.001, (now - (frame.prev || now - 16)) / 1000)) * 0.06; frame.prev = now;
     requestAnimationFrame(frame);
     if (VW !== window.innerWidth || VH !== window.innerHeight) { if (window.innerWidth > 0 && window.innerHeight > 0) resize(); }
     try {
@@ -5227,7 +5312,8 @@ if (!HEADLESS) {
 }
 
 // Schnittstelle für automatisierte Tests
-ROOT.NW = { spawnZombie, SKIN_OPTS, skinParse,
+if (!HEADLESS) setTimeout(settingsApply, 0);
+ROOT.NW = { SET, spawnZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
