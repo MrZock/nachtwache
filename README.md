@@ -7,7 +7,7 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 ## Spielen
 
 - **Spielen:** https://mrzock.github.io/nachtwache/ (der alte Link `/3d.html` geht weiterhin)
-- **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 15 andere klicken „Online beitreten“ und geben den Code ein. 2D- und 3D-Spieler können zusammen spielen. Vorher den Spielserver (GitHub Codespace) starten.
+- **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 15 andere klicken „Online beitreten“ und geben den Code ein. Der Spielserver läuft auf Render.com (nachtwache.onrender.com) und wacht von selbst auf.
 
 **Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** · **O / F5 = Ego-Perspektive** (Linksklick fängt die Maus, oder rechte Maustaste halten zum Umsehen) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
 
@@ -60,7 +60,7 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 
 1. **GitHub Pages** (Spiel-Seite): Repository → *Settings* → *Pages* → *Deploy from a branch* → `main` / `/ (root)`.
 2. **Render** (Spielserver): Auf render.com mit GitHub anmelden → *New* → *Blueprint* → dieses Repository wählen → *Apply*. Render zeigt danach eine Adresse wie `https://nachtwache-xxxx.onrender.com`.
-3. Diese Adresse in `index.html` bei `const RELAY_URL = '';` eintragen (z. B. `'nachtwache-xxxx.onrender.com'`) und hochladen.
+3. Diese Adresse in `game.js` bei `const RELAY_URL` eintragen (aktuell `'nachtwache.onrender.com'`) und hochladen.
 
 Hinweis: Der kostenlose Render-Server schläft nach 15 Minuten ohne Spieler ein. Beim nächsten Verbinden dauert das Aufwachen bis zu einer Minute – das Spiel versucht es automatisch weiter.
 

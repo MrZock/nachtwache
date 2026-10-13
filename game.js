@@ -2269,7 +2269,7 @@ function netSendU(o) {
 
 // ---------- Online-Modus über den Spielserver (server.js – lokal oder z. B. auf Render.com)
 // Adresse des Internet-Servers, wenn das Spiel z. B. auf GitHub Pages liegt:
-const RELAY_URL = 'upgraded-broccoli-wpx74r756p625pp-8080.app.github.dev';  // Spielserver im GitHub Codespace
+const RELAY_URL = 'nachtwache.onrender.com';  // Spielserver auf Render.com (wacht von selbst auf)
 function serverWsUrl() {
   if (typeof location === 'undefined') return null;
   let q = null;
@@ -2307,7 +2307,7 @@ function lanConnect(want, room, tries) {
   const ws = NET.ws = new WebSocket(ONLINE_URL);
   // Kostenlose Server schlafen nach Inaktivität – das Aufwachen dauert bis ca. 1 Minute
   const CS = /app\.github\.dev/.test(ONLINE_URL);
-  const offMsg = CS ? 'Der Spielserver (GitHub Codespace) ist gerade aus. Der Host startet ihn auf github.com/codespaces → „urban train“ öffnen – danach klappt es nach ca. 1–2 Minuten. Ich versuche es weiter …'
+  const offMsg = CS ? 'Der Spielserver (GitHub Codespace) ist gerade aus. Der Host startet ihn auf github.com/codespaces („upgraded broccoli“ öffnen) – danach klappt es nach ca. 1–2 Minuten. Ich versuche es weiter …'
                     : 'Server wird gestartet … das kann beim ersten Mal bis zu einer Minute dauern.';
   const slow = setTimeout(() => { if (!opened && NET.ws === ws) lobbyStatus(offMsg, CS); }, 3500);
   ws.onopen = () => { opened = true; clearTimeout(slow); ws.send(JSON.stringify({ t: '_hello', want, room: room || '' })); };
@@ -2338,7 +2338,7 @@ function lanConnect(want, room, tries) {
       setTimeout(() => { if (lobbyOpenNow() && !NET.ws) lanConnect(want, room, tries + 1); }, 3000);
       return;
     }
-    netClose(opened ? 'Verbindung zum Server verloren.' : (CS ? 'Spielserver ist aus – auf github.com/codespaces „urban train“ starten.' : 'Server nicht erreichbar.'));
+    netClose(opened ? 'Verbindung zum Server verloren.' : (CS ? 'Spielserver ist aus – auf github.com/codespaces „upgraded broccoli“ starten.' : 'Server nicht erreichbar.'));
   };
 }
 // Mitspieler kommt (auch mitten im laufenden Spiel) dazu – bis zu 7 Stück
