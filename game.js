@@ -29,6 +29,8 @@ const inMap = (tx, ty) => tx >= 0 && ty >= 0 && tx < MAP && ty < MAP;
 const tileAt = (x, y) => { const tx = Math.floor(x / TS), ty = Math.floor(y / TS); return inMap(tx, ty) ? ty * MAP + tx : -1; };
 const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (d < -Math.PI) d += TAU; return d; };
 
+// Läuft das Spiel als Windows-App (Electron)?
+const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
@@ -5002,17 +5004,18 @@ function drawOverlays() {
       button('🎨 SKIN', cx + bw / 2 + 10, y, bw / 2 - 3, 34, () => { skinOpen = true; }, false, true);
       button('⚙ EINSTELL.', cx + bw + 17, y, bw / 2 - 7, 34, () => { settingsOpen = true; }, false, true);
       y += 46;
+      if (DESKTOP) { button('✖ BEENDEN', cx - bw / 2, y, bw, 34, () => window.close(), false, true); y += 44; }
     } else {
       const bx = cx - bw / 2;
       button('▶ EINZELSPIELER', bx, y, bw, bh + 6, startSingle, true); y += bh + 18;
       button('ONLINE HOSTEN', bx, y, bw, bh, () => lanConnect('host')); y += bh + 10;
       button('ONLINE BEITRETEN', bx, y, bw, bh, () => lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info')); y += bh + 16;
-      button('DIREKT HOSTEN', bx, y, bw / 2 - 5, 34, () => lobbyOpen('host'), false, true);
-      button('DIREKT BEITRETEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => lobbyOpen('join'), false, true); y += 44;
       button('NAME: ' + playerName + '  ✎', bx, y, bw / 2 - 5, 34, setName, false, true);
       button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
       button('🎨 SKIN ANPASSEN', bx, y, bw / 2 - 5, 34, () => { skinOpen = true; }, false, true);
-      button('⚙ EINSTELLUNGEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { settingsOpen = true; }, false, true); y += 48;
+      button('⚙ EINSTELLUNGEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { settingsOpen = true; }, false, true); y += 44;
+      if (DESKTOP) { button('✖ BEENDEN', bx, y, bw, 34, () => window.close(), false, true); y += 44; }
+      y += 4;
     }
     if (menuMsg) { text(menuMsg, cx, y, 15, '#ff9a8a', 'center'); y += 24; }
     const info = (highscore ? 'REKORD: ' + highscore.nights + ' NÄCHTE · ' + highscore.kills + ' KILLS   ·   ' : '') + '🥚 ' + eggsFound.size + '/' + EGGS.length;

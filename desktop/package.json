@@ -1,0 +1,50 @@
+{
+  "name": "blackout",
+  "productName": "BLACKOUT",
+  "version": "3.0.0",
+  "description": "BLACKOUT – 3D Survival Game (Windows-Version)",
+  "author": "MrZock",
+  "license": "MIT",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "copy": "node scripts/copy-game.js",
+    "start": "npm run copy && electron .",
+    "build": "npm run copy && node scripts/make-icon.js && electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.github.mrzock.blackout",
+    "productName": "BLACKOUT",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BLACKOUT",
+      "artifactName": "BLACKOUT-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "BLACKOUT-${version}-portable.${ext}"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

@@ -43,6 +43,27 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 
 **Chat-Befehle:** `/hilfe` zeigt alles · `/afk` · `/full` (Vollbild) · Clan-Befehle siehe oben.
 
+## Windows-Version
+
+Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Spieldateien wie die Web-Version:
+
+- Vollbild ohne Browser-Leisten (F11 oder Alt+Enter schaltet um), eigener „Beenden“-Knopf im Menü
+- Online-Modus läuft über denselben Server wie die Web-Version – Web- und Windows-Spieler können zusammen spielen
+
+Selbst bauen (Node.js nötig):
+
+```
+cd desktop
+npm install
+npm run build
+```
+
+Danach liegen in `desktop/dist/`:
+- `BLACKOUT-Setup-3.0.0.exe` – Installer mit Desktop- und Startmenü-Verknüpfung
+- `BLACKOUT-3.0.0-portable.exe` – startet direkt ohne Installation
+
+Zum Ausprobieren ohne Bauen: `npm start` im Ordner `desktop`.
+
 ## Aufbau
 
 | Datei | Zweck |
