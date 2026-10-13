@@ -1603,6 +1603,15 @@ function useAbility(p) {
     ring(p.x, p.y, 300, 0.5, '#ff6a3a'); SFX.play('horn', p.x, p.y); shakeFor(p, 3);
   }
 }
+function toggleView() {
+  if (!R3) { toast('Die Ego-Perspektive gibt es in der 3D-Version', '#ff9a7a'); return; }
+  R3.fp = !R3.fp;
+  toast(R3.fp ? '👁 Ego-Perspektive – Maus = umsehen, O = zurück' : '🎥 Normale Ansicht', '#cfe8ff');
+  SFX.play('click');
+  if (R3.fp && !isTouch && canvas.requestPointerLock) { try { canvas.requestPointerLock(); } catch (e) {} }
+  if (!R3.fp && document.pointerLockElement) document.exitPointerLock();
+}
+const mouseLocked = () => typeof document !== 'undefined' && !!canvas && document.pointerLockElement === canvas;
 function jump(p) {
   p = p || S.player;
   if (!p || p.dead > 0 || p.z > 0.5 || mode !== 'play') return;
@@ -1864,6 +1873,11 @@ function lifeSteal(p, d) {
 }
 function aimPoint() {
   if (input.aim) return input.aim;
+  if (R3 && R3.ready && R3.fp && S && S.player) {
+    const p = S.player, w = R3.pick(VW / 2, VH / 2), y = R3.yaw || 0;
+    if (w && Math.hypot(w.x - p.x, w.y - p.y) < 12 * TS && Math.hypot(w.x - p.x, w.y - p.y) > 24) return w;
+    return { x: p.x - Math.sin(y) * 400, y: p.y - Math.cos(y) * 400 };
+  }
   if (R3 && R3.ready) { const w = R3.pick(input.sx, input.sy); if (w) return w; }
   return { x: input.sx + camX, y: input.sy + camY };
 }
@@ -1879,7 +1893,11 @@ function readLocalInput(p) {
   const yaw = R3 ? R3.yaw || 0 : 0;
   if (yaw && (mx || my)) { const c = Math.cos(yaw), s = Math.sin(yaw), rx = mx * c + my * s, ry = -mx * s + my * c; mx = rx; my = ry; }
   let a = aimPoint(), down = input.down;
-  if (mode === 'play' && touch.aimId !== null) { const s = stickAim(p); a = s; down = s.down; }
+  if (mode === 'play' && touch.aimId !== null && R3 && R3.fp) {
+    const dx = (touch.akx - touch.ax) / JOY_R, dy = (touch.aky - touch.ay) / JOY_R;
+    R3.look(dx * Math.abs(dx) * 9, dy * Math.abs(dy) * 6);
+    a = aimPoint();
+  } else if (mode === 'play' && touch.aimId !== null) { const s = stickAim(p); a = s; down = s.down; }
   else if (isTouch && touch.atkId === null && touch.placeId === null && touch.lastAng !== null && !S.place) a = { x: p.x + Math.cos(touch.lastAng) * 220, y: p.y + Math.sin(touch.lastAng) * 220 };
   p.inp.mx = mx; p.inp.my = my; p.inp.ax = a.x; p.inp.ay = a.y;
   p.inp.down = down && !S.place && mode === 'play';
@@ -2446,7 +2464,7 @@ function runCommand(p, text) {
   else if (cmd === 'hilfe' || cmd === 'help' || cmd === '?') {
     sysMsg(p, 'Befehle: /afk · /full (Vollbild) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
     sysMsg(p, 'Clans: /clan gründen <Name> · /clan einladen <Spieler> · /clan beitreten <Name> · /clan verlassen · /clan offen · /clan kick <Spieler> · /clan info');
-    sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · G Markierung · N Ton · 3D: rechte Maus ziehen bzw. , . = Kamera drehen');
+    sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · G Markierung · N Ton · 3D: rechte Maus ziehen bzw. , . = Kamera drehen · O = Ego-Perspektive');
     sysMsg(p, '🥚 Psst … in diesem Spiel sind ' + EGGS.length + ' Easter Eggs versteckt. Viel Spaß beim Suchen!', '#ffe27a');
   } else if (cmd === 'team' || cmd === 't' || cmd === 'tc') {
     if (!p.clan) { sysMsg(p, 'Du bist in keinem Clan. Gründe einen mit /clan gründen <Name>', '#ff9a7a'); return; }
@@ -3793,7 +3811,7 @@ function drawTouchUI() {
   else stick(H.lx / uiS, H.ly / uiS, H.lx / uiS, H.ly / uiS, false, 'Laufen', '➤', '#ffe27a');
   const atkCol = S.place ? '#7fd8ff' : '#ff8a6a';
   if (touch.aimId !== null) stick(touch.ax / uiS, touch.ay / uiS, touch.akx / uiS, touch.aky / uiS, true, '', '⚔', atkCol);
-  else if (!S.place) stick(H.rx / uiS, H.ry / uiS, H.rx / uiS, H.ry / uiS, false, 'Zielen & angreifen', '⚔', atkCol);
+  else if (!S.place) stick(H.rx / uiS, H.ry / uiS, H.rx / uiS, H.ry / uiS, false, R3 && R3.fp ? 'Umsehen (rechts tippen = angreifen)' : 'Zielen & angreifen', R3 && R3.fp ? '👁' : '⚔', atkCol);
   // Knöpfe am rechten Rand
   const btns = [
     ['⤒', 'Springen', () => jump()],
@@ -3802,7 +3820,7 @@ function drawTouchUI() {
     ['★', 'Skills', () => { skillsOpen = !skillsOpen; forgeOpen = false; }],
     ['⚒', 'Schmiede', () => { forgeOpen = !forgeOpen; skillsOpen = false; }],
     ['⚡', 'Fähigkeit', () => actAbility()],
-    ...(R3 ? [['🔄', 'Drehen', () => R3.rotate(Math.PI / 2)]] : []),
+    ...(R3 ? [['👁', 'Ansicht', () => toggleView()], ['🔄', 'Drehen', () => R3.rotate(Math.PI / 2)]] : []),
     ['⛶', 'Vollbild', () => toggleFullscreen()],
     ...(S.players.length > 1 ? [['👥', 'Spieler', () => { listOpen = !listOpen; }]] : []),
     ['💬', 'Chat', () => chatOpen()],
@@ -3999,6 +4017,14 @@ function goldRate() {
 function drawHUD() {
   if (mode === 'menu') return;
   const p = S.player;
+  if (R3 && R3.fp && mode === 'play') {
+    const cx = VW / 2, cy = VH / 2, c = S.place ? '#7fffa0' : p.cd > 0 ? '#ffb070' : '#ffffff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(cx - 11, cy); ctx.lineTo(cx - 4, cy); ctx.moveTo(cx + 4, cy); ctx.lineTo(cx + 11, cy); ctx.moveTo(cx, cy - 11); ctx.lineTo(cx, cy - 4); ctx.moveTo(cx, cy + 4); ctx.lineTo(cx, cy + 11); ctx.stroke();
+    ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = c; circle(cx, cy, 1.5); ctx.fill();
+    if (!isTouch && !mouseLocked()) text('Klicken, um die Maus zu fangen (Umsehen)', cx, cy + 34, 13, '#ffe27a', 'center', '600');
+  }
   // Ressourcen
   panel(12, 12, 200, 144);
   const rows = [['w', 'Holz', S.wood, '#e0b070'], ['s', 'Stein', S.stone, '#d0d0e0'], ['g', 'Gold', S.gold, '#ffd36b'], ['i', 'Eisen', S.iron || 0, '#c8d0dc']];
@@ -4594,7 +4620,7 @@ function drawOverlays() {
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
       news.forEach((l, i) => { ctx.fillStyle = i % 2 ? '#a8a098' : '#e8dcd0'; ctx.fillText((i % 2 ? '   ' : '▸ ') + l, 56, py + 54 + i * 24); });
       const ctl = isTouch ? ['LINKER STICK: LAUFEN', 'RECHTER STICK: ANGREIFEN', '⚡ SPEZIALFÄHIGKEIT', '⚒ SCHMIEDE · ★ SKILLS'] :
-        ['WASD  LAUFEN', 'MAUS  ZIELEN & ANGREIFEN', R3 ? 'RECHTE MAUS ZIEHEN  360° DREHEN' : 'MAUSRAD  WERKZEUG', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · /hilfe'];
+        ['WASD  LAUFEN', 'MAUS  ZIELEN & ANGREIFEN', R3 ? 'RECHTE MAUS ZIEHEN  360° DREHEN' : 'MAUSRAD  WERKZEUG', R3 ? 'O / F5  EGO-PERSPEKTIVE' : 'Q–B  WAFFEN', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · /hilfe'];
       const px = VW - 40 - pw;
       panel(px, py, pw, 46 + ctl.length * 24, 0.78);
       titleText('STEUERUNG', px + pw / 2, py + 24, 20, '#ff8a3a');
@@ -4678,6 +4704,7 @@ if (!HEADLESS) {
     if (chatIsOpen()) return;
     if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
+    if (mouseLocked() && ['KeyK', 'KeyH', 'KeyM', 'KeyT', 'Enter', 'Escape', 'KeyP'].includes(e.code)) document.exitPointerLock();
     if (e.repeat) return;
     if (e.code === 'KeyN') { SFX.toggle(); if (S && mode === 'play') toast(SFX.muted ? 'Ton aus' : 'Ton an'); return; }
     if (e.code === 'KeyM' && mode === 'play') { mapOpen = !mapOpen; SFX.play('click'); return; }
@@ -4700,6 +4727,7 @@ if (!HEADLESS) {
     if (e.code === 'KeyF') { selectBuild('trap'); return; }
     if (e.code === 'KeyJ') { selectBuild('frost'); return; }
     if (e.code === 'Space') { jump(); return; }
+    if (e.code === 'KeyO' || e.code === 'F5') { e.preventDefault(); toggleView(); return; }
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { actAbility(); return; }
     if (R3 && e.code === 'Comma') { R3.rotate(-Math.PI / 4); return; }
     if (R3 && e.code === 'Period') { R3.rotate(Math.PI / 4); return; }
@@ -4717,17 +4745,23 @@ if (!HEADLESS) {
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.down = false; if (mode === 'play' && !NET.role) mode = 'paused'; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   let rotDrag = null;
-  canvas.addEventListener('mousedown', e => { if (R3 && e.button === 2) { rotDrag = e.clientX; e.preventDefault(); } });
+  canvas.addEventListener('mousedown', e => { if (R3 && !R3.fp && e.button === 2) { rotDrag = e.clientX; e.preventDefault(); } });
   window.addEventListener('mouseup', e => { if (e.button === 2) rotDrag = null; });
   canvas.addEventListener('mousemove', e => {
+    if (mouseLocked()) { if (R3 && R3.fp && mode === 'play') R3.look(e.movementX, e.movementY); input.sx = VW / 2; input.sy = VH / 2; return; }
     if (rotDrag !== null && R3) { R3.rotate((e.clientX - rotDrag) * 0.008, true); rotDrag = e.clientX; }
     input.sx = e.clientX; input.sy = e.clientY;
     if (mode === 'play' && input.down && S.place && (S.place === 'wall' || S.place === 'door') && !hitUI(e.clientX, e.clientY)) tryPlaceAtAim(true);
   });
   canvas.addEventListener('mousedown', e => {
     SFX.init();
+    if (mouseLocked()) { e = { button: e.button, clientX: VW / 2, clientY: VH / 2 }; }
+    else if (R3 && R3.fp && mode === 'play' && !isTouch && e.button === 0 && !hitUI(e.clientX, e.clientY) && !skillsOpen && !forgeOpen && !mapOpen && !listOpen) {
+      try { canvas.requestPointerLock(); } catch (err) {}
+      return;
+    }
     input.sx = e.clientX; input.sy = e.clientY;
-    const u = hitUI(e.clientX, e.clientY);
+    const u = mouseLocked() ? null : hitUI(e.clientX, e.clientY);
     if (mode !== 'play') { if (u && e.button === 0) { SFX.play('click'); u.fn(); } return; }
     if (e.button === 2) {
       if (S.place && S.hq) { S.place = null; return; }
@@ -4852,7 +4886,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 ROOT.NW = {
-  jump,
+  jump, toggleView,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
   touch, joyHomes, get isTouch() { return isTouch; },

@@ -20,7 +20,8 @@
   const hash = n => { const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return s - Math.floor(s); };
 
   const R3 = window.NW3D = {
-    ready: false, init, render, overlay, pick, zoomLevel: 1, yaw: 0, yawT: 0,
+    ready: false, init, render, overlay, pick, zoomLevel: 1, yaw: 0, yawT: 0, fp: false, pitch: -0.12,
+    look(dx, dy) { R3.yaw -= dx * 0.0024; R3.yawT = R3.yaw; R3.pitch = Math.max(-1.25, Math.min(0.7, R3.pitch - dy * 0.0024)); },
     rotate(d, instant, reset) { if (reset) { R3.yawT = Math.round(R3.yaw / TAU) * TAU; return; } R3.yawT += d; if (instant) R3.yaw = R3.yawT; },
     zoom(dy) { R3.zoomLevel = Math.min(1.8, Math.max(0.6, R3.zoomLevel * (dy > 0 ? 1.1 : 1 / 1.1))); },
   };
@@ -83,6 +84,7 @@
   }
 
   // ---------------------------------------------------------------- Setup
+  let fpView = null, fpTools = null, fpMetal = null, lastFp = null;
   let peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
@@ -158,6 +160,8 @@
     const sc = sun.shadow.camera; sc.left = -26; sc.right = 26; sc.top = 26; sc.bottom = -26; sc.near = 1; sc.far = 90;
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
     scene.add(sun); scene.add(sun.target);
+    scene.add(camera);
+    fpView = new T.Group(); fpView.position.set(0.3, -0.32, -0.5); fpView.scale.setScalar(0.72); fpView.visible = false; camera.add(fpView);
     for (let i = 0; i < NL; i++) { const l = new T.PointLight(0xffb060, 0, 9, 1.3); scene.add(l); pointLights.push(l); }
 
     const outer = new T.Mesh(new T.PlaneGeometry(4000, 4000), lambert('#1d2a18'));
@@ -686,6 +690,29 @@
     return grp;
   }
 
+  // Waffe in der Hand (Ego-Perspektive)
+  function updateFpView(p, at) {
+    if (!fpTools) {
+      fpTools = {}; fpMetal = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: '#dfe6ee', emissive: '#1a1a1a' });
+      const hand = new T.Mesh(new Kit().lit(BX(0.12, 0.12, 0.2), '#f0c9a0', 0, 0, 0.05).lit(BX(0.14, 0.14, 0.3), '#3a6ea8', 0, -0.02, 0.28).build().lit, matLit);
+      fpView.add(hand);
+      for (const id of ['pick', 'sword', 'bow', 'spear', 'axe', 'staff']) {
+        const tg = new T.Group(), k = toolKit(id);
+        if (k.lit) tg.add(new T.Mesh(k.lit, matLit)); if (k.metal) tg.add(new T.Mesh(k.metal, fpMetal)); if (k.glow) tg.add(new T.Mesh(k.glow, matGlow));
+        tg.rotation.set(0, Math.PI / 2, id === 'bow' ? 0 : 0.5); tg.position.set(0, 0, 0);
+        fpView.add(tg); fpTools[id] = tg;
+      }
+      fpView.traverse(o => { o.renderOrder = 10; if (o.material) { o.material = o.material; } });
+    }
+    for (const k in fpTools) fpTools[k].visible = k === p.tool;
+    const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
+    const w = walkPh.get('p' + p.id) || { ph: 0, mv: 0 };
+    fpView.position.set(0.3 + Math.sin(w.ph) * 0.015 * w.mv, -0.32 + Math.abs(Math.cos(w.ph)) * 0.015 * w.mv, -0.5 - (p.tool === 'spear' ? swp * 0.35 : 0));
+    fpView.rotation.set(p.tool === 'spear' || p.tool === 'bow' || p.tool === 'staff' ? 0 : -swp * 1.3, p.tool === 'axe' ? swp * 1.2 : 0, p.tool === 'pick' ? swp * 0.4 : 0);
+    const lv = (p.tl && p.tl[p.tool]) || 1;
+    fpMetal.color.set(G.TMET[Math.min(4, lv - 1)]);
+  }
+
   // ---------------------------------------------------------------- Tier-Modelle
   function makeAnimal(an) {
     const D = G.ADEF[an.type], grp = new T.Group(), s = an.r / G.TS;
@@ -794,7 +821,18 @@
     const height = G.clamp(G.VW / TS * 0.72, 13, 24) * R3.zoomLevel;
     let shx = 0, shz = 0;
     if (S.shake > 0.2 && G.mode === 'play') { shx = (Math.random() - 0.5) * S.shake * 0.03; shz = (Math.random() - 0.5) * S.shake * 0.03; }
-    if (G.mode === 'menu') {
+    const fpOn = R3.fp && G.mode !== 'menu' && S.player && S.player.dead <= 0;
+    if (fpOn !== lastFp) {
+      lastFp = fpOn;
+      camera.fov = fpOn ? 72 : 42; camera.near = fpOn ? 0.05 : 0.5; camera.updateProjectionMatrix();
+    }
+    if (fpOn) {
+      const me = S.player, px = me.x / TS, pz = me.y / TS, wp = walkPh.get('p' + me.id) || { ph: 0, mv: 0 };
+      const hy = terrainH(px, pz) + (me.z || 0) / TS + 1.02 + Math.abs(Math.sin(wp.ph)) * 0.04 * wp.mv;
+      const cp = Math.cos(R3.pitch);
+      camera.position.set(px + shx * 0.3, hy, pz + shz * 0.3);
+      camera.lookAt(px - Math.sin(R3.yaw) * cp, hy + Math.sin(R3.pitch), pz - Math.cos(R3.yaw) * cp);
+    } else if (G.mode === 'menu') {
       const a = at * 0.05, r = 26, mx = MAP / 2, mz = MAP / 2;
       camera.position.set(mx + Math.cos(a) * r, 13 + Math.sin(at * 0.11) * 2, mz + Math.sin(a) * r);
       camera.lookAt(mx, 1, mz);
@@ -821,6 +859,7 @@
     else if (night < 0.3) sun.color.set(camBi === 3 ? '#f4f8ff' : '#ffe2c0');
     scene.background.copy(fogColor); scene.fog.color.copy(fogColor);
     scene.fog.near = 30 - night * 8 - wet * 4; scene.fog.far = 64 - night * 18 - wet * 8;
+    if (R3.fp && G.mode !== 'menu') { scene.fog.near = 7 - night * 3; scene.fog.far = 32 - night * 12 - wet * 6; }
 
     gN = 0;
     // Punktlichter: die wichtigsten Lichtquellen in Kameranähe
@@ -1080,7 +1119,8 @@
       pseen.add(p.id);
       let o = playerObjs.get(p.id);
       if (!o) { o = makePlayer(p); playerObjs.set(p.id, o); }
-      o.visible = p.dead <= 0;
+      o.visible = p.dead <= 0 && !(fpOn && p === S.player);
+      if (fpOn && p === S.player) updateFpView(p, at);
       if (!o.visible) continue;
       const u = o.userData, px = p.x / TS, pz = p.y / TS, wp = phase('p' + p.id, px, pz, 11), mv = wp.mv;
       const gy = terrainH(px, pz), jz = (p.z || 0) / TS;
@@ -1108,6 +1148,7 @@
       if (night > 0.3) glowAt(px, 0.9, pz, 1.4, '#ffcf8a', 0.18 * night);
     }
     for (const [id, o] of playerObjs) if (!pseen.has(id)) { scene.remove(o); playerObjs.delete(id); }
+    if (fpView) fpView.visible = fpOn;
 
     // Geschosse
     let nb = 0, nsph = 0;
