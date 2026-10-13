@@ -9,7 +9,9 @@ Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz
 - **Allein:** `index.html` im Browser öffnen → „Einzelspieler“.
 - **Zu zweit online:** Online-Version öffnen → einer klickt „Online hosten“ und bekommt einen **Raum-Code**, der andere klickt „Online beitreten“ und gibt den Code ein (oder öffnet den Einladungslink).
 
-**Steuerung:** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · Q/E/R Spitzhacke/Schwert/Bogen · 1–0 Gebäude · Gebäude anklicken → Upgrade (U) / Verkaufen (X) · T/Enter Chat · G Markierung · ESC Pause/Menü · M Ton
+**Steuerung:** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · Q/E/R Spitzhacke/Schwert/Bogen · 1–0 Gebäude · Gebäude anklicken → Upgrade (U) / Verkaufen (X) · T/Enter Chat · G Markierung · K Skills · ESC Pause/Menü · M Ton
+
+**Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Jedes Level gibt einen Skillpunkt für Stärke, Schütze, Sammler, Ausdauer, Flinkheit oder Plünderer (je 5 Stufen, Menü mit K).
 
 **Neu:** große Karte (140×140), Heilturm, Bomber-Zombies, Schatztruhen, Ingame-Chat, Markierungen für den Mitspieler.
 

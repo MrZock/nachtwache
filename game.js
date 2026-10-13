@@ -82,12 +82,12 @@ function costFor(type, lvl) {
 }
 
 const ZDEF = {
-  normal:  { name: 'Zombie',  hp: 45,   speed: 62,  r: 13, dmg: 9,  bdmg: 14,  atk: 1.0, gold: 1,   color: '#6fae5a' },
-  runner:  { name: 'Läufer',  hp: 24,   speed: 118, r: 10, dmg: 6,  bdmg: 7,   atk: 0.7, gold: 1,   color: '#b5d86a' },
-  brute:   { name: 'Brute',   hp: 240,  speed: 38,  r: 20, dmg: 22, bdmg: 70,  atk: 1.5, gold: 4,   color: '#4f7a3e' },
-  spitter: { name: 'Spucker', hp: 50,   speed: 52,  r: 13, dmg: 10, bdmg: 16,  atk: 2.2, gold: 2,   color: '#5cc8a0', range: 230 },
-  bomber:  { name: 'Bomber',  hp: 35,   speed: 80,  r: 13, dmg: 25, bdmg: 130, atk: 1.0, gold: 3,   color: '#d9622b' },
-  boss:    { name: 'Boss',    hp: 2300, speed: 42,  r: 34, dmg: 40, bdmg: 110, atk: 1.6, gold: 150, color: '#9b3fb0' },
+  normal:  { name: 'Zombie',  hp: 45,   speed: 62,  r: 13, dmg: 9,  bdmg: 14,  atk: 1.0, gold: 1,   xp: 6, color: '#6fae5a' },
+  runner:  { name: 'Läufer',  hp: 24,   speed: 118, r: 10, dmg: 6,  bdmg: 7,   atk: 0.7, gold: 1,   xp: 5, color: '#b5d86a' },
+  brute:   { name: 'Brute',   hp: 240,  speed: 38,  r: 20, dmg: 22, bdmg: 70,  atk: 1.5, gold: 4,   xp: 18, color: '#4f7a3e' },
+  spitter: { name: 'Spucker', hp: 50,   speed: 52,  r: 13, dmg: 10, bdmg: 16,  atk: 2.2, gold: 2,   xp: 9, color: '#5cc8a0', range: 230 },
+  bomber:  { name: 'Bomber',  hp: 35,   speed: 80,  r: 13, dmg: 25, bdmg: 130, atk: 1.0, gold: 3,   xp: 9, color: '#d9622b' },
+  boss:    { name: 'Boss',    hp: 2300, speed: 42,  r: 34, dmg: 40, bdmg: 110, atk: 1.6, gold: 150, xp: 200, color: '#9b3fb0' },
 };
 const hpScale = N => 1 + 0.13 * (N - 1) + 0.012 * (N - 1) * (N - 1);
 const dmgScale = N => 1 + 0.07 * (N - 1);
@@ -167,11 +167,12 @@ const SFX = (() => {
     rbreak() { noise(0.35, 0.28 * vf, 700, 'lowpass', 90); tone(rand(110, 140), 0.3, 'triangle', 0.18 * vf, 50); },
     join()   { [440, 554, 659, 880].forEach((f, i) => tone(f, 0.16, 'triangle', 0.09, null, i * 0.08)); },
     ping()   { tone(1320, 0.09, 'sine', 0.12); tone(1760, 0.14, 'sine', 0.1, null, 0.09); },
+    levelup(){ [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'triangle', 0.1, null, i * 0.07)); },
     chat()   { tone(980, 0.05, 'triangle', 0.07); tone(1300, 0.07, 'triangle', 0.05, null, 0.05); },
   };
   const gates = { chop: 60, mine: 60, swing: 80, bow: 60, hit: 40, tarrow: 70, cannon: 80, boom: 90, zap: 80, zdie: 50,
                   groan: 500, bhit: 80, bdestroy: 120, spit: 120, click: 30, hurt: 150, hqhit: 600, goldore: 60, rbreak: 100 };
-  const LOCAL_ONLY = { click: 1, error: 1, hurt: 1, die: 1, join: 1, ping: 1, chat: 1 };
+  const LOCAL_ONLY = { click: 1, error: 1, hurt: 1, die: 1, join: 1, ping: 1, chat: 1, levelup: 1 };
   function play(name, x, y, noNet) {
     // Host: Sound an den Mitspieler weiterreichen (mit Position, er rechnet die Lautstärke selbst)
     if (!noNet && NET.role === 'host' && !LOCAL_ONLY[name]) NET.ev.push(['s', name, x === undefined ? null : x | 0, y === undefined ? null : y | 0]);
@@ -217,10 +218,23 @@ const chatLog = [];   // { name, text, color, t }
 function cleanText(s, n) { return String(s || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n); }
 const PLAYER_COL = ['#3a6ea8', '#b8433f'];
 
+// ---------- Level & Skills
+const SKILLS = [
+  { id: 'str',  icon: '⚔', name: 'Stärke',     max: 5, desc: l => '+' + (l * 15) + '% Nahkampfschaden' },
+  { id: 'bow',  icon: '➶', name: 'Schütze',    max: 5, desc: l => '+' + (l * 12) + '% Bogenschaden, ' + (l * 6) + '% schneller' },
+  { id: 'gath', icon: '⛏', name: 'Sammler',    max: 5, desc: l => (l * 20) + '% Chance auf doppelte Ausbeute' },
+  { id: 'vit',  icon: '❤', name: 'Ausdauer',   max: 5, desc: l => '+' + (l * 15) + ' Max-HP, +' + l + ' HP/s Regeneration' },
+  { id: 'spd',  icon: '➤', name: 'Flinkheit',  max: 5, desc: l => '+' + (l * 6) + '% Laufgeschwindigkeit' },
+  { id: 'loot', icon: '$', name: 'Plünderer',  max: 5, desc: l => '+' + (l * 15) + '% Gold von Zombies & Truhen' },
+];
+const xpNeed = L => Math.round(40 + (L - 1) * 30 + (L - 1) * (L - 1) * 4);
+let skillsOpen = false;
+function newSkills() { return { str: 0, bow: 0, gath: 0, vit: 0, spd: 0, loot: 0 }; }
 function mkPlayer(id) {
   return { id, x: WORLD / 2, y: WORLD / 2, r: 14, hp: 100, maxHp: 100, dead: 0, face: 0, tool: 'sword', cd: 0, swing: 0,
            lastHurt: -99, flash: 0, walk: 0, tp: 0, remote: false, lastInput: 0,
-           inp: { mx: 0, my: 0, ax: 0, ay: 0, down: false }, tx: 0, ty: 0 };
+           inp: { mx: 0, my: 0, ax: 0, ay: 0, down: false }, tx: 0, ty: 0,
+           lvl: 1, xp: 0, sp: 0, sk: newSkills() };
 }
 function newGame(opts) {
   opts = opts || {};
@@ -351,8 +365,9 @@ function openChest(c, q) {
   let txt;
   if (r < 0.32) { const n = Math.round(rand(30, 70) * m); S.wood += n; txt = '+' + n + ' Holz'; }
   else if (r < 0.62) { const n = Math.round(rand(30, 70) * m); S.stone += n; txt = '+' + n + ' Stein'; }
-  else if (r < 0.9) { const n = Math.round(rand(60, 140) * m); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
-  else { for (const pl of S.players) pl.hp = pl.maxHp; const n = Math.round(30 * m); S.gold += n; S.goldEarned += n; txt = 'Heiltrank! Alle geheilt +' + n + ' Gold'; }
+  else if (r < 0.9) { const n = Math.round(rand(60, 140) * m * lootMul()); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
+  else { for (const pl of S.players) pl.hp = pl.maxHp; const n = Math.round(30 * m * lootMul()); S.gold += n; S.goldEarned += n; txt = 'Heiltrank! Alle geheilt +' + n + ' Gold'; }
+  giveXp(q, 25);
   burst(c.x, c.y, '#ffe27a', 30, 200, 0.8, 3.5);
   ring(c.x, c.y, 60, 0.4, '#ffe27a');
   floatText(c.x, c.y - 24, txt, '#ffe27a', 16);
@@ -673,7 +688,8 @@ function placeError(type, tx, ty) {
   if (!canAfford(c)) return missingText(c);
   return null;
 }
-function placeBuilding(type, tx, ty) {
+function placeBuilding(type, tx, ty, who) {
+  if (!HEADLESS || who) giveXp(who || S.player, type === 'wall' || type === 'door' ? 1 : 4);
   const d = BDEF[type];
   pay(costFor(type, 1));
   const b = {
@@ -724,7 +740,8 @@ function upgradeBuilding(b, who) {
   b.lvl++;
   b.maxHp = BDEF[b.type].hp[b.lvl - 1]; b.hp = b.maxHp;
   if (b.type === 'harv') countNodes(b);
-  if (b.type === 'hq') for (const p of S.players) { const m = 100 + 25 * (b.lvl - 1); p.hp += m - p.maxHp; p.maxHp = m; }
+  if (b.type === 'hq') for (const p of S.players) recalcMaxHp(p);
+  giveXp(who, 6);
   const ce = bCenter(b);
   burst(ce.x, ce.y, '#ffe27a', 24, 160, 0.7, 3);
   ring(ce.x, ce.y, b.size * TS, 0.4, '#ffe27a');
@@ -944,6 +961,7 @@ function startNight() {
 }
 function startDay() {
   S.survived = S.night;
+  teamXp(30 + 10 * S.night);
   S.night++;
   S.phase = 'day'; S.phaseT = DAY_LEN; S.spawnQueue = [];
   banner('TAG ' + S.night, 'Nacht ' + S.survived + ' überlebt! Zombies verbrennen im Sonnenlicht.', '#ffe27a');
@@ -993,17 +1011,23 @@ function bomberBlast(z) {
   ring(z.x, z.y, R, 0.35, '#ff8a3a'); lightFlash(z.x, z.y, R * 2.5, 0.3);
   addShake(6, z.x, z.y); SFX.play('boom', z.x, z.y);
 }
+function killXp(z) {
+  const xp = ZDEF[z.type].xp || 5;
+  if (z.lastHit && S.players.includes(z.lastHit)) giveXp(z.lastHit, xp); else teamXp(Math.ceil(xp / 3));
+}
 function killZombie(z) {
-  if (z.type === 'bomber' && !z.dead) {
+  if (z.dead) return;
+  killXp(z);
+  if (z.type === 'bomber') {
     // vorher erledigt: die Explosion trifft nur die Zombies drumherum
     z.dead = true; S.kills++;
-    S.gold += ZDEF.bomber.gold; S.goldEarned += ZDEF.bomber.gold;
+    const gb = Math.round(ZDEF.bomber.gold * lootMul()); S.gold += gb; S.goldEarned += gb;
     floatText(z.x, z.y - 20, 'BUMM!', '#ffb347', 16);
     explode(z.x, z.y, 2 * TS, 70 * hpScale(S.night), true);
     return;
   }
   z.dead = true; S.kills++;
-  const g = ZDEF[z.type].gold;
+  const g = Math.round(ZDEF[z.type].gold * lootMul());
   S.gold += g; S.goldEarned += g;
   if (!HEADLESS) {
     burst(z.x, z.y, '#5f9a3a', 10 + z.r, 160, 0.6, 3);
@@ -1032,6 +1056,33 @@ function hurtPlayer(p, dmg) {
     if (S.players.length > 1) { const o = S.players.find(q => q !== p); toastFor(o, 'Dein Mitspieler ist gestorben!', '#ff9a7a'); }
   }
 }
+function giveXp(p, n) {
+  if (!p || n <= 0) return;
+  p.xp += n;
+  while (p.xp >= xpNeed(p.lvl)) {
+    p.xp -= xpNeed(p.lvl); p.lvl++; p.sp++;
+    burst(p.x, p.y, '#ffe27a', 30, 180, 0.8, 3.5);
+    ring(p.x, p.y, 70, 0.5, '#ffe27a');
+    floatText(p.x, p.y - 40, 'LEVEL ' + p.lvl + '!', '#ffe27a', 20);
+    sfxFor(p, 'levelup');
+    toastFor(p, 'Level ' + p.lvl + '! +1 Skillpunkt – drück K', '#ffe27a');
+  }
+}
+function teamXp(n) { for (const p of S.players) giveXp(p, n); }
+function recalcMaxHp(p) {
+  const m = 100 + 25 * (hqLvl() - 1) + 15 * p.sk.vit;
+  p.hp = Math.max(1, p.hp + m - p.maxHp); p.maxHp = m;
+}
+function spendSkill(p, id) {
+  const sk = SKILLS.find(s => s.id === id);
+  if (!sk || p.sp <= 0 || p.sk[id] >= sk.max) return false;
+  p.sk[id]++; p.sp--;
+  if (id === 'vit') recalcMaxHp(p);
+  burst(p.x, p.y, '#9fd0ff', 16, 120, 0.6, 3);
+  sfxFor(p, 'upgrade');
+  return true;
+}
+function lootMul() { let m = 0; for (const p of S.players) m = Math.max(m, p.sk.loot); return 1 + 0.15 * m; }
 function nearestPlayer(x, y) {
   let best = null, bd = Infinity;
   for (const p of S.players) { if (p.dead > 0) continue; const d = Math.hypot(p.x - x, p.y - y); if (d < bd) { bd = d; best = p; } }
@@ -1211,7 +1262,8 @@ function readLocalInput(p) {
 function movePlayer(p, dt) {
   let mx = p.inp.mx, my = p.inp.my;
   const ml = Math.hypot(mx, my);
-  if (ml > 0) { mx /= ml; my /= ml; p.x += mx * 190 * dt; p.y += my * 190 * dt; p.walk += dt * 10; }
+  const spd = 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0));
+  if (ml > 0) { mx /= ml; my /= ml; p.x += mx * spd * dt; p.y += my * spd * dt; p.walk += dt * 10; }
   forZ(p.x, p.y, p.r + 40, z => {
     const dx = p.x - z.x, dy = p.y - z.y, rr = p.r + z.r, d2 = dx * dx + dy * dy;
     if (d2 < rr * rr && d2 > 0.01) { const d = Math.sqrt(d2), o = rr - d; p.x += dx / d * o * 0.6; p.y += dy / d * o * 0.6; }
@@ -1240,15 +1292,17 @@ function updPlayer(p, dt) {
     if (S.t - p.lastInput > 1.5) p.inp.down = false;
   } else movePlayer(p, dt);
   if (S.t - p.lastHurt > 4 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + 4 * dt);
+  if (p.sk.vit && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.sk.vit * dt);
   p.cd -= dt; p.swing -= dt;
   if (p.inp.down && p.cd <= 0) playerAttack(p);
 }
 function playerAttack(p) {
   const T = TOOLS[p.tool] || TOOLS.sword, mul = 1 + 0.3 * (hqLvl() - 1);
-  p.cd = T.cd; p.swing = 0.22;
+  const bow = p.tool === 'bow', melee = (1 + 0.15 * p.sk.str), ranged = (1 + 0.12 * p.sk.bow);
+  p.cd = T.cd * (bow ? 1 - 0.06 * p.sk.bow : 1); p.swing = 0.22;
   if (p.tool === 'bow') {
     const sp = 760, a = p.face;
-    S.projs.push({ k: 'parrow', x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: T.reach / sp, dmg: T.dmg * mul, r: 4 });
+    S.projs.push({ k: 'parrow', x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: T.reach / sp, dmg: T.dmg * mul * ranged, r: 4, owner: p.id });
     SFX.play('bow', p.x, p.y);
     return;
   }
@@ -1260,7 +1314,8 @@ function playerAttack(p) {
     if (d > reach + z.r) return;
     if (Math.abs(angDiff(Math.atan2(z.y - p.y, z.x - p.x), p.face)) > arc) return;
     const ka = Math.atan2(z.y - p.y, z.x - p.x);
-    hurtZombie(z, T.dmg * mul, { x: Math.cos(ka) * 220, y: Math.sin(ka) * 220 });
+    z.lastHit = p;
+    hurtZombie(z, T.dmg * mul * melee, { x: Math.cos(ka) * 220, y: Math.sin(ka) * 220 });
     burst(z.x, z.y, '#5f9a3a', 5, 120, 0.35, 2.5);
     hitAny = true;
   });
@@ -1281,7 +1336,9 @@ function playerAttack(p) {
     if (best >= 0) {
       const kind = S.res[best], cx = (best % MAP + 0.5) * TS, cy = ((best / MAP | 0) + 0.5) * TS;
       S.wobble.set(best, { t: 0.25, a: p.face }); hostEv(['w', best, +p.face.toFixed(2)]);
-      const amt = mineRes(best, 1 + Math.floor((hqLvl() - 1) / 2));
+      let amt = mineRes(best, 1 + Math.floor((hqLvl() - 1) / 2));
+      if (amt > 0 && Math.random() < 0.2 * p.sk.gath) { amt *= 2; burst(cx, cy, '#ffffff', 6, 100, 0.4, 2.5); }
+      giveXp(p, kind === 3 ? amt * 2 : amt);
       if (kind === 1) { S.wood += amt; SFX.play('chop', cx, cy); burst(cx, cy, '#a0763f', 6, 120, 0.45, 2.5); burst(cx, cy, '#4f8a3a', 4, 90, 0.6, 3); floatText(cx, cy - 18, '+' + amt + ' Holz', '#e0b070', 13); }
       else if (kind === 2) { S.stone += amt; SFX.play('mine', cx, cy); burst(cx, cy, '#a8a8b0', 7, 140, 0.4, 2.5); floatText(cx, cy - 18, '+' + amt + ' Stein', '#d0d0e0', 13); }
       else { S.gold += amt * 2; S.goldEarned += amt * 2; SFX.play('goldore', cx, cy); burst(cx, cy, '#f2c94c', 8, 150, 0.45, 2.5); floatText(cx, cy - 18, '+' + amt * 2 + ' Gold', '#ffd36b', 13); }
@@ -1326,6 +1383,7 @@ function updProjs(dt) {
     }
     if (hitZ) {
       const sp = Math.hypot(pr.vx, pr.vy);
+      if (pr.owner !== undefined) hitZ.lastHit = S.players[pr.owner];
       hurtZombie(hitZ, pr.dmg, { x: pr.vx / sp * 60, y: pr.vy / sp * 60 });
       burst(pr.x, pr.y, '#e8e0c0', 4, 90, 0.25, 2);
       if (pr.k === 'parrow') SFX.play('hit', pr.x, pr.y);
@@ -1541,7 +1599,8 @@ function hostAddPeer() {
   if (S.players.length < 2) {
     const q = mkPlayer(1); q.remote = true;
     const base = S.player;
-    q.x = base.x + 30; q.y = base.y; q.maxHp = base.maxHp; q.hp = q.maxHp; q.lastInput = S.t;
+    q.x = base.x + 30; q.y = base.y; q.lastInput = S.t;
+    recalcMaxHp(q); q.hp = q.maxHp;
     collideTiles(q, true, false);
     S.players.push(q);
   }
@@ -1704,7 +1763,7 @@ function netHostTick(dt) {
     t: 'S',
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned)],
-    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '']),
+    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id])]),
     ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0]),
     pr: S.projs.map(q => [PKINDS.indexOf(q.k), q.x | 0, q.y | 0, q.k === 'bomb' ? ((q.tx - q.sx) / q.T) | 0 : q.vx | 0, q.k === 'bomb' ? ((q.ty - q.sy) / q.T) | 0 : q.vy | 0, q.h | 0]),
@@ -1727,13 +1786,15 @@ function hostHandleClient(m) {
     addChat(p.name || 'Spieler 2', text, CHAT_COL[1]);
     hostEv(['c', p.name || 'Spieler 2', text, 1]);
     SFX.play('chat', undefined, undefined, true);
+  } else if (m.t === 'skill') {
+    spendSkill(p, String(m.id));
   } else if (m.t === 'pin') {
     addPing(clamp(+m.x || 0, 0, WORLD), clamp(+m.y || 0, 0, WORLD), 1);
   } else if (m.t === 'C' && mode !== 'over') {
     if (m.c === 'place' && BDEF[m.type]) {
       const err = placeError(m.type, m.tx | 0, m.ty | 0);
       if (err) { netSendR({ t: 'T', text: err, color: '#ff7b6b', err: 1 }); return; }
-      placeBuilding(m.type, m.tx | 0, m.ty | 0);
+      placeBuilding(m.type, m.tx | 0, m.ty | 0, p);
     } else if (m.c === 'up' || m.c === 'sell') {
       const b = S.bById.get(m.id);
       if (!b) return;
@@ -1799,6 +1860,11 @@ function clientSnapshot(m) {
     if (!p) continue;
     p.hp = a[5]; p.maxHp = a[6]; p.dead = a[7]; if (a[9]) p.flash = 0.15;
     if (p !== S.player && a[11]) p.name = a[11];
+    if (a[12]) {
+      if (p === S.player && a[12] > p.lvl) SFX.play('levelup', undefined, undefined, true);
+      p.lvl = a[12]; p.xp = a[13]; p.sp = a[14];
+      SKILLS.forEach((s, k) => { p.sk[s.id] = a[15][k] || 0; });
+    }
     if (p === S.player) {
       if (a[10] !== p.tp) { p.tp = a[10]; p.x = a[1]; p.y = a[2]; }
     } else {
@@ -2629,6 +2695,20 @@ function drawHUD() {
     ctx.fillStyle = f > 0.5 ? '#4fc3f7' : f > 0.25 ? '#ffb74d' : '#ef5350'; ctx.fillRect(VW / 2 - hbw / 2, y - 27, hbw * f, 12);
     text('HP ' + Math.ceil(p.hp) + ' / ' + p.maxHp, VW / 2, y - 21, 11, '#fff', 'center');
   }
+  // Level & XP
+  const need = xpNeed(p.lvl);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(VW / 2 - hbw / 2, y - 13, hbw, 4);
+  ctx.fillStyle = '#ffd36b'; ctx.fillRect(VW / 2 - hbw / 2, y - 13, hbw * clamp(p.xp / need, 0, 1), 4);
+  const lx = VW / 2 - hbw / 2 - 74;
+  panel(lx, y - 34, 62, 26);
+  text('Lv ' + p.lvl, lx + 31, y - 21, 14, '#ffe27a', 'center');
+  const bx = VW / 2 + hbw / 2 + 12, bw = 104, glow = p.sp > 0 && Math.sin(animT * 6) > 0;
+  ctx.fillStyle = skillsOpen ? 'rgba(255,226,122,0.35)' : glow ? 'rgba(255,200,60,0.55)' : 'rgba(12,16,22,0.72)';
+  rr(bx, y - 34, bw, 26, 8); ctx.fill();
+  ctx.strokeStyle = p.sp > 0 ? '#ffd36b' : 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+  text(p.sp > 0 ? 'Skills (K) +' + p.sp : 'Skills (K)', bx + bw / 2, y - 21, 12, p.sp > 0 ? '#fff6c0' : '#ccc', 'center');
+  ui.push({ x: bx, y: y - 34, w: bw, h: 26, fn: () => { skillsOpen = !skillsOpen; } });
+  ui.push({ x: lx, y: y - 34, w: 62, h: 26, fn: () => { skillsOpen = !skillsOpen; } });
   panel(x - 4, y - 4, totalW + 8, SW + 8);
   slots.forEach((s, i) => {
     if (i === 3) x += 14;
@@ -2719,6 +2799,7 @@ function drawHUD() {
     const lines = [R3 ? 'WASD laufen · Maus zielen · Linksklick angreifen · Mausrad Zoom' : 'WASD laufen · Maus zielen · Linksklick angreifen', 'Q/E/R Werkzeug · 1–0 Bauen · G Markierung · T Chat', 'Klick auf Gebäude: U Upgrade · X Verkaufen · ESC Pause · M Ton'];
     lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
   }
+  if (skillsOpen) drawSkills();
   // Niedrige HP Vignette
   if (p.dead <= 0 && p.hp / p.maxHp < 0.3) {
     const a = (0.3 - p.hp / p.maxHp) * 1.5 * (0.6 + Math.sin(animT * 6) * 0.4);
@@ -2777,6 +2858,41 @@ function wrapLines(str, maxW, font) {
   for (const w of words) { const tst = cur ? cur + ' ' + w : w; if (ctx.measureText(tst).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tst; }
   if (cur) lines.push(cur);
   return lines;
+}
+function actSkill(id) {
+  if (NET.role === 'client') { netSendR({ t: 'skill', id }); SFX.play('click'); return; }
+  if (!spendSkill(S.player, id)) SFX.play('error', undefined, undefined, true);
+}
+function drawSkills() {
+  const p = S.player;
+  const w = Math.min(600, VW - 24), cols = w > 480 ? 2 : 1, cw = (w - 36 - (cols - 1) * 12) / cols, chh = 74;
+  const rows = Math.ceil(SKILLS.length / cols), h = 92 + rows * (chh + 10);
+  const x = VW / 2 - w / 2, y = Math.max(80, VH / 2 - h / 2 - 40);
+  panel(x, y, w, h, 0.94);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('Fähigkeiten', x + 18, y + 24, 20, '#ffe27a');
+  text('Level ' + p.lvl + ' · XP ' + Math.floor(p.xp) + ' / ' + xpNeed(p.lvl), x + 18, y + 50, 13, '#ccc', 'left', '600');
+  text(p.sp > 0 ? p.sp + ' Skillpunkt' + (p.sp > 1 ? 'e' : '') + ' frei' : 'Keine Skillpunkte – sammle XP!', x + w - 50, y + 24, 14, p.sp > 0 ? '#8fe08f' : '#999', 'right');
+  text('×', x + w - 20, y + 23, 20, '#aaa', 'center');
+  ui.push({ x: x + w - 34, y: y + 6, w: 30, h: 30, fn: () => { skillsOpen = false; } });
+  SKILLS.forEach((s, i) => {
+    const cx = x + 18 + (i % cols) * (cw + 12), cy = y + 70 + Math.floor(i / cols) * (chh + 10), lv = p.sk[s.id];
+    ctx.fillStyle = 'rgba(255,255,255,0.06)'; rr(cx, cy, cw, chh, 8); ctx.fill();
+    ctx.fillStyle = 'rgba(255,211,107,0.15)'; circle(cx + 30, cy + chh / 2, 22); ctx.fill();
+    text(s.icon, cx + 30, cy + chh / 2 + 1, 22, '#ffd36b', 'center');
+    text(s.name, cx + 62, cy + 18, 15, '#fff');
+    for (let k = 0; k < s.max; k++) { ctx.fillStyle = k < lv ? '#ffd36b' : 'rgba(255,255,255,0.18)'; rr(cx + 62 + k * 18, cy + 30, 14, 7, 2); ctx.fill(); }
+    const descW = cw - 62 - 46;
+    const now = lv ? s.desc(lv) : 'noch nicht gelernt', next = lv < s.max ? 'Nächste: ' + s.desc(lv + 1) : 'Maximal!';
+    const lines = wrapLines(lv < s.max ? next : now, descW, '600 11px ' + FONT);
+    lines.slice(0, 2).forEach((l, k) => text(l, cx + 62, cy + 50 + k * 14, 11, lv < s.max ? '#9fd0ff' : '#8fe08f', 'left', '600'));
+    if (lv < s.max) {
+      const can = p.sp > 0, bx = cx + cw - 40, by = cy + chh / 2 - 15;
+      ctx.fillStyle = can ? 'rgba(60,160,80,0.9)' : 'rgba(255,255,255,0.08)'; rr(bx, by, 30, 30, 6); ctx.fill();
+      text('+', bx + 15, by + 15, 20, can ? '#fff' : '#666', 'center');
+      if (can) ui.push({ x: bx, y: by, w: 30, h: 30, fn: () => actSkill(s.id) });
+    }
+  });
 }
 function drawSlotTooltip(h) {
   const s = h.s;
@@ -2989,7 +3105,7 @@ if (!HEADLESS) {
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
     if (mode !== 'play') return;
     if (e.code === 'Escape') {
-      if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
+      if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
       return;
     }
     if (e.code === 'KeyP') { mode = 'paused'; return; }
@@ -2997,6 +3113,7 @@ if (!HEADLESS) {
     if (dm) { selectBuild(KEY_BUILD[dm[2]]); return; }
     if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOpen(); return; }
     if (e.code === 'KeyG') { const a = aimPoint(); pingAt(a.x, a.y); return; }
+    if (e.code === 'KeyK') { skillsOpen = !skillsOpen; SFX.play('click'); return; }
     if (e.code === 'KeyQ') selectTool('pick');
     else if (e.code === 'KeyE') selectTool('sword');
     else if (e.code === 'KeyR') selectTool('bow');
