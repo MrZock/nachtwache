@@ -10,9 +10,9 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 - **2D (klassisch, läuft auf schwachen Handys besser):** https://mrzock.github.io/nachtwache/
 - **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 7 andere klicken „Online beitreten“ und geben den Code ein. 2D- und 3D-Spieler können zusammen spielen. Vorher den Spielserver (GitHub Codespace) starten.
 
-**Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** (3D) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
+**Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** (3D) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
 
-**Handy:** im Querformat spielen. **Zwei Joysticks:** links laufen, rechts zielen & angreifen (kurz antippen = automatisch auf den nächsten Zombie). Knöpfe am Rand: Menü, Karte, Skills, Schmiede, ⚡ Fähigkeit, 🔄 Kamera drehen, ⛶ Vollbild, Chat, Markierung. Vollbild auch mit `/full` im Chat.
+**Handy:** im Querformat spielen. **Zwei Joysticks:** links laufen, rechts zielen & angreifen (kurz antippen = automatisch auf den nächsten Zombie). Knöpfe am Rand: ⤒ Springen, Menü, Karte, Skills, Schmiede, ⚡ Fähigkeit, 🔄 Kamera drehen, ⛶ Vollbild, Chat, Markierung. Vollbild auch mit `/full` im Chat.
 
 ## Neu in 3.0
 
@@ -24,7 +24,10 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
   - `/clan gründen <Name>` · `/clan einladen <Spieler>` · `/clan beitreten <Name>` · `/clan offen` · `/clan kick <Spieler>` · `/clan verlassen` · `/clan info`
   - `/team <Text>` – nur dein Clan sieht die Nachricht · `/w <Name> <Text>` – flüstern · `/spieler`
   - Clan-Bonus: +10 % Schaden in der Nähe von Clan-Mitgliedern.
-- **Spezialfähigkeiten** ab Level 5 (Leertaste / ⚡): Wirbelsturm, Sturmangriff, Heilwelle, Kriegsschrei. Skills für 100 Gold zurücksetzen.
+- **Springen** (Leertaste / ⤒): in der Luft trifft dich nichts, und du kannst über eigene Mauern springen.
+- **Berge besteigen:** Spieler können auf die Berge laufen (langsamer), Zombies kommen nicht hoch.
+- **Schrott → Eisen:** Autowracks und Fässer mit der Spitzhacke abbauen. Eisen brauchst du für Upgrades ab Stufe 3, für Werkzeug-Upgrades und den Plasmawerfer.
+- **Spezialfähigkeiten** ab Level 5 (Shift / ⚡): Wirbelsturm, Sturmangriff, Heilwelle, Kriegsschrei. Skills für 100 Gold zurücksetzen.
 - **Baubereich wächst** mit jeder Reaktor-Stufe (16 → 32 Felder).
 - Neue Gegner: **Schamane** (heilt Zombies), **Panzerzombie** (45 % Rüstung), seltener **Goldzombie**, Schattenwesen.
 - **Wetter:** Regen, Gewitter mit Blitzen, die Zombies treffen.

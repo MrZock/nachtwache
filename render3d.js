@@ -747,6 +747,13 @@
     scene.add(grp);
     return grp;
   }
+  // Geländehöhe in Feld-Koordinaten (nur Berge sind erhöht), weich interpoliert
+  function hAt(tx, ty) { const S = G.S; if (tx < 0 || ty < 0 || tx >= G.MAP || ty >= G.MAP) return 0; const i = ty * G.MAP + tx; return S.res[i] === 6 && S.mtn ? 0.3 + Math.min(S.mtn[i], 7) * 0.4 : 0; }
+  function terrainH(x, z) {
+    const fx = x - 0.5, fz = z - 0.5, x0 = Math.floor(fx), z0 = Math.floor(fz), ax = fx - x0, az = fz - z0;
+    const a = hAt(x0, z0), b = hAt(x0 + 1, z0), c = hAt(x0, z0 + 1), d = hAt(x0 + 1, z0 + 1);
+    return (a * (1 - ax) + b * ax) * (1 - az) + (c * (1 - ax) + d * ax) * az;
+  }
   // Laufphase aus der Bewegung (funktioniert auch für Mitspieler/Zombies vom Host)
   function phase(key, x, y, k) {
     let w = walkPh.get(key);
@@ -857,8 +864,6 @@
         const hv = hash(i);
         // Ruinen der alten Welt (nur Optik, blockiert nichts)
         if (bi !== 5 && !(S.hq && Math.abs(tx - S.hq.tx - 1) < 5 && Math.abs(ty - S.hq.ty - 1) < 5)) {
-          if (v % 97 === 13 && ncar < 600) { setInst(cars, ncar, px, 0, pz, 1, 1, 1, v * 0.7, 0, v % 3 === 0 ? 0.08 : 0); cars.setColorAt(ncar, col.set(['#8a3a2a', '#4a5a6a', '#7a6a3a', '#5a5a52', '#6a3a4a'][v % 5]).multiplyScalar(0.8)); ncar++; continue; }
-          if (v % 53 === 9 && nbar2 < 1200) { for (let b = 0; b < 1 + v % 3; b++) { setInst(barrels, nbar2, px + (b - 1) * 0.36, 0, pz + (b % 2) * 0.2, 1, 1, 1, v + b, b === 2 ? Math.PI / 2 : 0, 0); barrels.setColorAt(nbar2, col.set(['#a84a20', '#3a5a3a', '#8a2a20', '#4a4a52'][(v + b) % 4])); nbar2++; } continue; }
           if (v % 61 === 22 && nrub < 1200) { setInst(rubble, nrub, px, 0, pz, 1, 1, 1, v); rubble.setColorAt(nrub, col.setRGB(0.75, 0.73, 0.7)); nrub++; continue; }
           if (v % 131 === 40 && nlamp < 600) { setInst(lamps, nlamp, px, 0, pz, 1, 1, 1, v, 0, (v % 3) * 0.08); lamps.setColorAt(nlamp, WHITE); nlamp++; if (v % 2 && night > 0.3) glowAt(px + 0.5, 1.95, pz, 0.8, '#ffb050', night * (Math.sin(at * 17 + v) > -0.6 ? 0.8 : 0.1)); continue; }
         }
@@ -894,6 +899,11 @@
       const wob = S.wobble.get(i);
       if (wob) { const a = Math.sin(wob.t * 40) * 0.1 * (wob.t / 0.25); ox = Math.cos(wob.a) * a; oz = Math.sin(wob.a) * a; tilt = a; }
       const rot = v * 0.05;
+      if (k === 7) {
+        if (v % 3 === 0) { if (ncar < 600) { setInst(cars, ncar, px + ox, 0, pz + oz, sc, sc, sc, v * 0.7, tilt, v % 2 ? 0.06 : 0); cars.setColorAt(ncar, col.set(['#8a3a2a', '#4a5a6a', '#7a6a3a', '#5a5a52'][v % 4]).multiplyScalar(0.85)); ncar++; } }
+        else for (let b = 0; b < 3 && nbar2 < 1200; b++) { const a = v + b * 2.1; setInst(barrels, nbar2, px + ox + Math.cos(a) * 0.22 * sc, 0, pz + oz + Math.sin(a) * 0.2 * sc, sc, sc, sc, v + b, b === 2 ? Math.PI / 2 : tilt, 0); barrels.setColorAt(nbar2, col.set(['#a84a20', '#3a5a3a', '#8a2a20', '#4a4a52'][(v + b) % 4])); nbar2++; }
+        continue;
+      }
       if (k === 6) {
         if (npk < MAXRES * 2) {
           const hm = S.mtn ? Math.min(S.mtn[i], 7) : 1, hh = 0.45 + hm * 0.62 + hash(i) * 0.45, sw = 1.55 + hash(i + 3) * 0.6 + hm * 0.08;
@@ -1073,7 +1083,9 @@
       o.visible = p.dead <= 0;
       if (!o.visible) continue;
       const u = o.userData, px = p.x / TS, pz = p.y / TS, wp = phase('p' + p.id, px, pz, 11), mv = wp.mv;
-      o.position.set(px, Math.abs(Math.sin(wp.ph)) * 0.05 * mv, pz);
+      const gy = terrainH(px, pz), jz = (p.z || 0) / TS;
+      o.position.set(px, gy + jz + (jz > 0 ? 0 : Math.abs(Math.sin(wp.ph)) * 0.05 * mv), pz);
+      o.children[1] && (o.children[1].position.y = 0.02 - jz);
       o.rotation.y = p.danceT > 0 ? -at * 12 : -(p.face || 0);
       if (p.rageT > 0) glowAt(px, 0.6, pz, 1.6, '#ff5a2a', 0.5 + 0.2 * Math.sin(at * 10));
       u.legs[0].rotation.z = Math.sin(wp.ph) * 0.7 * mv; u.legs[1].rotation.z = -Math.sin(wp.ph) * 0.7 * mv;
