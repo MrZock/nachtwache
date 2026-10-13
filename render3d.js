@@ -479,9 +479,12 @@
         const dish = prt('spin', -0.95, 2.2, -0.9, { axis: 'y', speed: 0.8 });
         dish.lit(CY(0.04, 0.06, 0.4, 6), '#4a4440', 0, 0, 0).lit(SP(0.35, 10, 5, 0, TAU, 0, Math.PI / 2.5), P.light, 0.12, 0.3, 0, 0, 0, -1.0).lit(CY(0.015, 0.015, 0.3, 4), '#2a2a2a', 0.25, 0.4, 0, 0, 0, -1.0);
         // Schwebender Energiekern
-        const core = prt('bob', 0, 3.35, 0, { spin: 1.4, bobA: 0.12 });
-        core.glow(OC(0.32), '#ffb050', 0, 0, 0, 0, 0, 0, 1, 1.4, 1, 0.05).glow(OC(0.18), '#fff3c0', 0, 0, 0, 0, 0.7, 0, 1, 1.3, 1, 0);
-        core.lit(TO(0.48, 0.03, 4, 24), P.trim, 0, 0, 0, Math.PI / 2, 0, 0);
+        // Halterung für den Energiekern: Ring auf 4 Streben + leuchtende Leitung aus dem Dach
+        st.lit(TO(0.5, 0.045, 5, 24), P.trim, 0, 3.35, 0, Math.PI / 2, 0, 0).lit(TO(0.5, 0.02, 4, 24), '#2a2420', 0, 3.27, 0, Math.PI / 2, 0, 0);
+        st.lit(CY(0.11, 0.16, 0.2, 10), P.dark, 0, 2.82, 0).glow(CY(0.05, 0.05, 0.42, 6), '#ffb050', 0, 3.0, 0);
+        for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) st.lit(BX(0.07, 0.72, 0.07), P.dark, sx * 0.55, 3.0, sz * 0.55, -sz * 0.16, 0, sx * 0.16).lit(BX(0.12, 0.08, 0.12), P.metal, sx * 0.6, 2.68, sz * 0.6);
+        const core = prt('bob', 0, 3.35, 0, { spin: 1.4, bobA: 0.03 });
+        core.glow(OC(0.3), '#ffb050', 0, 0, 0, 0, 0, 0, 1, 1.4, 1, 0.05).glow(OC(0.17), '#fff3c0', 0, 0, 0, 0, 0.7, 0, 1, 1.3, 1, 0);
         glow(0, 3.35, 0, 2.6, '#ff9a3a', false, false).bob = true;
         glow(0, 1.5, 0, 2.4, '#ff8a2a', true, true);
         for (const s of [-1, 1]) { st.lit(CY(0.03, 0.03, 0.3, 5), '#5a3a1a', s * 0.5, 1.2, 1.36); st.glow(OC(0.06), '#ffcf6a', s * 0.5, 1.4, 1.36); glow(s * 0.5, 1.42, 1.38, 0.7, '#ff9a3a', false, true); }
@@ -517,16 +520,19 @@
       }
       case 'mage': {
         st.lit(CY(0.92, 1.0, 0.3, 8), P.stone, 0, 0.15, 0).lit(BX(1.2, 0.35, 1.2), P.main, 0, 0.45, 0);
-        for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + Math.PI / 4; st.lit(BX(0.1, 1.4, 0.1), P.metal, Math.cos(a) * 0.5, 1.2, Math.sin(a) * 0.5, Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12); }
+        for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + Math.PI / 4; st.lit(BX(0.1, 2.0, 0.1), P.metal, Math.cos(a) * 0.5, 1.58, Math.sin(a) * 0.5).lit(BX(0.16, 0.1, 0.16), P.trim, Math.cos(a) * 0.5, 2.52, Math.sin(a) * 0.5); }
         st.lit(CY(0.16, 0.22, 1.8, 10), '#3a3430', 0, 1.5, 0);
         for (let i = 0; i < 9; i++) st.lit(TO(0.22 - i * 0.008, 0.035, 5, 16), i % 2 ? '#c87a3a' : '#a85a2a', 0, 0.85 + i * 0.16, 0, Math.PI / 2, 0, 0);
         st.lit(TO(0.55, 0.12, 8, 24), P.metal, 0, 2.55, 0, Math.PI / 2, 0, 0);
+        for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + Math.PI / 4; st.lit(BX(0.5, 0.06, 0.08), P.dark, Math.cos(a) * 0.3, 2.55, Math.sin(a) * 0.3, 0, -a, 0); }
+        st.lit(CY(0.13, 0.16, 0.3, 10), P.dark, 0, 2.55, 0).lit(CY(0.05, 0.07, 0.3, 6), P.metal, 0, 2.78, 0);
+        for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; st.lit(BX(0.05, 0.42, 0.05), P.metal, Math.cos(a) * 0.17, 2.9, Math.sin(a) * 0.17, Math.sin(a) * -0.45, 0, Math.cos(a) * 0.45); }
         st.glow(TO(0.85, 0.025, 4, 32), '#7ad8ff', 0, 0.65, 0, Math.PI / 2, 0, 0);
         for (const s of [-1, 1]) { st.lit(CY(0.04, 0.04, 0.4, 6), '#d8d0c0', s * 0.6, 0.85, 0.6); st.glow(SP(0.05, 5, 4), '#bfe8ff', s * 0.6, 1.07, 0.6); }
-        const cr = prt('bob', 0, 2.95, 0, { spin: 2, bobA: 0.06 });
-        cr.glow(IC(0.26, 1), '#c8f0ff', 0, 0, 0).glow(IC(0.14, 0), '#ffffff', 0, 0, 0);
-        glow(0, 2.95, 0, 2.2, '#7ad8ff', false, true).bob = true;
-        const arcs = prt('spin', 0, 2.95, 0, { axis: 'y', speed: 4 });
+        const cr = prt('bob', 0, 3.02, 0, { spin: 2, bobA: 0.015 });
+        cr.glow(IC(0.24, 1), '#c8f0ff', 0, 0, 0).glow(IC(0.13, 0), '#ffffff', 0, 0, 0);
+        glow(0, 3.02, 0, 2.2, '#7ad8ff', false, true).bob = true;
+        const arcs = prt('spin', 0, 3.02, 0, { axis: 'y', speed: 4 });
         for (let i = 0; i < 4; i++) { const a = i / 4 * TAU; arcs.glow(BX(0.5, 0.025, 0.025), '#dff6ff', Math.cos(a) * 0.4, (i % 2) * 0.1, Math.sin(a) * 0.4, 0, -a, 0.6 * (i % 2 ? 1 : -1)); }
         break;
       }
@@ -582,9 +588,11 @@
         for (let i = 0; i < 3; i++) st.lit(CY(0.12, 0.12, 0.4, 10), i ? '#4a8a5a' : '#2a6a8a', -0.55 + i * 0.3, 0.36, 0.6);
         st.lit(BX(0.04, 0.8, 0.04), '#5a5a5a', 0.6, 1.5, -0.6).glow(SP(0.05, 5, 4), '#3aff6a', 0.6, 1.92, -0.6);
         glow(0, 0.6, 0.4, 1.3, '#7dffb0', true, false);
-        const cr = prt('bob', 0, 1.75, -0.2, { spin: 1.2, bobA: 0.08 });
+        st.lit(BX(0.4, 0.06, 0.4), P.trim, 0, 1.15, -0.2).lit(CY(0.045, 0.06, 0.42, 8), '#5a5a5a', 0, 1.36, -0.2).lit(CY(0.09, 0.09, 0.05, 8), P.metal, 0, 1.52, -0.2);
+        const cr = prt('bob', 0, 1.8, -0.2, { spin: 1.2, bobA: 0 });
+        cr.lit(CY(0.04, 0.04, 0.3, 6), '#7a7a7a', 0, -0.18, 0);
         cr.glow(BX(0.16, 0.5, 0.16), '#3fe07a', 0, 0, 0).glow(BX(0.5, 0.16, 0.16), '#3fe07a', 0, 0, 0);
-        glow(0, 1.75, -0.2, 1.4, '#5fff8a', false, false).bob = true;
+        glow(0, 1.8, -0.2, 1.4, '#5fff8a', false, false).bob = true;
         break;
       }
       case 'frost': {
@@ -595,12 +603,13 @@
         for (let i = 0; i < 5; i++) { const a = i / 5 * TAU, r = i ? 0.22 : 0; st.lit(OC(0.16 + (i ? 0 : 0.06)), i % 2 ? '#cdeeff' : '#9fd6f5', Math.cos(a) * r, 1.2 + (i ? 0 : 0.3), Math.sin(a) * r, Math.cos(a) * 0.4, 0, Math.sin(a) * 0.4, 1, i ? 3.4 : 4, 1, 0.12); }
         st.glow(TO(0.7, 0.03, 4, 28), '#9fe6ff', 0, 0.3, 0, Math.PI / 2, 0, 0);
         glow(0, 1.4, 0, 1.6, '#7fd8ff', false, false);
-        const cr = prt('bob', 0, 2.55, 0, { spin: 0.8, bobA: 0.1 });
+        const cr = prt('bob', 0, 2.42, 0, { spin: 0.8, bobA: 0 });
         cr.glow(OC(0.22), '#e8fbff', 0, 0, 0, 0, 0, 0, 1, 1.6, 1, 0.06);
         for (let i = 0; i < 6; i++) cr.glow(BX(0.04, 0.36, 0.04), '#bfefff', 0, 0, 0, 0, 0, i * Math.PI / 3);
-        glow(0, 2.55, 0, 1.4, '#bfefff', false, false).bob = true;
+        glow(0, 2.42, 0, 1.4, '#bfefff', false, false).bob = true;
         const orb = prt('spin', 0, 1.9, 0, { axis: 'y', speed: 1.4 });
-        for (let i = 0; i < 4; i++) { const a = i / 4 * TAU; orb.lit(OC(0.08), '#dff6ff', Math.cos(a) * 0.7, Math.sin(i * 2) * 0.1, Math.sin(a) * 0.7, 0, 0, 0, 1, 2, 1); }
+        orb.lit(TO(0.7, 0.025, 4, 28), '#9aa8b4', 0, 0, 0, Math.PI / 2, 0, 0).lit(CY(0.12, 0.12, 0.08, 8), P.trim, 0, 0, 0);
+        for (let i = 0; i < 4; i++) { const a = i / 4 * TAU; orb.lit(BX(0.62, 0.03, 0.03), '#9aa8b4', Math.cos(a) * 0.38, 0, Math.sin(a) * 0.38, 0, -a, 0).lit(OC(0.08), '#dff6ff', Math.cos(a) * 0.7, 0, Math.sin(a) * 0.7, 0, 0, 0, 1, 2, 1); }
         break;
       }
     }
@@ -946,13 +955,27 @@
     if (S.portal) { addL(S.portal.x, S.portal.y, 2, '#a060ff', 18, 8, true); addL(S.portal2.x, S.portal2.y, 2, '#a060ff', 22, 10, true); }
     for (const b of S.buildings) {
       const c = G.bCenter(b);
-      if (b.type === 'hq') addL(c.x, c.y, 3.5, '#ff9a40', 24, 11);
-      else if (b.type === 'mage') addL(c.x, c.y, 2.8, '#c792ff', 12, 6.5);
-      else if (b.type === 'frost') addL(c.x, c.y, 2.4, '#8fd8ff', 12, 6.5);
-      else if (G.TOWERS[b.type]) addL(c.x, c.y, 2.6, '#ffa050', 10, 6.5);
-      else if (b.type === 'heal') addL(c.x, c.y, 2.2, '#80ffa0', 10, 6);
+      const pul = 1 + Math.sin(at * 2.2 + b.id) * 0.12;
+      if (b.type === 'hq') addL(c.x, c.y, 3.4, '#ff9a40', 26 * pul, 12);
+      else if (b.type === 'mage') addL(c.x, c.y, 3.0, '#7ad8ff', 13 * (0.8 + 0.25 * (Math.sin(at * 23 + b.id) > 0.3 ? 1 : Math.random())), 7);
+      else if (b.type === 'frost') addL(c.x, c.y, 2.4, '#8fd8ff', 12 * pul, 6.5);
+      else if (G.TOWERS[b.type]) addL(c.x, c.y, 2.6, '#ffa050', 9, 6);
+      else if (b.type === 'heal') addL(c.x, c.y, 2.0, '#80ffa0', 11 * pul, 6);
+      else if (b.type === 'mine') addL(c.x, c.y, 1.0, '#ffd36b', 8 * pul, 5);
+      else if (b.type === 'door') addL(c.x, c.y, 1.2, '#3aff6a', 3, 3);
     }
     for (const c of S.chests) addL(c.x, c.y, 1.2, '#ffe27a', 6, 4);
+    // Straßenlaternen in der Nähe werfen echtes Licht auf den Boden
+    if (night > 0.3 && S.variant) {
+      const lr = 14, lx0 = Math.max(0, Math.floor(cx - lr)), lx1 = Math.min(MAP - 1, Math.ceil(cx + lr)), lz0 = Math.max(0, Math.floor(cz - lr)), lz1 = Math.min(MAP - 1, Math.ceil(cz + lr));
+      for (let ty = lz0; ty <= lz1; ty++) for (let tx = lx0; tx <= lx1; tx++) {
+        const i = ty * MAP + tx, v = S.variant[i];
+        if (v % 131 !== 40 || !(v % 2) || S.res[i] || S.bmap[i] || (S.biome && S.biome[i] === 5) || (S.hq && Math.abs(tx - S.hq.tx - 1) < 5 && Math.abs(ty - S.hq.ty - 1) < 5)) continue;
+        if (Math.sin(at * 17 + v) <= -0.6) continue;
+        const ry = v * 0.37;
+        addL((tx + 0.5 + 0.62 * Math.cos(ry)) * TS, (ty + 0.5 - 0.62 * Math.sin(ry)) * TS, 2.0, '#ffb050', 7, 6);
+      }
+    }
     cand.sort((a, b) => (b.always - a.always) || a.d2 - b.d2);
     for (let i = 0; i < NL; i++) {
       const L = pointLights[i], c = cand[i];
