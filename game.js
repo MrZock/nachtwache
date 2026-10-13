@@ -510,11 +510,37 @@ function drawAchList() {
 }
 function newSkills() { return { str: 0, bow: 0, gath: 0, vit: 0, spd: 0, loot: 0, crit: 0, armor: 0, vamp: 0 }; }
 function newTools() { return { pick: 1, sword: 1, bow: 1, spear: 0, axe: 0, staff: 0 }; }
+// ---------- Ausrüstung (4.0): Rüstung, Materialien, Verbrauchsgegenstände – gehören jedem Spieler selbst
+const MATS = [{ id: 'c', name: 'Stoff', icon: '🧵', col: '#e8d8b8' }, { id: 'e', name: 'Elektronik', icon: '🔌', col: '#7fd8ff' }, { id: 'h', name: 'Chemie', icon: '🧪', col: '#9dffb8' }];
+const ARMOR = [
+  { id: 'h', name: 'Helm', icon: '⛑', mul: 1, stat: L => '-' + [0, 4, 7, 10, 14][L] + ' % Schaden' },
+  { id: 'v', name: 'Weste', icon: '🦺', mul: 1.3, stat: L => '-' + [0, 6, 10, 15, 20][L] + ' % Schaden, +' + [0, 10, 20, 35, 50][L] + ' HP' },
+  { id: 'g', name: 'Handschuhe', icon: '🧤', mul: 0.8, stat: L => '+' + [0, 4, 8, 12, 16][L] + ' % Angriffstempo' },
+  { id: 'b', name: 'Stiefel', icon: '🥾', mul: 0.9, stat: L => '+' + [0, 4, 7, 10, 14][L] + ' % Lauftempo' },
+];
+const ARMOR_TIER = ['–', 'Schrott', 'Leder', 'Stahl', 'Militär'];
+const ARMOR_COL = ['#555', '#8a6a4a', '#a0703c', '#9aa4b0', '#4a5a3a'];
+const CONS = [
+  { id: 'med', name: 'Medkit', icon: '🩹', key: 'L', cost: { w: 0, s: 0, g: 15, c: 2, h: 1 }, desc: 'Heilt sofort 50 % deiner HP' },
+  { id: 'gren', name: 'Granate', icon: '💣', key: 'G', cost: { w: 0, s: 10, g: 0, i: 2, h: 1 }, desc: 'Werfen: explodiert und trifft alles im Umkreis' },
+  { id: 'molo', name: 'Molotow', icon: '🔥', key: 'Z', cost: { w: 5, s: 0, g: 0, c: 1, h: 2 }, desc: 'Werfen: Feuerfläche verbrennt Zombies 5 Sekunden lang' },
+];
+const CONS_MAX = 5;
+function armorCost(slot, L) {
+  const A = ARMOR.find(a => a.id === slot), m = A ? A.mul : 1, r = v => Math.round(v * m);
+  return [null, { w: r(20), s: r(10), g: 0, c: 2 }, { w: r(30), s: 0, g: r(20), c: r(6) }, { w: 0, s: r(40), g: r(40), i: r(8), c: 4, e: 1 },
+    { w: 0, s: 0, g: r(120), i: r(20), c: 8, e: r(4), h: 2 }][L];
+}
+const armorRed = p => p.eq ? ([0, 0.04, 0.07, 0.10, 0.14][p.eq.h | 0] + [0, 0.06, 0.10, 0.15, 0.20][p.eq.v | 0]) : 0;
+const armorHp = p => p.eq ? [0, 10, 20, 35, 50][p.eq.v | 0] : 0;
+const armorAtk = p => p.eq ? [0, 0.04, 0.08, 0.12, 0.16][p.eq.g | 0] : 0;
+const armorSpd = p => p.eq ? [0, 0.04, 0.07, 0.10, 0.14][p.eq.b | 0] : 0;
 function mkPlayer(id) {
   return { id, x: WORLD / 2, y: WORLD / 2, r: 14, hp: 100, maxHp: 100, dead: 0, face: 0, tool: 'sword', cd: 0, swing: 0,
            lastHurt: -99, flash: 0, walk: 0, tp: 0, remote: false, lastInput: 0,
            inp: { mx: 0, my: 0, ax: 0, ay: 0, down: false }, tx: 0, ty: 0,
-           lvl: 1, xp: 0, sp: 0, sk: newSkills(), tl: newTools(), afk: false, z: 0, vz: 0 };
+           lvl: 1, xp: 0, sp: 0, sk: newSkills(), tl: newTools(), afk: false, z: 0, vz: 0,
+           eq: { h: 0, v: 0, g: 0, b: 0 }, mat: { c: 0, e: 0, h: 0 }, cons: { med: 1, gren: 0, molo: 0 }, useCd: 0 };
 }
 function newGame(opts) {
   opts = opts || {};
@@ -522,7 +548,7 @@ function newGame(opts) {
     t: 0, phase: 'day', phaseT: DAY_LEN, night: 1, survived: 0, nightT: 0, started: false,
     res: new Uint8Array(MAP * MAP), rhp: new Uint8Array(MAP * MAP), variant: new Uint8Array(MAP * MAP), bmap: new Int32Array(MAP * MAP),
     wobble: new Map(), grow: new Map(), resCount: [0, 0, 0, 0, 0, 0, 0, 0], resTarget: [0, 0, 0, 0, 0, 0, 0, 0], seed: (Math.random() * 1e6) | 0, regrowT: 3,
-    buildings: [], bById: new Map(), nextId: 1, hq: null, counts: {},
+    buildings: [], bById: new Map(), nextId: 1, hq: null, counts: {}, fires: [],
     wood: 40, stone: 40, gold: 0, iron: 0,
     players: [], player: null,
     zombies: [], projs: [], parts: [], texts: [], bolts: [], rings: [], flashes: [],
@@ -720,6 +746,7 @@ function openChest(c, q) {
   else if (r < 0.9) { const n = Math.round(rand(60, 140) * m * lootMul()); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
   else { for (const pl of S.players) pl.hp = pl.maxHp; const n = Math.round(30 * m * lootMul()); S.gold += n; S.goldEarned += n; txt = 'Heiltrank! Alle geheilt +' + n + ' Gold'; }
   giveXp(q, 25);
+  giveMat(q, 'c', randi(1, 3)); giveMat(q, 'e', randi(1, 2)); giveMat(q, 'h', randi(0, 2));
   S.chestsOpened = (S.chestsOpened || 0) + 1;
   burst(c.x, c.y, '#ffe27a', 30, 200, 0.8, 3.5);
   ring(c.x, c.y, 60, 0.4, '#ffe27a');
@@ -780,6 +807,13 @@ function animalTick(dt) {
   }
   S.animals = S.animals.filter(an => !an.dead);
 }
+// Material für einen Spieler (Host)
+function giveMat(p, k, n) {
+  if (!p || !p.mat || n <= 0) return;
+  p.mat[k] = (p.mat[k] || 0) + n;
+  const M = MATS.find(m => m.id === k);
+  floatText(p.x, p.y - 44 - Math.random() * 10, '+' + n + ' ' + M.icon + ' ' + M.name, M.col, 13);
+}
 function hurtAnimal(an, dmg, p) {
   if (an.dead) return;
   an.hp -= dmg; an.flash = 0.12;
@@ -791,7 +825,7 @@ function hurtAnimal(an, dmg, p) {
     an.dead = true;
     const D = ADEF[an.type], g = Math.round(D.gold * lootMul());
     S.gold += g; S.goldEarned += g; S.animalKills = (S.animalKills || 0) + 1;
-    if (p) { giveXp(p, D.xp); p.hp = Math.min(p.maxHp, p.hp + D.heal); }
+    if (p) { giveXp(p, D.xp); p.hp = Math.min(p.maxHp, p.hp + D.heal); giveMat(p, 'c', an.type === 'rabbit' ? 1 : 2); }
     floatText(an.x, an.y - 24, D.name + ': +' + g + ' Gold, +' + D.heal + ' HP', '#ffd36b', 13);
     burst(an.x, an.y, '#8a2a2a', 16, 150, 0.6, 3);
     SFX.play('zdie', an.x, an.y);
@@ -1648,6 +1682,14 @@ function killZombie(z) {
     return;
   }
   z.dead = true; S.kills++;
+  {
+    const k = z.lastHit && S.players.includes(z.lastHit) ? z.lastHit : null;
+    if (k) {
+      if (Math.random() < 0.3) giveMat(k, 'c', 1);
+      if (Math.random() < (z.type === 'spitter' ? 0.6 : z.type === 'shaman' ? 0.5 : 0.05)) giveMat(k, 'h', 1);
+      if (Math.random() < (z.type === 'boss' ? 1 : z.type === 'armored' ? 0.45 : 0.03)) giveMat(k, 'e', z.type === 'boss' ? 4 : 1);
+    }
+  }
   if (z.golden) {
     S.gold += 75; S.goldEarned += 75;
     burst(z.x, z.y, '#ffd36b', 40, 260, 1.0, 4); ring(z.x, z.y, 90, 0.5, '#ffd36b');
@@ -1673,7 +1715,7 @@ function killZombie(z) {
 }
 function hurtPlayer(p, dmg) {
   if (p.dead > 0 || p.afk || p.invT > 0 || p.z > 6) return;   // in der Luft weicht man aus
-  dmg *= 1 - 0.07 * (p.sk.armor || 0);
+  dmg *= (1 - 0.07 * (p.sk.armor || 0)) * (1 - armorRed(p));
   p.hp -= dmg; p.lastHurt = S.t; p.flash = 0.15;
   burst(p.x, p.y, '#c0392b', 8, 130, 0.45, 2.5);
   shakeFor(p, 2.5);
@@ -1701,7 +1743,7 @@ function giveXp(p, n) {
 function teamXp(n) { for (const p of S.players) giveXp(p, n); }
 function recalcMaxHp(p) { withTeam(teamOf(p), () => recalcMaxHp0(p)); }
 function recalcMaxHp0(p) {
-  const m = 100 + 25 * (hqLvl() - 1) + 15 * p.sk.vit;
+  const m = 100 + 25 * (hqLvl() - 1) + 15 * p.sk.vit + armorHp(p);
   p.hp = Math.max(1, p.hp + m - p.maxHp); p.maxHp = m;
 }
 function spendSkill(p, id) {
@@ -1765,7 +1807,7 @@ function toggleView() {
   R3.fp = true; R3.eye = !R3.eye;
   toast(R3.eye ? '👁 Ego-Perspektive – O = zurück' : '🎥 Third-Person – O = Ego-Perspektive', '#cfe8ff');
   SFX.play('click');
-  if (!isTouch && canvas.requestPointerLock && !mouseLocked()) { try { canvas.requestPointerLock(); } catch (e) {} }
+  if (!isTouch && canvas.requestPointerLock && !mouseLocked()) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
 }
 const mouseLocked = () => typeof document !== 'undefined' && !!canvas && document.pointerLockElement === canvas;
 function jump(p) {
@@ -2016,9 +2058,81 @@ function upgradeTool(p, id) {
   if (L === 1 && !p.remote) p.tool = id;
   return null;
 }
+// Kosten prüfen/zahlen: Holz/Stein/Gold/Eisen vom Team, Stoff/Elektronik/Chemie vom Spieler
+function eqCostOk(p, c) { return canAfford(c) && MATS.every(m => (p.mat[m.id] || 0) >= (c[m.id] || 0)); }
+function eqPay(p, c) { pay(c); for (const m of MATS) p.mat[m.id] -= c[m.id] || 0; }
+function eqCostText(c) { const t = costText(c), m = MATS.filter(x => c[x.id]).map(x => c[x.id] + ' ' + x.name); return [t === 'kostenlos' ? '' : t, ...m].filter(Boolean).join(' · '); }
+function craftEquip(p, kind, id) { return withTeam(teamOf(p), () => craftEquip0(p, kind, id)); }
+function craftEquip0(p, kind, id) {
+  if (kind === 'a') {
+    const A = ARMOR.find(a => a.id === id); if (!A) return 'Unbekannt';
+    const L = (p.eq[id] | 0) + 1;
+    if (L > 4) return A.name + ' ist schon auf der höchsten Stufe';
+    const needHq = [0, 1, 1, 2, 3][L];
+    if (hqLvl() < needHq) return ARMOR_TIER[L] + '-' + A.name + ' braucht Reaktor Stufe ' + needHq;
+    const c = armorCost(id, L);
+    if (!eqCostOk(p, c)) return 'Nicht genug Material: ' + eqCostText(c);
+    eqPay(p, c); p.eq[id] = L;
+    if (id === 'v') recalcMaxHp0(p);
+    burst(p.x, p.y, ARMOR_COL[L], 22, 150, 0.6, 3); ring(p.x, p.y, 60, 0.4, ARMOR_COL[L]);
+    sfxFor(p, 'upgrade'); toastFor(p, A.icon + ' ' + ARMOR_TIER[L] + '-' + A.name + ' hergestellt: ' + A.stat(L), '#ffe27a');
+    return null;
+  }
+  const C = CONS.find(c => c.id === id); if (!C) return 'Unbekannt';
+  if ((p.cons[id] | 0) >= CONS_MAX) return 'Du kannst höchstens ' + CONS_MAX + ' ' + C.name + ' tragen';
+  if (!eqCostOk(p, C.cost)) return 'Nicht genug Material: ' + eqCostText(C.cost);
+  eqPay(p, C.cost); p.cons[id] = (p.cons[id] | 0) + 1;
+  sfxFor(p, 'click'); toastFor(p, C.icon + ' ' + C.name + ' hergestellt (' + p.cons[id] + '/' + CONS_MAX + ')', '#ffe27a');
+  return null;
+}
+function actCraftEq(kind, id) {
+  if (NET.role === 'client') { netSendR({ t: 'craftEq', k: kind, id }); SFX.play('click'); return; }
+  const err = craftEquip(S.player, kind, id);
+  if (err) { toast(err, '#ff7b6b'); SFX.play('error', undefined, undefined, true); }
+}
+// Verbrauchsgegenstand benutzen (Host). a = Zielpunkt
+function useCons(p, id, a) {
+  if (!p || p.dead > 0 || (p.useCd || 0) > 0 || !(p.cons[id] > 0)) return;
+  const C = CONS.find(c => c.id === id); if (!C) return;
+  if (id === 'med') {
+    if (p.hp >= p.maxHp) { toastFor(p, 'Du hast schon volle HP', '#aaa'); return; }
+    p.hp = Math.min(p.maxHp, p.hp + p.maxHp * 0.5);
+    burst(p.x, p.y, '#7dff9a', 20, 120, 0.7, 3, -40); ring(p.x, p.y, 50, 0.4, '#7dff9a'); sfxFor(p, 'upgrade');
+  } else {
+    let tx = a.x, ty = a.y; const d = Math.hypot(tx - p.x, ty - p.y), mx = 7 * TS;
+    if (d > mx) { tx = p.x + (tx - p.x) / d * mx; ty = p.y + (ty - p.y) / d * mx; }
+    const T = 0.45 + Math.min(d, mx) / mx * 0.4;
+    S.projs.push({ k: 'bomb', sx: p.x, sy: p.y, x: p.x, y: p.y, tx, ty, t: 0, T, h: 0, owner: p.id, team: tidOf(p),
+      dmg: id === 'gren' ? 80 + 35 * hqLvl() : 0, splash: id === 'gren' ? 2.3 * TS : 0, molo: id === 'molo' });
+    SFX.play('bow', p.x, p.y);
+  }
+  p.cons[id]--; p.useCd = 0.6;
+}
+function actUse(id) {
+  const p = S.player, C = CONS.find(c => c.id === id);
+  if (!p || !C || mode !== 'play') return;
+  if (!(p.cons[id] > 0)) { toast('Kein ' + C.name + ' – stell eins im Inventar her (I → Ausrüstung)', '#ff9a7a'); SFX.play('error', undefined, undefined, true); return; }
+  const a = aimPoint();
+  if (NET.role === 'client') { netSendR({ t: 'use', id, x: a.x | 0, y: a.y | 0 }); return; }
+  useCons(p, id, a);
+}
+// Feuerflächen vom Molotow
+function addFire(x, y, owner) { S.fires.push({ x, y, r: 1.9 * TS, t: 5, tick: 0, owner }); burst(x, y, '#ff8a2a', 24, 200, 0.6, 4); SFX.play('boom', x, y); }
+function updFires(dt) {
+  for (const f of S.fires) {
+    f.t -= dt; f.tick -= dt;
+    if (f.tick <= 0 && !S.isClient) {
+      f.tick = 0.35;
+      const ow = f.owner !== undefined ? pById(f.owner) : null;
+      forZ(f.x, f.y, f.r + 30, z => { if (Math.hypot(z.x - f.x, z.y - f.y) < f.r + z.r) { if (ow) z.lastHit = ow; hurtZombie(z, 7 + 3 * hqLvl(), null, true); } });
+    }
+    if (!HEADLESS && Math.random() < 0.7) burst(f.x + rand(-f.r, f.r) * 0.7, f.y + rand(-f.r, f.r) * 0.7, Math.random() < 0.5 ? '#ff9a3a' : '#ffd36b', 1, 40, 0.5, 3, -80);
+  }
+  S.fires = S.fires.filter(f => f.t > 0);
+}
 let forgeOpen = false;
 // Inventar & Bau-Menü (Taste I): alle Gebäude hier, in der Leiste nur die zuletzt benutzten
-let craftOpen = false, craftHover = null;
+let craftOpen = false, craftHover = null, craftTab = 'b';
 let recentB = ['wall', 'arrow', 'mine', 'door'];
 const CRAFT_CATS = [['🛡 Verteidigung', ['wall', 'door', 'trap']], ['🎯 Türme', ['arrow', 'cannon', 'mage', 'bomb', 'frost']], ['⚙ Basis & Wirtschaft', ['mine', 'harv', 'heal']]];
 const buildKey = id => { const e = BAR_ORDER.find(b => b[0] === id); return e ? String(e[1]) : ''; };
@@ -2067,7 +2181,7 @@ function movePlayer(p, dt) {
   let mx = p.inp.mx, my = p.inp.my;
   const ml = Math.hypot(mx, my);
   const onMtn = S.res[tileAt(p.x, p.y)] === 6;
-  const spd = 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0)) * (p.rageT > 0 ? 1.2 : 1) * (biomeAtW(p.x, p.y) === 4 && !onMtn ? 0.85 : 1) * (onMtn ? 0.75 : 1);
+  const spd = 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0) + armorSpd(p)) * (p.rageT > 0 ? 1.2 : 1) * (biomeAtW(p.x, p.y) === 4 && !onMtn ? 0.85 : 1) * (onMtn ? 0.75 : 1);
   // Sprung
   if (p.z > 0 || p.vz > 0) { p.vz -= 1500 * dt; p.z = Math.max(0, p.z + p.vz * dt); if (p.z <= 0) { p.vz = 0; if (!HEADLESS) burst(p.x, p.y + 8, '#a89a88', 4, 60, 0.35, 2.5); } }
   if (ml > 0) { mx /= ml; my /= ml; p.x += mx * spd * dt; p.y += my * spd * dt; p.walk += dt * 10; }
@@ -2123,7 +2237,7 @@ function playerAttack(p) {
   if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
   const T = TOOLS[p.tool] || TOOLS.sword, L = p.tl[p.tool] || 1, mul = (1 + 0.3 * (hqLvl() - 1)) * toolMul(L) * (p.rageT > 0 ? 1.4 : 1) * clanBonus(p);
   const ranged = p.tool === 'bow' || p.tool === 'staff', melee = (1 + 0.15 * p.sk.str), rangedM = (1 + 0.12 * p.sk.bow);
-  p.cd = T.cd * (ranged ? 1 - 0.06 * p.sk.bow : 1); p.swing = 0.22;
+  p.cd = T.cd * (ranged ? 1 - 0.06 * p.sk.bow : 1) * (1 - armorAtk(p)); p.swing = 0.22;
   if (p.tool === 'bow') {
     const sp = 760, n = L >= 5 ? 3 : L >= 3 ? 2 : 1;
     for (let k = 0; k < n; k++) {
@@ -2183,7 +2297,7 @@ function playerAttack(p) {
       giveXp(p, kind === 3 || kind === 7 ? amt * 2 : kind === 5 ? amt * 5 : amt);
       if (kind === 1) { S.wood += amt; SFX.play('chop', cx, cy); burst(cx, cy, '#a0763f', 6, 120, 0.45, 2.5); burst(cx, cy, '#4f8a3a', 4, 90, 0.6, 3); floatText(cx, cy - 18, '+' + amt + ' Holz', '#e0b070', 13); }
       else if (kind === 2) { S.stone += amt; SFX.play('mine', cx, cy); burst(cx, cy, '#a8a8b0', 7, 140, 0.4, 2.5); floatText(cx, cy - 18, '+' + amt + ' Stein', '#d0d0e0', 13); }
-      else if (kind === 7) { S.iron += amt; SFX.play('mine', cx, cy); burst(cx, cy, '#a8582a', 8, 140, 0.45, 2.5); burst(cx, cy, '#8a8a92', 5, 120, 0.4, 2.5); floatText(cx, cy - 18, '+' + amt + ' Eisen', '#c8d0dc', 13); }
+      else if (kind === 7) { if (Math.random() < 0.25) giveMat(p, 'e', 1); if (Math.random() < 0.15) giveMat(p, 'h', 1); if (Math.random() < 0.2) giveMat(p, 'c', 1); S.iron += amt; SFX.play('mine', cx, cy); burst(cx, cy, '#a8582a', 8, 140, 0.45, 2.5); burst(cx, cy, '#8a8a92', 5, 120, 0.4, 2.5); floatText(cx, cy - 18, '+' + amt + ' Eisen', '#c8d0dc', 13); }
       else if (kind === 5) { S.gold += amt * 6; S.goldEarned += amt * 6; S.crystals = (S.crystals || 0) + amt; SFX.play('zap', cx, cy); burst(cx, cy, '#c890ff', 10, 160, 0.5, 2.5); floatText(cx, cy - 18, '+' + amt * 6 + ' Gold ✦', '#d8b4ff', 14); }
       else { S.gold += amt * 2; S.goldEarned += amt * 2; SFX.play('goldore', cx, cy); burst(cx, cy, '#f2c94c', 8, 150, 0.45, 2.5); floatText(cx, cy - 18, '+' + amt * 2 + ' Gold', '#ffd36b', 13); }
       return;
@@ -2204,7 +2318,7 @@ function updProjs(dt) {
       pr.t += dt;
       const f = Math.min(1, pr.t / pr.T);
       pr.x = lerp(pr.sx, pr.tx, f); pr.y = lerp(pr.sy, pr.ty, f); pr.h = Math.sin(f * Math.PI) * 90;
-      if (f >= 1) { pr.dead = true; explode(pr.x, pr.y, pr.splash, pr.dmg, true); }
+      if (f >= 1) { pr.dead = true; if (pr.molo) addFire(pr.x, pr.y, pr.owner); else explode(pr.x, pr.y, pr.splash, pr.dmg, true, pr.owner !== undefined ? pById(pr.owner) : null); }
       continue;
     }
     pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.life -= dt;
@@ -2288,6 +2402,8 @@ function update(dt) {
   buildHash();
   updBuildings(dt);
   updProjs(dt);
+  updFires(dt);
+  for (const q of S.players) if (q.useCd > 0) q.useCd -= dt;
   updFx(dt);
   if (S.phase === 'night' && S.zombies.length) {
     S.groanT -= dt;
@@ -2705,7 +2821,7 @@ function runCommand(p, text) {
     sysMsg(p, 'Befehle: /afk · /full (Vollbild) · /heim (zur Basis) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
     sysMsg(p, 'Jeder hat seine eigene Basis. Im Clan teilt ihr Reaktor, Rohstoffe und Gebäude.');
     sysMsg(p, 'Clans: /clan gründen <Name> · /clan einladen <Spieler> · /clan beitreten <Name> · /clan verlassen · /clan offen · /clan kick <Spieler> · /clan info');
-    sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · G Markierung · N Ton · 3D: rechte Maus ziehen bzw. , . = Kamera drehen · O = Ego-Perspektive');
+    sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · Y Markierung · I Inventar · L Medkit · G Granate · Z Molotow · N Ton · O = Ego-Perspektive');
     sysMsg(p, '🥚 Psst … in diesem Spiel sind ' + EGGS.length + ' Easter Eggs versteckt. Viel Spaß beim Suchen!', '#ffe27a');
   } else if (cmd === 'team' || cmd === 't' || cmd === 'tc') {
     if (!p.clan) { sysMsg(p, 'Du bist in keinem Clan. Gründe einen mit /clan gründen <Name>', '#ff9a7a'); return; }
@@ -2894,12 +3010,13 @@ function netHostTick(dt) {
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
         S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0)],
-    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '']),
+    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '', [p.eq.h, p.eq.v, p.eq.g, p.eq.b, p.mat.c, p.mat.e, p.mat.h, p.cons.med, p.cons.gren, p.cons.molo]]),
     ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
     tm: [...S.teams.values()].map(t => [t.id, r2(t.wood), r2(t.stone), r2(t.gold), r2(t.iron || 0), Math.floor(t.goldEarned || 0), t.name || '']),
     an: (S.animals || []).map(a => [a.id, ATYPES.indexOf(a.type), a.x | 0, a.y | 0, r2(a.face), Math.round(100 * a.hp / a.maxHp), a.flash > 0 ? 1 : 0, a.vx | 0, a.vy | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0, z.frostT > 0 ? 1 : 0, z.golden ? 1 : 0]),
+    fi: S.fires.map(f => [f.x | 0, f.y | 0, f.r | 0, r2(f.t)]),
     pr: S.projs.map(q => [PKINDS.indexOf(q.k), q.x | 0, q.y | 0, q.k === 'bomb' ? ((q.tx - q.sx) / q.T) | 0 : q.vx | 0, q.k === 'bomb' ? ((q.ty - q.sy) / q.T) | 0 : q.vy | 0, q.h | 0]),
     bd,
   });
@@ -2934,6 +3051,11 @@ function hostHandleClient(m, p) {
     respecSkills(p);
   } else if (m.t === 'egg') {
     hostEgg(p, String(m.id));
+  } else if (m.t === 'craftEq') {
+    const err = craftEquip(p, m.k === 'a' ? 'a' : 'c', String(m.id));
+    if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
+  } else if (m.t === 'use') {
+    useCons(p, String(m.id), { x: clamp(+m.x || 0, 0, WORLD), y: clamp(+m.y || 0, 0, WORLD) });
   } else if (m.t === 'tool') {
     const err = upgradeTool(p, String(m.id));
     if (err) netSendR({ t: 'T', text: err, color: '#ff7b6b', err: 1 });
@@ -2994,7 +3116,7 @@ async function clientInitMap(m) {
   SFX.init();
   banner('Verbunden!', 'Ihr baut gemeinsam – Ressourcen werden geteilt', '#7fd8ff');
   netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin) });
-  addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit G.', '#8fe08f');
+  addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit Y.', '#8fe08f');
 }
 function clientBuildings(list) {
   const old = S.bById;
@@ -3030,6 +3152,7 @@ function clientSnapshot(m) {
     p.hp = a[5]; p.maxHp = a[6]; p.dead = a[7]; if (a[9]) p.flash = 0.15;
     if (p !== S.player && a[11]) p.name = a[11];
     if (p !== S.player && a[24]) p.skin = a[24];
+    if (a[25]) { const e = a[25]; p.eq = { h: e[0], v: e[1], g: e[2], b: e[3] }; p.mat = { c: e[4], e: e[5], h: e[6] }; p.cons = { med: e[7], gren: e[8], molo: e[9] }; }
     p.afk = !!a[16];
     if (a[12]) {
       if (p === S.player && a[12] > p.lvl) SFX.play('levelup', undefined, undefined, true);
@@ -3065,6 +3188,7 @@ function clientSnapshot(m) {
     return z;
   });
   S.projs = m.pr.map(a => ({ k: PKINDS[a[0]], x: a[1], y: a[2], vx: a[3], vy: a[4], h: a[5], r: 6 }));
+  S.fires = (m.fi || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], tick: 1 }));
   if (m.ch) S.chests = m.ch.map(a => ({ id: a[0], x: a[1], y: a[2] }));
   if (m.po) { S.portal = { x: m.po[0], y: m.po[1] }; S.portal2 = { x: m.po[2], y: m.po[3] }; }
   for (const a of m.bd) {
@@ -4082,6 +4206,7 @@ function drawTouchUI() {
     ['⤒', 'Springen', () => jump()],
     ['🛠', 'Bauen', () => toggleCraft()],
     ['☰', 'Mehr', () => { touch.more = !touch.more; }],
+    ...CONS.filter(c => S.player.cons && S.player.cons[c.id] > 0).map(c => [c.icon, c.name, () => actUse(c.id)]),
   ];
   if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
   if (S.sel && !S.sel.dead) btns.push(['✖', 'Schließen', () => { S.sel = null; }]);
@@ -4329,6 +4454,19 @@ function drawHUD() {
   });
   text('+' + goldRate().toFixed(1) + ' Gold/s', 48, 136, 12, '#b8a060', 'left', '600');
   text('☠ ' + S.kills, 196, 136, 12, '#ff9a9a', 'right', '600');
+  // Material & Verbrauchsgegenstände des Spielers
+  if (p.mat) {
+    const oy = S.hq && VW / 2 + 150 + 240 > VW ? 28 : 0;   // Platz für die Reaktor-Anzeige auf schmalen Bildschirmen
+    panel(12, 162 + oy, 200, 58);
+    MATS.forEach((m, i) => { text(m.icon, 26 + i * 64, 178 + oy, 13, '#fff', 'left'); text(String(p.mat[m.id] | 0), 46 + i * 64, 178 + oy, 13, m.col, 'left', '700'); });
+    CONS.forEach((c, i) => {
+      const n = p.cons[c.id] | 0, bx = 18 + i * 64, by = 192 + oy;
+      ctx.fillStyle = n ? 'rgba(255,170,90,0.18)' : 'rgba(255,255,255,0.05)'; rr(bx, by, 58, 22, 5); ctx.fill();
+      ctx.save(); if (!n) ctx.globalAlpha = 0.4; text(c.icon + ' ' + n, bx + 6, by + 11, 12, '#fff', 'left', '700'); ctx.restore();
+      if (!isTouch) text(c.key, bx + 52, by + 11, 10, '#c89a6a', 'right', '700');
+      ui.push({ x: bx, y: by, w: 58, h: 22, fn: () => actUse(c.id) });
+    });
+  }
 
   // Phase & Countdown
   const pw = 300; const px = VW / 2 - pw / 2;
@@ -4528,7 +4666,7 @@ function drawHUD() {
   drawChat();
   // Steuerungshinweis
   if (!isTouch && VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
-    const lines = ['WASD laufen · Maus umsehen · Linksklick angreifen · Mausrad Kamera-Abstand · O Ego-Perspektive', 'Q E R C V B Waffen · H Schmiede · 1–0 Bauen · G Markierung · T Chat', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
+    const lines = ['WASD laufen · Maus umsehen · Linksklick angreifen · Mausrad Kamera-Abstand · O Ego-Perspektive', 'Q E R C V B Waffen · H Schmiede · I Inventar · 1–0 Bauen · Y Markierung · T Chat · L Medkit · G Granate · Z Molotow', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
     lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
   }
   if (skillsOpen) drawSkills();
@@ -4706,8 +4844,15 @@ function drawCraft() {
   const h = Math.min(VH - 24, Math.max(side ? 470 : 0, 64 + invH + rowsH + 40)), x = VW / 2 - w / 2, y = Math.max(12, VH / 2 - h / 2 - 30);
   panel(x, y, w, h, 0.96);
   ui.push({ x, y, w, h, fn: () => {} });
-  text('🛠 Inventar & Bauen', x + 18, y + 24, 20, '#ffe27a');
-  if (w > 620 && !isTouch) text('Gebäude anklicken → platzieren · I / ESC = schließen', x + w - 50, y + 24, 12, '#999', 'right', '600');
+  text('🛠 Inventar', x + 18, y + 24, 20, '#ffe27a');
+  [['b', '🏗 Gebäude'], ['eq', '🛡 Ausrüstung']].forEach(([id, l], i) => {
+    const tx = x + 150 + i * 140, on = craftTab === id;
+    ctx.fillStyle = on ? '#8a4a1e' : 'rgba(255,255,255,0.07)'; rr(tx, y + 10, 132, 28, 6); ctx.fill();
+    ctx.strokeStyle = on ? '#ffb070' : 'rgba(170,100,60,0.4)'; ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+    text(l, tx + 66, y + 24, 13, on ? '#fff' : '#ccc', 'center', '700');
+    ui.push({ x: tx, y: y + 8, w: 132, h: 32, fn: () => { craftTab = id; SFX.play('click'); } });
+  });
+  if (w > 760 && !isTouch) text(craftTab === 'eq' ? 'I / ESC = schließen' : 'Gebäude anklicken → platzieren · I / ESC = schließen', x + w - 50, y + 24, 12, '#999', 'right', '600');
   text('×', x + w - 20, y + 23, 20, '#aaa', 'center');
   ui.push({ x: x + w - 34, y: y + 6, w: 30, h: 30, fn: () => { craftOpen = false; } });
   // --- Inventar
@@ -4720,7 +4865,9 @@ function drawCraft() {
     resIcon(k, rx + 13, ry); text(n, rx + 32, ry - 6, 11, '#aaa', 'left', '600'); text(String(Math.floor(v)), rx + 32, ry + 8, 15, c, 'left');
   });
   if (side) {
-    let ty = iy + 40 + 4 * 34 + 8;
+    let ty = iy + 40 + 4 * 34 + 2;
+    MATS.forEach((m, i) => { text(m.icon, ix + 12 + i * 70, ty, 14, '#fff', 'left'); text(String(p.mat[m.id] | 0), ix + 34 + i * 70, ty, 14, m.col, 'left', '700'); });
+    ty += 22;
     text('WERKZEUGE', ix + 12, ty, 11, '#c89a6a', 'left', '700'); ty += 12;
     TOOL_ORDER.forEach((id, i) => {
       const L = p.tl[id] || 0, tx = ix + 12 + (i % 3) * 70, yy = ty + Math.floor(i / 3) * 62;
@@ -4738,6 +4885,7 @@ function drawCraft() {
     text(S.hq ? 'Reaktor Stufe ' + S.hq.lvl : 'Noch kein Reaktor', ix + 12, ty + 18, 12, '#ddd', 'left', '600');
     text(nb + ' Gebäude · ' + (S.counts.wall || 0) + ' Mauern', ix + 12, ty + 34, 12, '#aaa', 'left', '600');
   }
+  if (craftTab === 'eq') { drawEquipTab(x + gx0, y + 46 + invH, gw, h - 46 - invH - 12); return; }
   // --- Gebäude
   let cy = y + 46 + invH;
   craftHover = null;
@@ -4781,6 +4929,64 @@ function drawCraft() {
     const d = BDEF[craftHover.id];
     text(d.name + ': ' + d.desc + (craftHover.full ? '  (Maximum erreicht)' : ''), x + gx0 + 10, by + 13, 12, craftHover.full ? '#ff9a8a' : '#e8dcd0', 'left', '600');
   } else text(isTouch ? 'Tippe ein Gebäude an, um es zu platzieren.' : 'Die letzten 4 Gebäude liegen unten in der Leiste – Tasten 1–0, F, J gehen weiterhin.', x + gx0 + 10, by + 13, 12, '#999', 'left', '600');
+}
+// Ausrüstungs-Seite im Inventar: Rüstung (4 Plätze) und Verbrauchsgegenstände
+function drawEquipTab(x, y, w, h) {
+  const p = S.player;
+  const card = (cx, cy, cw, ch, on) => {
+    const gr = ctx.createLinearGradient(0, cy, 0, cy + ch); gr.addColorStop(0, on ? '#3e3630' : '#2a2622'); gr.addColorStop(1, '#151210');
+    ctx.fillStyle = gr; rr(cx, cy, cw, ch, 8); ctx.fill(); ctx.strokeStyle = on ? '#c88a4a' : 'rgba(170,100,60,0.4)'; ctx.lineWidth = on ? 2 : 1; ctx.stroke();
+  };
+  const btn = (bx, by, bw, label, ok, fn) => {
+    ctx.fillStyle = ok ? '#8a4a1e' : 'rgba(255,255,255,0.06)'; rr(bx, by, bw, 26, 5); ctx.fill();
+    ctx.strokeStyle = ok ? '#ffb070' : 'rgba(170,100,60,0.3)'; ctx.lineWidth = 1; ctx.stroke();
+    text(label, bx + bw / 2, by + 13, 12, ok ? '#fff' : '#999', 'center', '700');
+    ui.push({ x: bx, y: by, w: bw, h: 26, fn });
+  };
+  const costLine = (c, cx, cy) => {
+    const parts = [['w', c.w], ['s', c.s], ['g', c.g], ['i', c.i]].filter(e => e[1]);
+    let px = cx;
+    withTeam(teamOf(p), () => {
+      for (const [k, v] of parts) { const have = k === 'w' ? S.wood : k === 's' ? S.stone : k === 'g' ? S.gold : S.iron || 0;
+        ctx.save(); ctx.translate(px + 7, cy); ctx.scale(0.55, 0.55); resIcon(k, 0, 0); ctx.restore();
+        text(String(v), px + 16, cy, 11, have >= v ? '#e8e0d0' : '#ff6b5b', 'left', '700'); px += 26 + String(v).length * 6; }
+    });
+    for (const m of MATS) if (c[m.id]) { text(m.icon, px, cy, 11, '#fff', 'left'); text(String(c[m.id]), px + 16, cy, 11, (p.mat[m.id] | 0) >= c[m.id] ? '#e8e0d0' : '#ff6b5b', 'left', '700'); px += 28 + String(c[m.id]).length * 6; }
+  };
+  text('🛡 RÜSTUNG', x + 4, y + 12, 13, '#ffcf8a', 'left', '700');
+  text('Reduziert Schaden: ' + Math.round(armorRed(p) * 100) + ' %', x + w - 4, y + 12, 12, '#aaa', 'right', '600');
+  const cols = w > 560 ? 4 : 2, cw = (w - (cols - 1) * 8) / cols, ch = 150, rowsA = Math.ceil(ARMOR.length / cols);
+  ARMOR.forEach((A, i) => {
+    const cx = x + (i % cols) * (cw + 8), cy = y + 26 + Math.floor(i / cols) * (ch + 8), L = p.eq[A.id] | 0, nx = L + 1;
+    card(cx, cy, cw, ch, L > 0);
+    ctx.fillStyle = ARMOR_COL[L]; rr(cx + 10, cy + 10, 40, 40, 8); ctx.fill();
+    text(A.icon, cx + 30, cy + 31, 22, '#fff', 'center');
+    text(A.name, cx + 58, cy + 22, 14, '#fff', 'left', '700');
+    text(L ? ARMOR_TIER[L] : 'nicht hergestellt', cx + 58, cy + 40, 11, L ? ARMOR_COL[L] === '#4a5a3a' ? '#9ac07a' : ARMOR_COL[L] : '#888', 'left', '700');
+    text(L ? A.stat(L) : '—', cx + 10, cy + 66, 11, '#cfe8ff', 'left', '600');
+    if (nx <= 4) {
+      const c = armorCost(A.id, nx);
+      text('→ ' + ARMOR_TIER[nx] + ': ' + A.stat(nx), cx + 10, cy + 86, 10, '#aaa', 'left', '600');
+      costLine(c, cx + 10, cy + 104);
+      const ok = withTeam(teamOf(p), () => eqCostOk(p, c)) && hqLvl() >= [0, 1, 1, 2, 3][nx];
+      btn(cx + 10, cy + ch - 34, cw - 20, hqLvl() < [0, 1, 1, 2, 3][nx] ? 'Reaktor Stufe ' + [0, 1, 1, 2, 3][nx] + ' nötig' : (L ? 'Verbessern' : 'Herstellen'), ok, () => actCraftEq('a', A.id));
+    } else text('★ Höchste Stufe', cx + cw / 2, cy + ch - 22, 13, '#ffd36b', 'center', '700');
+  });
+  let cy0 = y + 26 + rowsA * (ch + 8) + 8;
+  text('🎒 VERBRAUCHSGEGENSTÄNDE', x + 4, cy0 + 8, 13, '#ffcf8a', 'left', '700');
+  text(isTouch ? 'Benutzen: Knöpfe rechts' : 'Benutzen: Tasten L · G · Z (oder anklicken oben links)', x + w - 4, cy0 + 8, 12, '#aaa', 'right', '600');
+  const ccols = w > 560 ? 3 : 2, ccw = (w - (ccols - 1) * 8) / ccols, cch = Math.max(96, Math.min(120, y + h - cy0 - 26));
+  CONS.forEach((C, i) => {
+    const cx = x + (i % ccols) * (ccw + 8), cy = cy0 + 22 + Math.floor(i / ccols) * (cch + 8), n = p.cons[C.id] | 0;
+    card(cx, cy, ccw, cch, n > 0);
+    text(C.icon, cx + 26, cy + 24, 24, '#fff', 'center');
+    text(C.name + (isTouch ? '' : ' (' + C.key + ')'), cx + 48, cy + 18, 14, '#fff', 'left', '700');
+    text(n + ' / ' + CONS_MAX, cx + ccw - 10, cy + 18, 12, n ? '#ffd36b' : '#888', 'right', '700');
+    wrapLines(C.desc, ccw - 58, '600 10px ' + FONT).slice(0, 2).forEach((l, k) => text(l, cx + 48, cy + 36 + k * 12, 10, '#bbb', 'left', '600'));
+    costLine(C.cost, cx + 10, cy + cch - 48);
+    const ok = n < CONS_MAX && withTeam(teamOf(p), () => eqCostOk(p, C.cost));
+    btn(cx + 10, cy + cch - 34, ccw - 20, n >= CONS_MAX ? 'Voll' : 'Herstellen', ok, () => actCraftEq('c', C.id));
+  });
 }
 function drawForge() {
   const p = S.player, rowH = 64;
@@ -5144,7 +5350,11 @@ if (!HEADLESS) {
     const dm = /^(Digit|Numpad)([0-9])$/.exec(e.code);
     if (dm) { selectBuild(KEY_BUILD[dm[2]]); return; }
     if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOpen(); return; }
-    if (e.code === 'KeyG') { const a = aimPoint(); pingAt(a.x, a.y); return; }
+    { const k = (e.key || '').toLowerCase();
+      if (k === 'y') { const a = aimPoint(); pingAt(a.x, a.y); return; }
+      if (k === 'l') { actUse('med'); return; }
+      if (k === 'g') { actUse('gren'); return; }
+      if (k === 'z') { actUse('molo'); return; } }
     if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyI') { toggleCraft(); return; }
@@ -5324,7 +5534,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { SET, lanConnect, spawnZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,

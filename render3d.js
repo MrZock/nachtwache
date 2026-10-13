@@ -24,6 +24,7 @@
     look(dx, dy) { const k = 0.0024 * (R3.lookSens || 1); R3.yaw -= dx * k; R3.yawT = R3.yaw; R3.pitch = Math.max(-1.25, Math.min(0.7, R3.pitch - dy * k)); },
     rotate(d, instant, reset) { if (reset) { R3.yawT = Math.round(R3.yaw / TAU) * TAU; return; } R3.yawT += d; if (instant) R3.yaw = R3.yawT; },
     zoom(dy) { R3.zoomLevel = Math.min(1.8, Math.max(0.55, R3.zoomLevel * (dy > 0 ? 1.1 : 1 / 1.1))); },
+    stats() { const r = renderer.info.render; return { calls: r.calls, tris: r.triangles, geos: renderer.info.memory.geometries }; },
   };
 
   // ---------------------------------------------------------------- Materialien
@@ -787,6 +788,15 @@
       tk.lit(BX(0.04, 0.62, 0.07), '#3a2a1a', -0.16, 0.74, 0, 0.75, 0, 0).lit(BX(0.05, 0.05, 0.12), '#c8a040', -0.17, 0.95, 0.2, 0.75, 0, 0)
         .lit(CY(0.022, 0.022, 0.14, 6), '#5a3a1a', -0.17, 1.02, 0.28, 0.75, 0, 0).lit(BX(0.26, 0.03, 0.03), '#4a3020', 0, 0.72, 0, 0.75, 0, 0);
     }
+    // Rüstung (aus der Ausrüstung): Weste, Stiefel, Handschuhe, Helm-Farbe
+    const EQ = p.eq || {}, AC = G.ARMOR_COL || [];
+    if (EQ.v) {
+      const c = AC[EQ.v], cd = '#' + col.set(c).offsetHSL(0, 0, -0.1).getHexString();
+      tk.lit(BX(0.04, 0.3, 0.34), c, 0.135, 0.7, 0).lit(BX(0.04, 0.26, 0.32), c, -0.135, 0.7, 0)
+        .lit(BX(0.27, 0.04, 0.42), cd, 0, 0.6, 0).lit(BX(0.015, 0.06, 0.1), '#2a2a2a', 0.158, 0.76, 0.08).lit(BX(0.015, 0.06, 0.1), '#2a2a2a', 0.158, 0.76, -0.08);
+      if (EQ.v >= 3) for (const s of [-1, 1]) tk.lit(BX(0.2, 0.1, 0.16), cd, 0, 0.9, s * 0.23, s * -0.4, 0, 0);
+    }
+    if (EQ.b) for (const s of [-1, 1]) tk.lit(BX(0.23, 0.12, 0.18), AC[EQ.b], 0.035, 0.06, s * 0.09);
     mesh(tk.build().lit);
     const gg = gk.build().glow; if (gg) mesh(gg, body, 0, 0, 0, matGlow);
     // Kopf
@@ -828,6 +838,7 @@
     if (goggles) hk.lit(BX(0.285, 0.035, 0.285), '#2a2622', 0, gogY, 0)
       .lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, gogY, 0.065, 0, 0, Math.PI / 2).lit(CY(0.05, 0.05, 0.05, 8), '#5a4a3a', 0.15, gogY, -0.065, 0, 0, Math.PI / 2);
     const hb = hk.build();
+    if (p.eq && p.eq.h) steel.color.set(['#9aa0a8', '#a07a50', '#8a6440', '#c8d0d8', '#5a6a48'][p.eq.h]);
     mesh(hb.lit, head); const helm = mesh(hb.metal, head, 0, 0, 0, steel);
     const lk = new Kit();
     if (goggles) lk.glow(CY(0.038, 0.038, 0.012, 8), LENS, 0.176, gogY, 0.065, 0, 0, Math.PI / 2).glow(CY(0.038, 0.038, 0.012, 8), LENS, 0.176, gogY, -0.065, 0, 0, Math.PI / 2);
@@ -837,7 +848,7 @@
     const arms = [];
     const armG = new Kit().lit(BX(0.1, 0.17, 0.1), J, 0, -0.085, 0).lit(BX(0.105, 0.05, 0.105), Jd, 0, -0.17, 0)
       .lit(BX(0.115, 0.1, 0.115), '#6a5e52', 0, -0.23, 0).lit(BX(0.118, 0.02, 0.118), '#8a4a2a', 0, -0.2, 0)
-      .lit(BX(0.11, 0.09, 0.11), '#3a2a1a', 0, -0.32, 0).lit(BX(0.04, 0.05, 0.05), '#3a2a1a', 0.05, -0.33, 0.03).build().lit;
+      .lit(BX(0.11, 0.09, 0.11), p.eq && p.eq.g ? (G.ARMOR_COL || [])[p.eq.g] : '#3a2a1a', 0, -0.32, 0).lit(BX(0.04, 0.05, 0.05), '#3a2a1a', 0.05, -0.33, 0.03).build().lit;
     for (const s of [-1, 1]) { const ga = new T.Group(); ga.position.set(0, 0.82, s * 0.255); body.add(ga); mesh(armG, ga); arms.push(ga); }
     const tool = new T.Group(); tool.position.set(0.28, 0.52, 0.28); body.add(tool);
     const tools = {};
@@ -848,10 +859,12 @@
     }
     const sh = new T.Mesh(geo('shadowDisc', () => new T.CircleGeometry(0.3, 16).rotateX(-Math.PI / 2)), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.25, depthWrite: false }));
     sh.position.y = 0.02; grp.add(sh);
-    grp.userData = { body, legs, arms, head, helm, tool, tools, mat, metal, skin: p.skin || '' };
+    grp.userData = { body, legs, arms, head, helm, tool, tools, mat, metal, skin: lookKey(p) };
     return grp;
   }
   function makePlayer(p) { const grp = buildPlayer(p); scene.add(grp); return grp; }
+  // Aussehen = Skin + Rüstungsstufen; nur wenn sich das ändert, wird das Modell neu gebaut
+  function lookKey(p) { const e = p.eq; return (p.skin || '') + '|' + (e ? e.h + '' + e.v + e.g + e.b : ''); }
 
   // Vorschau für den Skin-Editor im Hauptmenü (eigener kleiner Renderer)
   let pvR = null, pvScene = null, pvCam = null, pvObj = null, pvKey = '';
@@ -1093,6 +1106,7 @@
     glows.setMatrixAt(gN, m4); glows.setColorAt(gN, col2.set(c).multiplyScalar(a)); gN++;
   }
   let quality = 2;
+  const GRASS_Q = [0.35, 0.7, 1];   // Grasdichte je Grafikstufe
   R3.setQuality = q => { quality = Math.max(0, Math.min(2, q | 0)); };
   function render(dt) {
     const S = G.S;
@@ -1135,6 +1149,13 @@
       const cp = Math.cos(R3.pitch), fx = -Math.sin(R3.yaw) * cp, fy = Math.sin(R3.pitch), fz = -Math.cos(R3.yaw) * cp;
       const rx = Math.cos(R3.yaw), rz = -Math.sin(R3.yaw), dist = 3.6 * R3.zoomLevel, side = 0.55;
       let camX = px - fx * dist + rx * side, camY = pivotY - fy * dist + 0.35, camZ = pz - fz * dist + rz * side;
+      // Kamera nicht in Gebäude oder Bäume schieben: von der Figur aus prüfen und davor stehen bleiben
+      for (let t = 0.2; t <= 1.001; t += 0.1) {
+        const sx = px + (camX - px) * t, sz = pz + (camZ - pz) * t, ti = Math.floor(sz) * MAP + Math.floor(sx);
+        if (ti >= 0 && ti < MAP * MAP && (S.bmap[ti] || S.res[ti] === 1 || S.res[ti] === 4)) {
+          const k = Math.max(0.12, t - 0.15); camX = px + (camX - px) * k; camY = pivotY + (camY - pivotY) * k + 0.25 * (1 - k); camZ = pz + (camZ - pz) * k; break;
+        }
+      }
       camY = Math.max(camY, terrainH(camX, camZ) + 0.35);
       camera.position.set(camX + shx * 0.4, camY, camZ + shz * 0.4);
       camera.lookAt(px + rx * side + fx * 12, pivotY + 0.35 + fy * 12, pz + rz * side + fz * 12);
@@ -1197,6 +1218,7 @@
       else if (b.type === 'door') addL(c.x, c.y, 1.2, '#3aff6a', 3, 3);
     }
     for (const c of S.chests) addL(c.x, c.y, 1.2, '#ffe27a', 6, 4);
+    for (const f of S.fires || []) addL(f.x, f.y, 1.0, '#ff8a2a', 16 * Math.min(1, f.t), f.r / TS * 2.2, true);
     // Straßenlaternen in der Nähe werfen echtes Licht auf den Boden
     if (night > 0.3 && S.variant) {
       const lr = 14, lx0 = Math.max(0, Math.floor(cx - lr)), lx1 = Math.min(MAP - 1, Math.ceil(cx + lr)), lz0 = Math.max(0, Math.floor(cz - lr)), lz1 = Math.min(MAP - 1, Math.ceil(cz + lr));
@@ -1217,6 +1239,7 @@
 
     // Natur in Sichtweite
     const R = 30, x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(MAP - 1, Math.ceil(cx + R));
+    const vfx = -Math.sin(R3.yaw), vfz = -Math.cos(R3.yaw);
     const z0 = Math.max(0, Math.floor(cz - R - 4)), z1 = Math.min(MAP - 1, Math.ceil(cz + R + 4));
     let npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
     const BI = S.biome || null;
@@ -1224,6 +1247,9 @@
     for (let ty = z0; ty <= z1; ty++) for (let tx = x0; tx <= x1; tx++) {
       const i = ty * MAP + tx, k = S.res[i], v = S.variant[i];
       const px = tx + 0.5, pz = ty + 0.5;
+      // Leistung: was hinter oder weit neben der Kamera liegt, wird gar nicht erst gezeichnet
+      const dxv = px - cx, dzv = pz - cz, dd = dxv * dxv + dzv * dzv;
+      if (viewOn && dd > 30 && (dxv * vfx + dzv * vfz) < 0.28 * Math.sqrt(dd)) continue;
       const bi = BI ? BI[i] : 0;
       if (!k) {
         if (S.bmap[i]) continue;
@@ -1248,7 +1274,7 @@
           if (bi === 2 && v % 19 === 0 && nbu < MAXDECO) { setInst(bushes, nbu, px, 0, pz, 0.6, 0.5, 0.6, v); bushes.setColorAt(nbu, col.setRGB(0.55, 0.48, 0.28)); nbu++; }
           continue;
         }
-        if (hv < (bi === 4 ? 0.7 : 0.45) && ngr < MAXDECO) {
+        if (hv < (bi === 4 ? 0.7 : 0.45) * GRASS_Q[quality] && ngr < MAXDECO && dd < 400) {
           const ox = (hash(i + 1) - 0.5) * 0.8, oz = (hash(i + 2) - 0.5) * 0.8, sc = 0.7 + hash(i + 3) * 0.6;
           setInst(grass, ngr, px + ox, 0, pz + oz, sc, sc * (0.8 + hv), sc, hv * 9, Math.sin(at * 2 + tx * 0.6 + ty * 0.3) * sway, Math.cos(at * 1.7 + tx * 0.4) * sway);
           if (bi === 4) col.setRGB(0.28 + hv * 0.15, 0.34 + hv * 0.12, 0.16); else col.setRGB(0.3 + hv * 0.2, 0.4 + hv * 0.2, 0.18);
@@ -1459,7 +1485,7 @@
     for (const p of S.players) {
       pseen.add(p.id);
       let o = playerObjs.get(p.id);
-      if (o && o.userData.skin !== (p.skin || '')) { scene.remove(o); o = null; }
+      if (o && o.userData.skin !== lookKey(p)) { scene.remove(o); o.userData.mat.dispose(); o.userData.metal.dispose(); o = null; }
       if (!o) { o = makePlayer(p); playerObjs.set(p.id, o); }
       o.visible = p.dead <= 0 && !(fpOn && p === S.player);
       if (fpOn && p === S.player) updateFpView(p, at);
@@ -1523,6 +1549,12 @@
     }
     parts.count = npart; done(parts);
     for (const fl of S.flashes) { const a = G.clamp(fl.life / fl.max, 0, 1); glowAt(fl.x / TS, 0.8, fl.y / TS, fl.r / TS * 1.3, '#ffb347', a * 0.9); }
+    // Molotow-Feuer: wenige flackernde Leuchtpunkte (günstig, keine eigenen Meshes)
+    for (const f of S.fires || []) {
+      const a = Math.min(1, f.t), r = f.r / TS;
+      for (let k = 0; k < 5; k++) { const an = k * 1.26 + at * 0.7, d = r * (0.2 + 0.5 * ((k * 37) % 10) / 10); glowAt(f.x / TS + Math.cos(an) * d, 0.3 + 0.25 * Math.abs(Math.sin(at * 9 + k)), f.y / TS + Math.sin(an) * d, 1.1, k % 2 ? '#ff8a2a' : '#ffcf4a', a * 0.85); }
+      glowAt(f.x / TS, 0.05, f.y / TS, r * 2.2, '#ff5a1a', a * 0.35);
+    }
 
     // Kettenblitze
     const pos = boltLines.geometry.attributes.position.array;

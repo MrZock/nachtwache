@@ -10,7 +10,7 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 - **Bauen:** Taste **I** (Handy: 🛠) öffnet „Inventar & Bauen“ mit allen Gebäuden, Rohstoffen und Werkzeugen. In der Leiste liegen nur die letzten 4 Gebäude.
 - **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 15 andere klicken „Online beitreten“ und geben den Code ein. Der Spielserver läuft auf Render.com (nachtwache.onrender.com) und wacht von selbst auf.
 
-**Steuerung (PC):** WASD laufen · **Maus umsehen** (Third-Person-Kamera hinter der Schulter; Linksklick fängt die Maus, oder rechte Maustaste halten) · Linksklick angreifen/abbauen · **O / F5 = Ego-Perspektive ↔ Third-Person** · Mausrad Kamera-Abstand · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
+**Steuerung (PC):** WASD laufen · **Maus umsehen** (Third-Person-Kamera hinter der Schulter; Linksklick fängt die Maus, oder rechte Maustaste halten) · Linksklick angreifen/abbauen · **O / F5 = Ego-Perspektive ↔ Third-Person** · Mausrad Kamera-Abstand · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · Y Markierung · I Inventar · **L Medkit · G Granate · Z Molotow** · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
 
 **Handy:** im Querformat spielen. **Zwei Joysticks:** links laufen, rechts zielen & angreifen (kurz antippen = automatisch auf den nächsten Zombie). Knöpfe am Rand: ⤒ Springen, Menü, Karte, Skills, Schmiede, ⚡ Fähigkeit, 🔄 Kamera drehen, ⛶ Vollbild, Chat, Markierung. Vollbild auch mit `/full` im Chat.
 
@@ -42,6 +42,15 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 **Schmiede (H):** Speer, Streitaxt und Plasmawerfer freischalten, alle Waffen bis Stufe 5 aufwerten. Höchststufe = Reaktor-Stufe + 1.
 
 **Chat-Befehle:** `/hilfe` zeigt alles · `/afk` · `/full` (Vollbild) · Clan-Befehle siehe oben.
+
+## Ausrüstung (4.0, Etappe 1)
+
+Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
+
+- **Rüstung** in 4 Plätzen (Helm, Weste, Handschuhe, Stiefel), je 4 Stufen: Schrott → Leder → Stahl → Militär. Helm & Weste senken Schaden, die Weste gibt HP, Handschuhe machen schneller angreifen, Stiefel schneller laufen. Rüstung sieht man am Spielermodell.
+- **Verbrauchsgegenstände** (max. 5): 🩹 Medkit (L, heilt 50 %), 💣 Granate (G, Explosion), 🔥 Molotow (Z, Feuerfläche 5 s). Am Handy erscheinen eigene Knöpfe.
+- **Neue Materialien** gehören jedem Spieler selbst: 🧵 Stoff (Zombies, Tiere), 🔌 Elektronik (Schrott, Panzerzombies, Bosse), 🧪 Chemie (Spucker, Schamanen, Schrott). Truhen geben von allem etwas.
+- Markieren jetzt mit **Y**.
 
 ## Windows-Version
 
