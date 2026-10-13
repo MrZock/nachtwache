@@ -6,10 +6,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#120d0a">
-<title>BLACKOUT – Survival Game (2D)</title>
+<title>BLACKOUT – 3D Survival Game</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #120d0a; }
-  canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+  #game3d { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+  #game { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: crosshair; background: transparent; }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +18,10 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<canvas id="game3d"></canvas>
 <canvas id="game"></canvas>
+<script src="three.min.js"></script>
+<script src="render3d.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

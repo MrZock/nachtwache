@@ -4004,6 +4004,8 @@ function text(s, x, y, size, color, align, weight) {
   ctx.fillStyle = color; ctx.fillText(s, x, y);
 }
 function resIcon(kind, x, y) {
+  const im = R3 && R3.icon ? R3.icon('r', kind) : null;
+  if (im) { ctx.drawImage(im, x - 13, y - 13, 26, 26); return; }
   if (kind === 'w') { ctx.fillStyle = '#8a5a2a'; rr(x - 8, y - 5, 16, 10, 3); ctx.fill(); ctx.fillStyle = '#c89a5a'; circle(x + 7, y, 4.5); ctx.fill(); ctx.fillStyle = '#8a5a2a'; circle(x + 7, y, 1.8); ctx.fill(); }
   else if (kind === 's') { ctx.fillStyle = '#9a9aa4'; ctx.beginPath(); ctx.moveTo(x - 8, y + 6); ctx.lineTo(x - 5, y - 5); ctx.lineTo(x + 3, y - 7); ctx.lineTo(x + 8, y + 1); ctx.lineTo(x + 5, y + 6); ctx.closePath(); ctx.fill(); }
   else if (kind === 'i') { ctx.fillStyle = '#8a929e'; ctx.beginPath(); ctx.moveTo(x - 9, y + 5); ctx.lineTo(x - 5, y - 4); ctx.lineTo(x + 9, y - 4); ctx.lineTo(x + 5, y + 5); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#c8d0dc'; ctx.fillRect(x - 4, y - 3, 11, 2); }
@@ -4130,12 +4132,18 @@ function drawHUD() {
     if (hov) hoverSlot = { s, x, y };
     let afford = true;
     if (s.kind === 'build') afford = canAfford(costFor(s.id, 1)) && (s.id === 'hq' || (S.counts[s.id] || 0) < BDEF[s.id].max) && (s.id === 'hq' || !!S.hq);
-    ctx.fillStyle = sel ? 'rgba(255,226,122,0.28)' : hov ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.05)';
-    rr(x, y, SW, SW, 6); ctx.fill();
-    ctx.strokeStyle = sel ? '#ffe27a' : 'rgba(255,255,255,0.15)'; ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
+    // Slot: rostiger Metallrahmen, ausgewählt = Glut
+    const sg = ctx.createLinearGradient(0, y, 0, y + SW);
+    sg.addColorStop(0, sel ? '#5a3418' : hov ? '#3e3630' : '#2a2622'); sg.addColorStop(1, sel ? '#2a1408' : '#151210');
+    if (sel) { ctx.shadowColor = 'rgba(255,120,40,0.8)'; ctx.shadowBlur = 12; }
+    ctx.fillStyle = sg; rr(x, y, SW, SW, 5); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.strokeStyle = sel ? '#ff9a3a' : hov ? '#a86a3a' : 'rgba(170,100,60,0.45)'; ctx.lineWidth = sel ? 2.2 : 1.2; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 3, y + 3, SW - 6, SW * 0.22);
     ctx.save();
-    if (!afford) ctx.globalAlpha = 0.35;
-    if (s.kind === 'tool') drawToolIcon(s.id, x + SW / 2, y + SW / 2, SW, toolMet(p, s.id));
+    if (!afford) ctx.globalAlpha = 0.32;
+    const icon = R3 && R3.icon ? (s.kind === 'tool' ? R3.icon('t', s.id, p.tl[s.id] || 1) : s.kind === 'forge' ? R3.icon('f', 'forge') : R3.icon('b', s.id, 1)) : null;
+    if (icon) { const pad = s.kind === 'tool' ? 2 : 3, bob = sel ? Math.sin(animT * 4) * 1.2 : 0; ctx.drawImage(icon, x + pad, y + pad + bob, SW - pad * 2, SW - pad * 2); }
+    else if (s.kind === 'tool') drawToolIcon(s.id, x + SW / 2, y + SW / 2, SW, toolMet(p, s.id));
     else if (s.kind === 'forge') drawToolIcon('forge', x + SW / 2, y + SW / 2, SW);
     else {
       const sz = BDEF[s.id].size, sc = (SW - 12) / (sz * TS);
@@ -4143,7 +4151,9 @@ function drawHUD() {
       drawBuildingShape(s.id, 1, sz * TS, -Math.PI / 4, animT, false);
     }
     ctx.restore();
-    text(s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key), x + 5, y + 9, 11, '#fff', 'left');
+    { const kl = s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(x + 2, y + 2, 13, 13, 3); ctx.fill();
+      ctx.font = '10px ' + FONT_P; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = sel ? '#ffb070' : '#e8dcd0'; ctx.fillText(kl, x + 8.5, y + 9); }
     if (s.kind === 'tool' && p.tl[s.id] > 1) text(String(p.tl[s.id]), x + SW - 5, y + SW - 8, 11, TMET[p.tl[s.id] - 1], 'right');
     if (s.kind === 'forge' && TOOL_ORDER.some(k => !toolError(p, k)) && Math.sin(animT * 5) > 0) { ctx.fillStyle = '#8fe08f'; circle(x + SW - 6, y + 6, 4); ctx.fill(); }
     const sx = x;
@@ -4580,7 +4590,6 @@ function drawOverlays() {
     ctx.font = '12px ' + FONT_P; ctx.fillStyle = '#ff8a3a';
     ctx.fillText('v3.0 · DIE WELT IST DUNKEL. DEIN REAKTOR IST DAS LETZTE LICHT.', cx, y);
     // Umschalter 2D/3D
-    button(R3 ? '◀ 2D-VERSION' : '3D-VERSION ▶', VW - 210, 14, 196, 40, () => { location.href = (R3 ? 'index.html' : '3d.html') + location.search; }, !R3, true);
     if (isTouch) button(document.fullscreenElement ? 'VOLLBILD AUS' : '⛶ VOLLBILD', 14, 14, 170, 40, () => {
       const el = document.documentElement;
       if (document.fullscreenElement) document.exitFullscreen();

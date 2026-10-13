@@ -713,6 +713,68 @@
     fpMetal.color.set(G.TMET[Math.min(4, lv - 1)]);
   }
 
+  // ---------------------------------------------------------------- Icons aus den echten 3D-Modellen
+  let iconR = null, iconScene = null, iconCam = null, iconBudget = 0;
+  const iconCache = new Map();
+  function iconSetup() {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    iconR = new T.WebGLRenderer({ canvas: c, alpha: true, antialias: true, preserveDrawingBuffer: true });
+    iconR.setPixelRatio(1); iconR.setSize(128, 128, false);
+    iconR.toneMapping = T.ACESFilmicToneMapping; iconR.toneMappingExposure = 1.15;
+    iconScene = new T.Scene();
+    iconScene.add(new T.HemisphereLight(0xfff4e8, 0x40342c, 1.7));
+    const d = new T.DirectionalLight(0xffffff, 2.4); d.position.set(3, 6, 4); iconScene.add(d);
+    const r = new T.DirectionalLight(0xff9a50, 1.0); r.position.set(-4, 2, -3); iconScene.add(r);
+    iconCam = new T.OrthographicCamera(-1, 1, 1, -1, 0.01, 100);
+  }
+  function iconModel(kind, id, lvl) {
+    const grp = new T.Group();
+    const add = (geom, mat, x, y, z) => { const m = new T.Mesh(geom, mat); m.position.set(x || 0, y || 0, z || 0); grp.add(m); return m; };
+    if (kind === 'b') {
+      for (const p of specFor(id, lvl).parts) { if (p.lit) add(p.lit, matLit, p.x, p.y, p.z); if (p.glow) add(p.glow, matGlow, p.x, p.y, p.z); }
+    } else if (kind === 't') {
+      const k = toolKit(id), metal = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: G.TMET[Math.min(4, lvl - 1)], emissive: '#222' });
+      if (k.lit) add(k.lit, matLit); if (k.metal) add(k.metal, metal); if (k.glow) add(k.glow, matGlow);
+      grp.rotation.set(0, Math.PI / 4, 0);
+    } else if (kind === 'f') {
+      const k = new Kit().lit(BX(0.9, 0.18, 0.4), '#5a5e66', 0.05, 0.62, 0).lit(CO(0.2, 0.42, 4), '#6a6e76', 0.62, 0.62, 0, 0, Math.PI / 4, -Math.PI / 2, 1, 1, 0.7)
+        .lit(BX(0.36, 0.34, 0.3), '#4a4e56', 0, 0.36, 0).lit(BX(0.62, 0.16, 0.48), '#3a3e46', 0, 0.1, 0)
+        .lit(BX(0.5, 0.06, 0.06), '#7a5530', 0.1, 0.95, 0.2, 0, 0, 0.5).lit(BX(0.14, 0.12, 0.16), '#8a8e96', 0.32, 1.06, 0.2, 0, 0, 0.5)
+        .glow(OC(0.06), '#ffb347', -0.25, 0.8, 0.1).glow(OC(0.05), '#ff8a2a', 0.35, 0.85, -0.1).build();
+      add(k.lit, matLit); add(k.glow, matGlow); grp.rotation.y = -0.4;
+    } else if (kind === 'r') {
+      const k = new Kit();
+      if (id === 'w') k.lit(CY(0.22, 0.22, 0.9, 8), '#7a5028', 0, 0.22, 0, 0, 0, Math.PI / 2).lit(CY(0.2, 0.2, 0.92, 8), '#c8a070', 0, 0.22, 0, 0, 0, Math.PI / 2, 1, 1, 1, 0)
+        .lit(CY(0.18, 0.18, 0.8, 8), '#6a4420', 0.1, 0.52, 0.12, 0, 0.3, Math.PI / 2);
+      else if (id === 's') k.lit(DO(0.42), '#8d8a84', 0, 0.35, 0, 0.3, 0.5, 0).lit(DO(0.24), '#a8a49c', 0.4, 0.2, 0.2, 0.7, 0, 0);
+      else if (id === 'g') k.lit(OC(0.2), '#f6d05a', 0, 0.35, 0, 0, 0, 0, 1, 2, 1, 0.1).lit(OC(0.16), '#ffe27a', 0.25, 0.25, 0.1, 0, 0, -0.5, 1, 1.8, 1, 0.1).lit(OC(0.14), '#e2b23a', -0.22, 0.22, -0.05, 0.4, 0, 0.5, 1, 1.7, 1, 0.1);
+      else k.lit(BX(0.8, 0.22, 0.36), '#9aa4b0', 0, 0.12, 0, 0, 0, 0, 1, 1, 1, 0.05).lit(BX(0.62, 0.06, 0.26), '#c8d0dc', 0, 0.26, 0).lit(BX(0.8, 0.22, 0.36), '#7a848e', 0.1, 0.36, 0.05, 0, 0.3, 0);
+      add(k.build().lit, matLit);
+    }
+    return grp;
+  }
+  R3.icon = function (kind, id, lvl) {
+    lvl = lvl || 1;
+    const key = kind + ':' + id + ':' + lvl;
+    if (iconCache.has(key)) return iconCache.get(key);
+    if (!R3.ready || iconBudget <= 0) return null;
+    iconBudget--;
+    if (!iconR) iconSetup();
+    const grp = iconModel(kind, id, lvl);
+    iconScene.add(grp); grp.updateMatrixWorld(true);
+    const sph = new T.Box3().setFromObject(grp).getBoundingSphere(new T.Sphere());
+    const r = sph.radius * (kind === 't' ? 0.8 : 1.0);
+    iconCam.left = -r; iconCam.right = r; iconCam.top = r; iconCam.bottom = -r; iconCam.near = 0.01; iconCam.far = r * 20;
+    iconCam.position.copy(sph.center).addScaledVector((kind === 't' ? new T.Vector3(0.12, 1, 0.3) : new T.Vector3(1, 0.95, 1.3)).normalize(), r * 5);
+    iconCam.lookAt(sph.center); iconCam.updateProjectionMatrix();
+    iconR.setClearColor(0x000000, 0); iconR.clear(); iconR.render(iconScene, iconCam);
+    const out = document.createElement('canvas'); out.width = out.height = 128;
+    out.getContext('2d').drawImage(iconR.domElement, 0, 0);
+    iconScene.remove(grp);
+    iconCache.set(key, out);
+    return out;
+  };
+
   // ---------------------------------------------------------------- Tier-Modelle
   function makeAnimal(an) {
     const D = G.ADEF[an.type], grp = new T.Group(), s = an.r / G.TS;
@@ -801,6 +863,7 @@
   }
   function render(dt) {
     const S = G.S;
+    iconBudget = 4;   // höchstens ein paar neue Icons pro Bild erzeugen
     if (!S) return;
     frameNo++;
     const TS = G.TS, MAP = G.MAP, at = G.animT;
