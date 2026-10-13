@@ -1407,7 +1407,10 @@ function lanConnect(want, room, tries) {
   let opened = false;
   const ws = NET.ws = new WebSocket(ONLINE_URL);
   // Kostenlose Server schlafen nach Inaktivität – das Aufwachen dauert bis ca. 1 Minute
-  const slow = setTimeout(() => { if (!opened && NET.ws === ws) lobbyStatus('Server wird gestartet … das kann beim ersten Mal bis zu einer Minute dauern.'); }, 3500);
+  const CS = /app\.github\.dev/.test(ONLINE_URL);
+  const offMsg = CS ? 'Der Spielserver (GitHub Codespace) ist gerade aus. Der Host startet ihn auf github.com/codespaces → „urban train“ öffnen – danach klappt es nach ca. 1–2 Minuten. Ich versuche es weiter …'
+                    : 'Server wird gestartet … das kann beim ersten Mal bis zu einer Minute dauern.';
+  const slow = setTimeout(() => { if (!opened && NET.ws === ws) lobbyStatus(offMsg, CS); }, 3500);
   ws.onopen = () => { opened = true; clearTimeout(slow); ws.send(JSON.stringify({ t: '_hello', want, room: room || '' })); };
   ws.onmessage = e => {
     NET.lastRecv = performance.now();
@@ -1428,12 +1431,13 @@ function lanConnect(want, room, tries) {
   ws.onclose = () => {
     clearTimeout(slow);
     if (NET.ws !== ws) return;
-    if (!opened && tries < 25 && lobbyOpenNow()) {   // Server wacht noch auf → erneut versuchen
+    if (!opened && tries < 60 && lobbyOpenNow()) {
+      lobbyStatus(offMsg, CS);   // Server wacht noch auf → erneut versuchen
       NET.ws = null;
       setTimeout(() => { if (lobbyOpenNow() && !NET.ws) lanConnect(want, room, tries + 1); }, 3000);
       return;
     }
-    netClose(opened ? 'Verbindung zum Server verloren.' : 'Server nicht erreichbar.');
+    netClose(opened ? 'Verbindung zum Server verloren.' : (CS ? 'Spielserver ist aus – auf github.com/codespaces „urban train“ starten.' : 'Server nicht erreichbar.'));
   };
 }
 // Mitspieler kommt (auch mitten im laufenden Spiel) dazu
