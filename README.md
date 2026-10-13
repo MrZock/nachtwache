@@ -10,14 +10,14 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 - **Bauen:** Taste **I** (Handy: 🛠) öffnet „Inventar & Bauen“ mit allen Gebäuden, Rohstoffen und Werkzeugen. In der Leiste liegen nur die letzten 4 Gebäude.
 - **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 15 andere klicken „Online beitreten“ und geben den Code ein. Der Spielserver läuft auf Render.com (nachtwache.onrender.com) und wacht von selbst auf.
 
-**Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** · **O / F5 = Ego-Perspektive** (Linksklick fängt die Maus, oder rechte Maustaste halten zum Umsehen) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
+**Steuerung (PC):** WASD laufen · **Maus umsehen** (Third-Person-Kamera hinter der Schulter; Linksklick fängt die Maus, oder rechte Maustaste halten) · Linksklick angreifen/abbauen · **O / F5 = Ego-Perspektive ↔ Third-Person** · Mausrad Kamera-Abstand · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
 
 **Handy:** im Querformat spielen. **Zwei Joysticks:** links laufen, rechts zielen & angreifen (kurz antippen = automatisch auf den nächsten Zombie). Knöpfe am Rand: ⤒ Springen, Menü, Karte, Skills, Schmiede, ⚡ Fähigkeit, 🔄 Kamera drehen, ⛶ Vollbild, Chat, Markierung. Vollbild auch mit `/full` im Chat.
 
 ## Neu in 3.0
 
 - **Eigene Basen:** Jeder Spieler startet weit weg von den anderen auf einer **riesigen Karte (512×512)** und baut seinen eigenen Reaktor mit eigenen Rohstoffen. Im **Clan** teilt ihr Reaktor, Rohstoffe und Gebäude (beim Beitreten wird deine alte Basis zerlegt, die Rohstoffe gehen an den Clan). Fällt eine Basis, kann das Team neu anfangen – das Spiel endet erst, wenn kein Reaktor mehr steht. `/heim` bringt dich zurück zu deiner Basis.
-- **Ego-Perspektive** (O / F5, Handy 👁) zusätzlich zur normalen Ansicht.
+- **Third-Person-Kamera** hinter der Schulter statt Vogelperspektive, dazu die **Ego-Perspektive** (O / F5, Handy: ☰ → Ego-Ansicht).
 - **Icons aus den echten 3D-Modellen** in der Leiste.
 
 - **Neuer Name & Look:** BLACKOUT mit Rost-Logo, neues Hauptmenü, alles im Stil einer kaputten Zukunft: Reaktor statt Goldspeicher, Schrott-Barrikaden, Geschütz-, Tesla-, Mörser- und Kryotürme, Bohrturm, Recycler, Sanistation, Autowracks, Fässer, Ruinen und kaputte Laternen.

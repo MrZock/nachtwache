@@ -20,10 +20,10 @@
   const hash = n => { const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return s - Math.floor(s); };
 
   const R3 = window.NW3D = {
-    ready: false, init, render, overlay, pick, zoomLevel: 1, yaw: 0, yawT: 0, fp: false, pitch: -0.12,
+    ready: false, init, render, overlay, pick, zoomLevel: 1, yaw: 0, yawT: 0, fp: true, eye: false, pitch: -0.12,
     look(dx, dy) { const k = 0.0024 * (R3.lookSens || 1); R3.yaw -= dx * k; R3.yawT = R3.yaw; R3.pitch = Math.max(-1.25, Math.min(0.7, R3.pitch - dy * k)); },
     rotate(d, instant, reset) { if (reset) { R3.yawT = Math.round(R3.yaw / TAU) * TAU; return; } R3.yawT += d; if (instant) R3.yaw = R3.yawT; },
-    zoom(dy) { R3.zoomLevel = Math.min(1.8, Math.max(0.6, R3.zoomLevel * (dy > 0 ? 1.1 : 1 / 1.1))); },
+    zoom(dy) { R3.zoomLevel = Math.min(1.8, Math.max(0.55, R3.zoomLevel * (dy > 0 ? 1.1 : 1 / 1.1))); },
   };
 
   // ---------------------------------------------------------------- Materialien
@@ -169,36 +169,39 @@
     scene.add(outer);
 
     // ---- Natur (instanziert)
-    trunks = inst(new Kit().lit(CY(0.075, 0.13, 1.45, 6), '#6b4626', 0, 0.72, 0).lit(CY(0.14, 0.19, 0.14, 6), '#5a3a20', 0, 0.07, 0).lit(BX(0.05, 0.3, 0.05), '#5a3a20', 0.1, 0.9, 0, 0, 0, -0.7).build().lit, matInst, MAXRES, true);
-    pine1 = inst(new Kit().lit(CO(0.7, 0.9, 7), '#ffffff', 0, 1.2, 0, 0, 0, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
-    pine2 = inst(new Kit().lit(CO(0.54, 0.8, 7), '#ffffff', 0, 1.68, 0, 0, 0.3, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
-    pine3 = inst(new Kit().lit(CO(0.36, 0.72, 7), '#ffffff', 0, 2.14, 0, 0, 0.6, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
-    oaks = inst(new Kit()
-      .lit(IC(0.58, 0), '#ffffff', 0, 1.6, 0, 0, 0, 0, 1, 0.9, 1, 0.12)
-      .lit(IC(0.36, 0), '#e8ffe0', 0.36, 1.45, 0.2, 0.5, 0, 0, 1, 1, 1, 0.12)
-      .lit(IC(0.38, 0), '#f4fff0', -0.32, 1.5, -0.24, 0, 0.7, 0, 1, 1, 1, 0.12)
-      .lit(IC(0.33, 0), '#ffffff', 0.05, 2.0, -0.05, 0.3, 0.2, 0, 1, 1, 1, 0.12)
-      .lit(IC(0.3, 0), '#dcf0d4', -0.1, 1.4, 0.4, 0, 0, 0.4, 1, 1, 1, 0.12).build().lit, matInst, MAXRES, true);
+    { const k = new Kit().lit(CY(0.075, 0.13, 1.45, 7), '#6b4626', 0, 0.72, 0).lit(CY(0.14, 0.19, 0.14, 7), '#5a3a20', 0, 0.07, 0)
+        .lit(CY(0.085, 0.085, 0.03, 7), '#4a2e18', 0, 0.55, 0).lit(BX(0.05, 0.3, 0.05), '#5a3a20', 0.1, 0.9, 0, 0, 0, -0.7).lit(BX(0.04, 0.22, 0.04), '#5a3a20', -0.08, 1.15, 0.05, 0.4, 0, 0.6);
+      for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.4; k.lit(CY(0.035, 0.06, 0.3, 5), '#5a3a20', Math.cos(a) * 0.15, 0.05, Math.sin(a) * 0.15, Math.sin(a) * 1.15, 0, -Math.cos(a) * 1.15); }
+      for (let i = 0; i < 5; i++) k.lit(BX(0.02, 0.12, 0.02), '#4a2e18', Math.cos(i * 1.3) * 0.1, 0.35 + i * 0.18, Math.sin(i * 1.3) * 0.1);
+      trunks = inst(k.build().lit, matInst, MAXRES, true); }
+    pine1 = inst(new Kit().lit(CO(0.72, 0.95, 8), '#ffffff', 0, 1.2, 0, 0, 0, 0, 1, 1, 1, 0.08).lit(CO(0.778, 0.399, 8), '#dfeedd', 0, 0.877, 0, 0, 0+0.39, 0, 1, 1, 1, 0.12).build().lit, matInst, MAXRES, true);
+    pine2 = inst(new Kit().lit(CO(0.56, 0.85, 8), '#ffffff', 0, 1.68, 0, 0, 0.3, 0, 1, 1, 1, 0.08).lit(CO(0.605, 0.357, 8), '#dfeedd', 0, 1.391, 0, 0, 0.3+0.39, 0, 1, 1, 1, 0.12).build().lit, matInst, MAXRES, true);
+    pine3 = inst(new Kit().lit(CO(0.38, 0.75, 8), '#ffffff', 0, 2.14, 0, 0, 0.6, 0, 1, 1, 1, 0.08).lit(CO(0.41, 0.315, 8), '#dfeedd', 0, 1.885, 0, 0, 0.6+0.39, 0, 1, 1, 1, 0.12).lit(CO(0.08, 0.3, 5), '#ffffff', 0, 2.6, 0, 0, 0, 0, 1, 1, 1, 0.05).build().lit, matInst, MAXRES, true);
+    { const k = new Kit().lit(IC(0.6, 1), '#ffffff', 0, 1.62, 0, 0, 0, 0, 1, 0.85, 1, 0.1)
+        .lit(IC(0.4, 0), '#e8ffe0', 0.42, 1.48, 0.22, 0.5, 0, 0, 1, 0.9, 1, 0.12).lit(IC(0.42, 0), '#f4fff0', -0.38, 1.52, -0.26, 0, 0.7, 0, 1, 0.9, 1, 0.12)
+        .lit(IC(0.36, 0), '#ffffff', 0.05, 2.05, -0.05, 0.3, 0.2, 0, 1, 1, 1, 0.12).lit(IC(0.34, 0), '#dcf0d4', -0.12, 1.42, 0.44, 0, 0, 0.4, 1, 0.9, 1, 0.12)
+        .lit(IC(0.32, 0), '#eaffea', 0.3, 1.9, -0.3, 0.2, 0.4, 0, 1, 1, 1, 0.12).lit(IC(0.3, 0), '#f8fff4', -0.32, 1.9, 0.22, 0.6, 0, 0.3, 1, 1, 1, 0.12)
+        .lit(IC(0.28, 0), '#d0e4c8', 0.38, 1.3, -0.28, 0, 0.3, 0, 1, 0.8, 1, 0.12)
+        .lit(IC(0.5, 0), '#a8bca0', 0, 1.3, 0, 0, 0.5, 0, 1.15, 0.45, 1.15, 0.1);
+      oaks = inst(k.build().lit, matInst, MAXRES, true); }
     rocks = inst(rockGeometry(), matInst, MAXRES, true);
     ores = inst(new Kit()
       .lit(OC(0.1), '#f6d05a', 0, 0, 0, 0, 0, 0, 0.8, 2.2, 0.8, 0.15)
       .lit(OC(0.08), '#ffe27a', 0.12, -0.04, 0.05, 0, 0, -0.6, 0.8, 1.8, 0.8, 0.15)
       .lit(OC(0.07), '#f2c94c', -0.1, -0.05, -0.06, 0.5, 0, 0.5, 0.8, 1.6, 0.8, 0.15).build().lit,
       new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, emissive: '#6a4a08' }), MAXRES, false);
-    grass = inst(new Kit()
-      .lit(CO(0.035, 0.32, 3), '#ffffff', 0, 0.16, 0, 0, 0, 0.12)
-      .lit(CO(0.03, 0.26, 3), '#e0f0d0', 0.06, 0.13, 0.04, 0.3, 0, -0.3)
-      .lit(CO(0.03, 0.28, 3), '#ffffff', -0.05, 0.14, 0.05, -0.3, 0, 0.25)
-      .lit(CO(0.03, 0.22, 3), '#d8ecc8', 0.02, 0.11, -0.07, -0.35, 0, 0).build().lit, matInst, MAXDECO, false);
-    flowers = inst(new Kit()
-      .lit(CY(0.01, 0.01, 0.22, 3), '#3a7a2a', 0, 0.11, 0)
-      .lit(IC(0.07, 0), '#ffffff', 0, 0.24, 0, 0, 0, 0, 1, 0.5, 1, 0)
-      .lit(SP(0.03, 6, 4), '#ffe27a', 0, 0.265, 0).build().lit, matInst, MAXDECO, false);
-    bushes = inst(new Kit()
-      .lit(IC(0.26, 0), '#ffffff', 0, 0.2, 0, 0, 0, 0, 1, 0.8, 1, 0.12)
-      .lit(IC(0.2, 0), '#e8ffe8', 0.2, 0.15, 0.08, 0.4, 0, 0, 1, 0.8, 1, 0.12)
-      .lit(IC(0.18, 0), '#ffffff', -0.16, 0.14, 0.12, 0, 0.6, 0, 1, 0.8, 1, 0.12)
-      .lit(SP(0.035, 5, 4), '#d8304a', 0.12, 0.3, 0.12).lit(SP(0.035, 5, 4), '#d8304a', -0.1, 0.27, 0.18).build().lit, matInst, MAXDECO, true);
+    { const k = new Kit();
+      for (let i = 0; i < 8; i++) { const a = i * 2.4, r = 0.03 + (i % 3) * 0.03, h = 0.2 + ((i * 7) % 5) * 0.035; k.lit(CO(0.026, h, 3), i % 3 ? '#ffffff' : '#d8ecc8', Math.cos(a) * r, h / 2, Math.sin(a) * r, Math.sin(a) * 0.35, a, -Math.cos(a) * 0.35); }
+      grass = inst(k.build().lit, matInst, MAXDECO, false); }
+    { const k = new Kit().lit(CY(0.01, 0.012, 0.24, 4), '#3a7a2a', 0, 0.12, 0).lit(BX(0.08, 0.01, 0.035), '#4a8a3a', 0.04, 0.08, 0, 0, 0, 0.4);
+      for (let i = 0; i < 5; i++) { const a = i / 5 * TAU; k.lit(SP(0.035, 5, 3), '#ffffff', Math.cos(a) * 0.045, 0.25, Math.sin(a) * 0.045, 0, -a, 0, 1.4, 0.4, 0.9); }
+      k.lit(SP(0.028, 6, 4), '#ffe27a', 0, 0.262, 0);
+      flowers = inst(k.build().lit, matInst, MAXDECO, false); }
+    { const k = new Kit().lit(IC(0.27, 1), '#ffffff', 0, 0.21, 0, 0, 0, 0, 1, 0.8, 1, 0.08)
+        .lit(IC(0.2, 0), '#e8ffe8', 0.22, 0.15, 0.08, 0.4, 0, 0, 1, 0.8, 1, 0.12).lit(IC(0.19, 0), '#ffffff', -0.18, 0.14, 0.12, 0, 0.6, 0, 1, 0.8, 1, 0.12)
+        .lit(IC(0.17, 0), '#dcefd8', 0.05, 0.13, -0.22, 0.3, 0.2, 0, 1, 0.8, 1, 0.12).lit(IC(0.15, 0), '#f0fff0', -0.12, 0.32, -0.08, 0.2, 0, 0.4, 1, 0.9, 1, 0.12);
+      for (const [x, y, z] of [[0.12, 0.3, 0.14], [-0.1, 0.27, 0.2], [0.24, 0.22, -0.05], [-0.2, 0.25, -0.12], [0.02, 0.38, 0.05], [0.15, 0.18, -0.2]]) k.lit(SP(0.032, 5, 4), '#d8304a', x, y, z);
+      bushes = inst(k.build().lit, matInst, MAXDECO, true); }
 
     peaks = inst(peakGeometry(false), matInst, MAXRES * 2, true);
     peakSnow = inst(peakGeometry(true), matInst, MAXRES * 2, false);
@@ -215,13 +218,20 @@
       .glow(OC(0.16), '#c890ff', 0, 0.42, 0, 0, 0, 0, 1, 3, 1, 0.1).glow(OC(0.12), '#e0c0ff', 0.16, 0.3, 0.06, 0, 0, -0.5, 1, 2.6, 1, 0.1)
       .glow(OC(0.11), '#9a5aff', -0.15, 0.26, -0.05, 0.4, 0, 0.5, 1, 2.4, 1, 0.1).glow(OC(0.08), '#f4e8ff', 0.02, 0.2, 0.18, -0.6, 0, 0, 1, 2.2, 1, 0.1)
       .build().glow, new T.MeshBasicMaterial({ vertexColors: true, toneMapped: false }), MAXRES, false);
-    cars = inst(new Kit()
-      .lit(BX(1.5, 0.35, 0.7), '#ffffff', 0, 0.38, 0).lit(BX(0.8, 0.3, 0.64), '#e6e6e6', -0.1, 0.7, 0, 0, 0, 0.05)
-      .lit(BX(0.04, 0.24, 0.6), '#202428', 0.31, 0.7, 0, 0, 0, -0.5).lit(BX(0.8, 0.22, 0.02), '#202428', -0.1, 0.72, 0.33)
-      .lit(CY(0.17, 0.17, 0.12, 8), '#1a1a1a', 0.5, 0.17, 0.36, Math.PI / 2, 0, 0).lit(CY(0.17, 0.17, 0.12, 8), '#1a1a1a', -0.5, 0.12, 0.36, Math.PI / 2, 0, 0.4)
-      .lit(CY(0.17, 0.17, 0.12, 8), '#1a1a1a', 0.5, 0.17, -0.36, Math.PI / 2, 0, 0)
-      .lit(BX(0.4, 0.05, 0.5), '#8a4a2a', 0.4, 0.57, 0.05, 0, 0.3, 0.1, 1, 1, 1, 0.2).lit(BX(0.3, 0.05, 0.3), '#7a3a20', -0.5, 0.56, -0.1, 0, 0, 0, 1, 1, 1, 0.2)
-      .build().lit, matInst, 600, true);
+    { const k = new Kit()
+        .lit(BX(1.5, 0.32, 0.7), '#ffffff', 0, 0.4, 0).lit(BX(1.52, 0.08, 0.72), '#9a9a9a', 0, 0.24, 0)
+        .lit(BX(0.82, 0.3, 0.64), '#e6e6e6', -0.12, 0.71, 0, 0, 0, 0.04)
+        .lit(BX(0.04, 0.26, 0.58), '#26303a', 0.3, 0.71, 0, 0, 0, -0.55).lit(BX(0.04, 0.24, 0.56), '#26303a', -0.54, 0.71, 0, 0, 0, 0.45)
+        .lit(BX(0.32, 0.2, 0.02), '#26303a', 0.05, 0.73, 0.325).lit(BX(0.32, 0.2, 0.02), '#26303a', -0.3, 0.73, 0.325)
+        .lit(BX(0.32, 0.2, 0.02), '#26303a', 0.05, 0.73, -0.325).lit(BX(0.15, 0.15, 0.02), '#151a1e', -0.3, 0.73, -0.33, 0, 0, 0.3)
+        .lit(BX(0.01, 0.26, 0.012), '#555', -0.12, 0.42, 0.355).lit(BX(0.01, 0.26, 0.012), '#555', -0.12, 0.42, -0.355)
+        .lit(BX(0.03, 0.08, 0.14), '#f4ecc8', 0.755, 0.45, 0.22).lit(BX(0.03, 0.08, 0.14), '#3a3a3a', 0.755, 0.45, -0.22)
+        .lit(BX(0.03, 0.07, 0.12), '#c82a2a', -0.755, 0.45, 0.24).lit(BX(0.03, 0.07, 0.12), '#c82a2a', -0.755, 0.45, -0.24)
+        .lit(BX(0.04, 0.08, 0.66), '#5a5a5a', 0.77, 0.3, 0).lit(BX(0.04, 0.08, 0.66), '#5a5a5a', -0.77, 0.3, 0);
+      for (const [x, z, y, t] of [[0.5, 0.36, 0.17, 0], [-0.5, 0.36, 0.13, 0.4], [0.5, -0.36, 0.17, 0], [-0.48, -0.37, 0.1, -0.3]]) k.lit(CY(0.17, 0.17, 0.12, 10), '#1a1a1a', x, y, z, Math.PI / 2, 0, t).lit(CY(0.08, 0.08, 0.13, 6), '#7a7a7a', x, y, z, Math.PI / 2, 0, t);
+      k.lit(BX(0.42, 0.05, 0.5), '#8a4a2a', 0.42, 0.57, 0.05, 0, 0.3, 0.1, 1, 1, 1, 0.2).lit(BX(0.3, 0.05, 0.3), '#7a3a20', -0.5, 0.57, -0.1, 0, 0, 0, 1, 1, 1, 0.2)
+        .lit(BX(0.2, 0.04, 0.2), '#9a5a32', -0.1, 0.87, 0.12, 0, 0.5, 0, 1, 1, 1, 0.2);
+      cars = inst(k.build().lit, matInst, 600, true); }
     barrels = inst(new Kit().lit(CY(0.18, 0.18, 0.5, 10), '#ffffff', 0, 0.25, 0).lit(CY(0.19, 0.19, 0.04, 10), '#555555', 0, 0.1, 0).lit(CY(0.19, 0.19, 0.04, 10), '#555555', 0, 0.4, 0)
       .lit(BX(0.02, 0.12, 0.14), '#e8d040', 0.18, 0.28, 0).build().lit, matInst, 1200, true);
     rubble = inst(new Kit().lit(BX(0.7, 0.3, 0.5), '#a8a49c', 0, 0.15, 0, 0, 0.2, 0.1).lit(BX(0.4, 0.25, 0.4), '#8a8680', 0.4, 0.12, 0.25, 0.3, 0.5, 0)
@@ -365,8 +375,11 @@
       return g;
     };
     const kit = new Kit().lit(mk(0.42, 1), '#ffffff', 0, 0.2, 0, 0, 0, 0, 1, 1, 1, 0.1)
-      .lit(mk(0.22, 2), '#e6e6e6', 0.36, 0.08, 0.18, 0.4, 0.3, 0, 1, 1, 1, 0.1)
-      .lit(mk(0.14, 3), '#f0f0f0', -0.3, 0.05, 0.28, 0, 0.8, 0, 1, 1, 1, 0.1);
+      .lit(mk(0.26, 2), '#e6e6e6', 0.36, 0.1, 0.18, 0.4, 0.3, 0, 1, 1, 1, 0.1)
+      .lit(mk(0.18, 3), '#f0f0f0', -0.3, 0.07, 0.28, 0, 0.8, 0, 1, 1, 1, 0.1)
+      .lit(mk(0.2, 4), '#dadada', -0.22, 0.12, -0.3, 0.5, 0.2, 0.3, 1, 1, 1, 0.1)
+      .lit(mk(0.07, 5), '#cfcfcf', 0.5, 0.03, -0.2).lit(mk(0.06, 6), '#e0e0e0', -0.48, 0.03, 0.05).lit(mk(0.05, 7), '#d4d4d4', 0.15, 0.03, 0.45)
+      .lit(BX(0.02, 0.22, 0.12), '#5a5a5a', 0.38, 0.25, 0.05, 0, 0.2, 0.3);
     const g = kit.build().lit, nrm = g.attributes.normal, c = g.attributes.color;
     for (let f = 0; f < nrm.count; f += 3) if (nrm.getY(f) > 0.72) for (let v = 0; v < 3; v++) { c.setXYZ(f + v, c.getX(f + v) * 0.72, c.getY(f + v) * 1.05, c.getZ(f + v) * 0.6); }
     return g;
@@ -1109,12 +1122,23 @@
     const height = G.clamp(G.VW / TS * 0.72, 13, 24) * R3.zoomLevel;
     let shx = 0, shz = 0;
     if (S.shake > 0.2 && G.mode === 'play' && R3.shakeOn !== false) { shx = (Math.random() - 0.5) * S.shake * 0.03; shz = (Math.random() - 0.5) * S.shake * 0.03; }
-    const fpOn = R3.fp && G.mode !== 'menu' && S.player && S.player.dead <= 0;
-    if (fpOn !== lastFp) {
-      lastFp = fpOn;
-      camera.fov = fpOn ? 72 : 42; camera.near = fpOn ? 0.05 : 0.5; camera.updateProjectionMatrix();
+    // Ansichten: Third-Person (Kamera hinter der Schulter) oder Ego-Perspektive (R3.eye)
+    const viewOn = R3.fp && G.mode !== 'menu' && S.player && S.player.dead <= 0, fpOn = viewOn && R3.eye, tpOn = viewOn && !R3.eye;
+    const camKey = fpOn ? 'fp' : tpOn ? 'tp' : 'top';
+    if (camKey !== lastFp) {
+      lastFp = camKey;
+      camera.fov = fpOn ? 72 : tpOn ? 62 : 42; camera.near = fpOn ? 0.05 : tpOn ? 0.1 : 0.5; camera.updateProjectionMatrix();
     }
-    if (fpOn) {
+    if (tpOn) {
+      const me = S.player, px = me.x / TS, pz = me.y / TS;
+      const pivotY = terrainH(px, pz) + (me.z || 0) / TS + 1.35;
+      const cp = Math.cos(R3.pitch), fx = -Math.sin(R3.yaw) * cp, fy = Math.sin(R3.pitch), fz = -Math.cos(R3.yaw) * cp;
+      const rx = Math.cos(R3.yaw), rz = -Math.sin(R3.yaw), dist = 3.6 * R3.zoomLevel, side = 0.55;
+      let camX = px - fx * dist + rx * side, camY = pivotY - fy * dist + 0.35, camZ = pz - fz * dist + rz * side;
+      camY = Math.max(camY, terrainH(camX, camZ) + 0.35);
+      camera.position.set(camX + shx * 0.4, camY, camZ + shz * 0.4);
+      camera.lookAt(px + rx * side + fx * 12, pivotY + 0.35 + fy * 12, pz + rz * side + fz * 12);
+    } else if (fpOn) {
       const me = S.player, px = me.x / TS, pz = me.y / TS, wp = walkPh.get('p' + me.id) || { ph: 0, mv: 0 };
       const hy = terrainH(px, pz) + (me.z || 0) / TS + 1.02 + Math.abs(Math.sin(wp.ph)) * 0.04 * wp.mv;
       const cp = Math.cos(R3.pitch);
@@ -1147,7 +1171,8 @@
     else if (night < 0.3) sun.color.set(camBi === 3 ? '#f4f8ff' : '#ffe2c0');
     scene.background.copy(fogColor); scene.fog.color.copy(fogColor);
     scene.fog.near = 30 - night * 8 - wet * 4; scene.fog.far = 64 - night * 18 - wet * 8;
-    if (R3.fp && G.mode !== 'menu') { scene.fog.near = 7 - night * 3; scene.fog.far = 32 - night * 12 - wet * 6; }
+    if (fpOn) { scene.fog.near = 7 - night * 3; scene.fog.far = 32 - night * 12 - wet * 6; }
+    else if (tpOn) { scene.fog.near = 9 - night * 3; scene.fog.far = 36 - night * 11 - wet * 6; }
 
     gN = 0;
     // Punktlichter: die wichtigsten Lichtquellen in Kameranähe

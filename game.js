@@ -1761,11 +1761,11 @@ function useAbility(p) {
 }
 function toggleView() {
   if (!R3) { toast('Die Ego-Perspektive gibt es in der 3D-Version', '#ff9a7a'); return; }
-  R3.fp = !R3.fp;
-  toast(R3.fp ? '👁 Ego-Perspektive – Maus = umsehen, O = zurück' : '🎥 Normale Ansicht', '#cfe8ff');
+  // Umschalten zwischen Third-Person (Schulter-Kamera) und Ego-Perspektive
+  R3.fp = true; R3.eye = !R3.eye;
+  toast(R3.eye ? '👁 Ego-Perspektive – O = zurück' : '🎥 Third-Person – O = Ego-Perspektive', '#cfe8ff');
   SFX.play('click');
-  if (R3.fp && !isTouch && canvas.requestPointerLock) { try { canvas.requestPointerLock(); } catch (e) {} }
-  if (!R3.fp && document.pointerLockElement) document.exitPointerLock();
+  if (!isTouch && canvas.requestPointerLock && !mouseLocked()) { try { canvas.requestPointerLock(); } catch (e) {} }
 }
 const mouseLocked = () => typeof document !== 'undefined' && !!canvas && document.pointerLockElement === canvas;
 function jump(p) {
@@ -4075,7 +4075,7 @@ function drawTouchUI() {
   const atkCol = S.place ? '#7fd8ff' : '#ff8a6a';
   if (modal) {}
   else if (touch.aimId !== null) stick(touch.ax / uiS, touch.ay / uiS, touch.akx / uiS, touch.aky / uiS, true, '', '⚔', atkCol);
-  else if (!S.place) stick(H.rx / uiS, H.ry / uiS, H.rx / uiS, H.ry / uiS, false, R3 && R3.fp ? 'Umsehen (rechts tippen = angreifen)' : 'Zielen & angreifen', R3 && R3.fp ? '👁' : '⚔', atkCol);
+  else if (!S.place) stick(H.rx / uiS, H.ry / uiS, H.rx / uiS, H.ry / uiS, false, R3 && R3.fp ? 'Umsehen · Bildschirm tippen = angreifen' : 'Zielen & angreifen', R3 && R3.fp ? '👁' : '⚔', atkCol);
   // Rechts nur die wichtigsten Knöpfe – der Rest steckt im „Mehr“-Menü
   const btns = [
     ['⚡', 'Fähigkeit', () => actAbility()],
@@ -4106,7 +4106,7 @@ function drawTouchMore() {
     ['🗺', 'Karte', close(() => { mapOpen = !mapOpen; })],
     ['★', 'Skills' + (S.player.sp > 0 ? ' +' + S.player.sp : ''), close(() => { skillsOpen = !skillsOpen; forgeOpen = false; craftOpen = false; })],
     ['⚒', 'Schmiede', close(() => { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; })],
-    ...(R3 ? [['👁', R3.fp ? 'Normale Ansicht' : 'Ego-Ansicht', close(() => toggleView())], ['🔄', 'Kamera drehen', close(() => R3.rotate(Math.PI / 2))]] : []),
+    ...(R3 ? [['👁', R3.eye ? 'Third-Person' : 'Ego-Ansicht', close(() => toggleView())]] : []),
     ['💬', 'Chat', close(() => chatOpen())],
     ['📍', 'Markieren', close(() => { touch.pingMode = !touch.pingMode; if (touch.pingMode) toast('Tippe auf die Stelle, die du markieren willst', '#7fd8ff'); })],
     ...(S.players.length > 1 ? [['👥', 'Spieler', close(() => { listOpen = !listOpen; })]] : []),
@@ -4528,7 +4528,7 @@ function drawHUD() {
   drawChat();
   // Steuerungshinweis
   if (!isTouch && VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
-    const lines = [R3 ? 'WASD laufen · Maus zielen · Linksklick angreifen · Mausrad Zoom' : 'WASD laufen · Maus zielen · Linksklick angreifen', 'Q E R C V B Waffen · H Schmiede · 1–0 Bauen · G Markierung · T Chat', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
+    const lines = ['WASD laufen · Maus umsehen · Linksklick angreifen · Mausrad Kamera-Abstand · O Ego-Perspektive', 'Q E R C V B Waffen · H Schmiede · 1–0 Bauen · G Markierung · T Chat', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
     lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
   }
   if (skillsOpen) drawSkills();
@@ -5037,7 +5037,7 @@ function drawOverlays() {
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
       news.forEach((l, i) => { ctx.fillStyle = i % 2 ? '#a8a098' : '#e8dcd0'; ctx.fillText((i % 2 ? '   ' : '▸ ') + l, 56, py + 54 + i * 24); });
       const ctl = isTouch ? ['LINKER STICK: LAUFEN', 'RECHTER STICK: ANGREIFEN', '⚡ SPEZIALFÄHIGKEIT', '⚒ SCHMIEDE · ★ SKILLS'] :
-        ['WASD  LAUFEN', 'MAUS  ZIELEN & ANGREIFEN', R3 ? 'RECHTE MAUS ZIEHEN  360° DREHEN' : 'MAUSRAD  WERKZEUG', R3 ? 'O / F5  EGO-PERSPEKTIVE' : 'Q–B  WAFFEN', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · /hilfe'];
+        ['WASD  LAUFEN', 'MAUS  UMSEHEN', 'LINKSKLICK  ANGREIFEN', 'O / F5  EGO ↔ THIRD-PERSON', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · /hilfe'];
       const px = VW - 40 - pw;
       panel(px, py, pw, 46 + ctl.length * 24, 0.78);
       titleText('STEUERUNG', px + pw / 2, py + 24, 20, '#ff8a3a');
