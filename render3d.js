@@ -86,7 +86,7 @@
 
   // ---------------------------------------------------------------- Setup
   let fpView = null, fpTools = null, fpMetal = null, lastFp = null;
-  let peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
+  let ruinFloor, ruinTop, bunkerWall, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
   let projArrow, projBall, parts, glows, rain;
@@ -186,6 +186,15 @@
         .lit(IC(0.5, 0), '#a8bca0', 0, 1.3, 0, 0, 0.5, 0, 1.15, 0.45, 1.15, 0.1);
       oaks = inst(k.build().lit, matInst, MAXRES, true); }
     rocks = inst(rockGeometry(), matInst, MAXRES, true);
+    { const k = new Kit().lit(BX(1, 0.96, 1), '#ffffff', 0, 0.48, 0).lit(BX(1.02, 0.05, 1.02), '#c8c8c8', 0, 0.97, 0);
+      for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) k.lit(BX(nz ? 0.34 : 0.02, 0.36, nx ? 0.34 : 0.02), '#1a1a1e', nx * 0.505, 0.55, nz * 0.505);
+      ruinFloor = inst(k.build().lit, matInst, 9000, true); }
+    { const k = new Kit().lit(BX(1, 0.12, 1), '#e6e6e6', 0, 0.06, 0).lit(BX(0.4, 0.22, 0.3), '#d0d0d0', -0.25, 0.2, 0.2, 0, 0.3, 0.2).lit(BX(0.3, 0.16, 0.4), '#dcdcdc', 0.28, 0.16, -0.22, 0.2, 0, 0)
+        .lit(CY(0.02, 0.02, 0.4, 4), '#8a4a2a', 0.1, 0.3, 0.1, 0.3, 0, 0.2).lit(CY(0.02, 0.02, 0.32, 4), '#8a4a2a', -0.2, 0.26, -0.15, -0.4, 0, 0.3);
+      ruinTop = inst(k.build().lit, matInst, 9000, true); }
+    bunkerWall = inst(new Kit().lit(BX(1, 2.2, 1), '#ffffff', 0, 1.1, 0).lit(BX(1.02, 0.18, 1.02), '#d8a82a', 0, 0.09, 0).lit(BX(1.02, 0.06, 1.02), '#1a1a1a', 0, 0.2, 0)
+      .lit(CY(0.06, 0.06, 1.02, 6), '#7a7e86', 0.5, 1.7, 0.3, Math.PI / 2, 0, 0).lit(CY(0.04, 0.04, 1.02, 6), '#8a4a2a', 0.5, 1.5, -0.2, Math.PI / 2, 0, 0)
+      .lit(BX(1.04, 0.08, 1.04), '#6a6e76', 0, 2.2, 0).build().lit, matInst, 6000, true);
     ores = inst(new Kit()
       .lit(OC(0.1), '#f6d05a', 0, 0, 0, 0, 0, 0, 0.8, 2.2, 0.8, 0.15)
       .lit(OC(0.08), '#ffe27a', 0.12, -0.04, 0.05, 0, 0, -0.6, 0.8, 1.8, 0.8, 0.15)
@@ -402,6 +411,10 @@
       else if (bi === 3) { r = 222 + n * 3 + (v % 7); g = 230 + n * 3 + (v % 5); b = 238 + (v % 5); if (v < 20) { r = 160; g = 176; b = 190; } }
       else if (bi === 4) { r = 58 + n * 5 + (v % 7); g = 72 + n * 6; b = 44 + n * 3; if (v % 9 === 0) { r = 38; g = 60; b = 66; } }
       else if (bi === 5) { r = 30 + (v % 9); g = 18 + (v % 5); b = 44 + (v % 11); if (v % 7 === 0) { r = 120; g = 50; b = 200; } }
+      if (bi === 6) {
+        if (G.isStreet(x, y)) { const m = (x + 1500) % 15 === 1 || (y + 1500) % 15 === 1; r = 58 + (v % 6); g = 58 + (v % 6); b = 62 + (v % 5); if (m && (x + y) % 3 === 0 && !((x + 1500) % 15 < 3 && (y + 1500) % 15 < 3)) { r = 170; g = 150; b = 70; } }
+        else { r = 112 + (v % 11); g = 108 + (v % 9); b = 100 + (v % 7); if (v < 30) { r = 82; g = 92; b = 62; } }
+      } else if (bi === 7) { r = 46 + (v % 6); g = 46 + (v % 5); b = 50 + (v % 6); if ((x + y) % 4 === 0) { r -= 6; g -= 6; b -= 6; } }
       if (S.res[y * MAP + x] === 6) { r = 92 + (v % 9); g = 86 + (v % 7); b = 80 + (v % 5); }
       const i = (y * MAP + x) * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
     }
@@ -1059,6 +1072,25 @@
   const PANTS = ['#3a3a44', '#4a3a2a', '#2a3a4a', '#4a4a3a', '#3a2a2a'].map(c => new T.Color(c));
   const TSHIRT = { brute: '#5a4030', spitter: '#2f5a4a', bomber: '#6a4a2a', boss: '#3a1448', shaman: '#3a2050', armored: '#4a4a52', shade: '#140a22' };
   const FROST = new T.Color('#bfe6ff'), WHITE = new T.Color('#ffffff'), GOLD = new T.Color('#ffd36b');
+  let hatchObjs = null;
+  const vehObjs = new Map();
+  // Buggy aus Schrott: Rohrrahmen, Sitz, Motor hinten, große Räder, Scheinwerfer
+  function buggyModel() {
+    const grp = new T.Group(), k = new Kit()
+      .lit(BX(1.5, 0.12, 0.8), '#4a4e56', 0, 0.42, 0).lit(BX(0.5, 0.25, 0.7), '#8a4a2a', 0.55, 0.55, 0, 0, 0, -0.15)
+      .lit(BX(0.4, 0.3, 0.5), '#3a3a3e', -0.55, 0.62, 0).lit(CY(0.08, 0.08, 0.3, 8), '#2a2a2a', -0.75, 0.8, 0.15, 0, 0, 0.8).lit(CY(0.08, 0.08, 0.3, 8), '#2a2a2a', -0.75, 0.8, -0.15, 0, 0, 0.8)
+      .lit(BX(0.3, 0.08, 0.36), '#5a3a2a', -0.1, 0.55, 0).lit(BX(0.08, 0.36, 0.36), '#5a3a2a', -0.26, 0.72, 0, 0, 0, 0.2)
+      .lit(CY(0.03, 0.03, 0.8, 6), '#c84a2a', 0.1, 0.95, 0.38).lit(CY(0.03, 0.03, 0.8, 6), '#c84a2a', 0.1, 0.95, -0.38)
+      .lit(CY(0.03, 0.03, 0.8, 6), '#c84a2a', 0.1, 1.35, 0, Math.PI / 2, 0, 0).lit(CY(0.03, 0.03, 0.6, 6), '#c84a2a', 0.45, 1.1, 0.38, 0, 0, 0.9).lit(CY(0.03, 0.03, 0.6, 6), '#c84a2a', 0.45, 1.1, -0.38, 0, 0, 0.9)
+      .lit(CY(0.02, 0.02, 0.4, 4), '#2a2a2a', 0.35, 0.85, 0.12, 0, 0, -0.6).lit(BX(0.04, 0.08, 0.12), '#fff2c8', 0.8, 0.62, 0.25).lit(BX(0.04, 0.08, 0.12), '#fff2c8', 0.8, 0.62, -0.25)
+      .lit(BX(0.04, 0.06, 0.1), '#c82a2a', -0.76, 0.5, 0.3).lit(BX(0.04, 0.06, 0.1), '#c82a2a', -0.76, 0.5, -0.3);
+    const m = new T.Mesh(k.build().lit, matLit); m.castShadow = true; grp.add(m);
+    const wheels = [], wk = new Kit().lit(CY(0.28, 0.28, 0.2, 12), '#1a1a1a', 0, 0, 0, Math.PI / 2, 0, 0).lit(CY(0.13, 0.13, 0.22, 6), '#8a8e96', 0, 0, 0, Math.PI / 2, 0, 0)
+      .lit(BX(0.04, 0.5, 0.21), '#2a2a2a', 0, 0, 0).build().lit;
+    for (const [x, z] of [[0.55, 0.5], [0.55, -0.5], [-0.5, 0.52], [-0.5, -0.52]]) { const w = new T.Mesh(wk, matLit); w.position.set(x, 0.28, z); w.castShadow = true; grp.add(w); wheels.push(w); }
+    grp.userData = { wheels }; scene.add(grp);
+    return grp;
+  }
   function chestModel() {
     const grp = new T.Group();
     const k = new Kit()
@@ -1126,6 +1158,8 @@
       for (const o of buildingObjs.values()) disposeGroup(o); buildingObjs.clear();
       for (const o of chestObjs.values()) scene.remove(o); chestObjs.clear();
       for (const o of animalObjs.values()) scene.remove(o); animalObjs.clear();
+      if (hatchObjs) { for (const hb of hatchObjs) { scene.remove(hb.o1); scene.remove(hb.o2); } hatchObjs = null; }
+      for (const o of vehObjs.values()) scene.remove(o); vehObjs.clear();
     }
 
     // Kamera: schräg von oben, folgt dem Spieler
@@ -1152,7 +1186,7 @@
       // Kamera nicht in Gebäude oder Bäume schieben: von der Figur aus prüfen und davor stehen bleiben
       for (let t = 0.2; t <= 1.001; t += 0.1) {
         const sx = px + (camX - px) * t, sz = pz + (camZ - pz) * t, ti = Math.floor(sz) * MAP + Math.floor(sx);
-        if (ti >= 0 && ti < MAP * MAP && (S.bmap[ti] || S.res[ti] === 1 || S.res[ti] === 4)) {
+        if (ti >= 0 && ti < MAP * MAP && (S.bmap[ti] || S.res[ti] === 1 || S.res[ti] === 4 || S.res[ti] === 8)) {
           const k = Math.max(0.12, t - 0.15); camX = px + (camX - px) * k; camY = pivotY + (camY - pivotY) * k + 0.25 * (1 - k); camZ = pz + (camZ - pz) * k; break;
         }
       }
@@ -1188,12 +1222,15 @@
     fogColor.set(wet ? '#7d8288' : dayFog).lerp(col.set(S.bloodMoon ? '#2a0306' : dimV ? '#0e0418' : '#06060a'), night);
     if (strikeA) fogColor.lerp(col.set('#c8d4ff'), strikeA * 0.6);
     if (S.bloodMoon && night > 0.3) hemi.color.set('#b03838');
+    const bunkerV = camBi === 7;
+    if (bunkerV) { hemi.color.set('#5a6070'); hemi.intensity = 0.32; sun.intensity = 0.04; fogColor.set('#050608'); }
     if (dimV) { hemi.color.set('#8a5ac8'); hemi.intensity = Math.max(0.7, hemi.intensity * 0.8); sun.color.set('#b07aff'); sun.intensity *= 0.35; }
     else if (night < 0.3) sun.color.set(camBi === 3 ? '#f4f8ff' : '#ffe2c0');
     scene.background.copy(fogColor); scene.fog.color.copy(fogColor);
     scene.fog.near = 30 - night * 8 - wet * 4; scene.fog.far = 64 - night * 18 - wet * 8;
     if (fpOn) { scene.fog.near = 7 - night * 3; scene.fog.far = 32 - night * 12 - wet * 6; }
     else if (tpOn) { scene.fog.near = 9 - night * 3; scene.fog.far = 36 - night * 11 - wet * 6; }
+    if (bunkerV) { scene.background.copy(fogColor); scene.fog.color.copy(fogColor); scene.fog.near = 4; scene.fog.far = 20; }
 
     gN = 0;
     // Punktlichter: die wichtigsten Lichtquellen in Kameranähe
@@ -1204,7 +1241,7 @@
     };
     for (const s of S.strikes || []) addL(s.x, s.y, 4, '#d8e4ff', 120 * G.clamp(s.life / 0.45, 0, 1), 16, true);
     for (const f of S.flashes) addL(f.x, f.y, 1.5, '#ffb347', 30 * G.clamp(f.life / f.max, 0, 1), f.r / TS * 1.2, true);
-    for (const q of S.players) if (q.dead <= 0) addL(q.x, q.y, 2.2, '#ffd9a0', 14, 8);
+    for (const q of S.players) if (q.dead <= 0) { const inB = S.biome && S.biome[G.clamp(Math.floor(q.y / TS), 0, MAP - 1) * MAP + G.clamp(Math.floor(q.x / TS), 0, MAP - 1)] === 7; addL(q.x, q.y, inB ? 1.8 : 2.2, inB ? '#fff2d8' : '#ffd9a0', inB ? 30 : 14, inB ? 11 : 8, inB); }
     if (S.portal) { addL(S.portal.x, S.portal.y, 2, '#a060ff', 18, 8, true); addL(S.portal2.x, S.portal2.y, 2, '#a060ff', 22, 10, true); }
     for (const b of S.buildings) {
       const c = G.bCenter(b);
@@ -1241,7 +1278,7 @@
     const R = 30, x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(MAP - 1, Math.ceil(cx + R));
     const vfx = -Math.sin(R3.yaw), vfz = -Math.cos(R3.yaw);
     const z0 = Math.max(0, Math.floor(cz - R - 4)), z1 = Math.min(MAP - 1, Math.ceil(cz + R + 4));
-    let npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
+    let nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
     const BI = S.biome || null;
     const sway = (wet === 2 ? 0.16 : wet ? 0.09 : 0.05);
     for (let ty = z0; ty <= z1; ty++) for (let tx = x0; tx <= x1; tx++) {
@@ -1255,7 +1292,7 @@
         if (S.bmap[i]) continue;
         const hv = hash(i);
         // Ruinen der alten Welt (nur Optik, blockiert nichts)
-        if (bi !== 5 && !(S.hq && Math.abs(tx - S.hq.tx - 1) < 5 && Math.abs(ty - S.hq.ty - 1) < 5)) {
+        if (bi !== 5 && bi !== 7 && !(S.hq && Math.abs(tx - S.hq.tx - 1) < 5 && Math.abs(ty - S.hq.ty - 1) < 5)) {
           if (v % 61 === 22 && nrub < 1200) { setInst(rubble, nrub, px, 0, pz, 1, 1, 1, v); rubble.setColorAt(nrub, col.setRGB(0.75, 0.73, 0.7)); nrub++; continue; }
           if (v % 131 === 40 && nlamp < 600) {
             const ry = v * 0.37, tilt = (v % 3) * 0.06;
@@ -1269,6 +1306,8 @@
             continue;
           }
         }
+        if (bi === 7) continue;
+        if (bi === 6 && v % 7) continue;   // Stadt: nur vereinzeltes Unkraut
         if (bi === 2 || bi === 3 || bi === 5) {
           if (bi === 5 && v % 13 === 0) glowAt(px + Math.sin(at * 0.7 + i) * 0.4, 0.3 + ((at * 0.4 + hash(i) * 3) % 3), pz, 0.22, '#c890ff', 0.7);
           if (bi === 2 && v % 19 === 0 && nbu < MAXDECO) { setInst(bushes, nbu, px, 0, pz, 0.6, 0.5, 0.6, v); bushes.setColorAt(nbu, col.setRGB(0.55, 0.48, 0.28)); nbu++; }
@@ -1316,6 +1355,17 @@
         }
         continue;
       }
+      if (k === 8) {
+        // Mauer: in der Stadt je Grundstück 1–4 Stockwerke, im Bunker niedrig und dunkel
+        if (bi === 7) { if (nbw < 6000) { setInst(bunkerWall, nbw, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2); bunkerWall.setColorAt(nbw, col.setRGB(0.36 + (v % 5) * 0.01, 0.37, 0.39)); nbw++; } continue; }
+        const bunker = false, lot = Math.floor(tx / 15) * 977 + Math.floor(ty / 15) * 131 + (S.seed | 0);
+        let fl = bunker ? 2 : 1 + Math.floor(hash(lot) * 4);
+        if (!bunker && v % 5 === 0) fl = Math.max(1, fl - 1);
+        if (bunker) col.setRGB(0.32, 0.33, 0.34); else { const c0 = 0.62 + hash(lot + 3) * 0.2; col.setRGB(c0, c0 * 0.97, c0 * 0.9); }
+        for (let f = 0; f < fl && nrf < 9000; f++) { setInst(ruinFloor, nrf, px, f * 0.96, pz, 1, 1, 1, 0); ruinFloor.setColorAt(nrf, col); nrf++; }
+        if (nrt < 9000) { setInst(ruinTop, nrt, px, fl * 0.96, pz, 1, 0.6 + (v % 4) * 0.25, 1, (v % 4) * Math.PI / 2); ruinTop.setColorAt(nrt, col); nrt++; }
+        continue;
+      }
       if (k === 4) { if (nvo < MAXRES) { setInst(voids, nvo, px, 0, pz, 1, 0.8 + (v % 5) * 0.12, 1, (v % 4) * Math.PI / 2); voids.setColorAt(nvo, col.setRGB(0.09, 0.06, 0.14)); nvo++; if (v % 11 === 0) glowAt(px, 1.4 + (v % 5) * 0.12, pz, 0.6, '#9a5aff', 0.4); } continue; }
       if (k === 5) { if (ncr < MAXRES) { setInst(crystals, ncr, px + ox, 0, pz + oz, sc * 1.1, sc * (1 + (v % 3) * 0.15), sc * 1.1, v); ncr++; glowAt(px, 0.5, pz, 1.4 * sc, '#b47aff', 0.45 + 0.2 * Math.sin(at * 3 + v)); } continue; }
       if (k === 1 && bi === 2) { if (nca < MAXRES) { const s = (0.8 + (v % 5) * 0.1) * sc; setInst(cacti, nca, px + ox, 0, pz + oz, s, s, s, rot * 9, tilt, 0); cacti.setColorAt(nca, col.setRGB(0.22 + (v % 4) * 0.02, 0.48 + (v % 5) * 0.03, 0.22)); nca++; } continue; }
@@ -1359,6 +1409,7 @@
     }
     trunks.count = nt; pine1.count = pine2.count = pine3.count = np; oaks.count = no; rocks.count = nr; ores.count = ng;
     peaks.count = npk; peakSnow.count = nps; done(peaks, peakSnow);
+    ruinFloor.count = nrf; ruinTop.count = nrt; bunkerWall.count = nbw; done(ruinFloor, ruinTop, bunkerWall);
     grass.count = ngr; flowers.count = nfl; bushes.count = nbu; cacti.count = nca; snowcap.count = nsc; voids.count = nvo; crystals.count = ncr;
     cars.count = ncar; barrels.count = nbar2; rubble.count = nrub; lamps.count = nlamp;
     done(trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, snowcap, voids, crystals, cars, barrels, rubble, lamps);
@@ -1497,6 +1548,7 @@
       o.rotation.y = p.danceT > 0 ? -at * 12 : -(p.face || 0);
       if (p.rageT > 0) glowAt(px, 0.6, pz, 1.6, '#ff5a2a', 0.5 + 0.2 * Math.sin(at * 10));
       u.legs[0].rotation.z = Math.sin(wp.ph) * 0.7 * mv; u.legs[1].rotation.z = -Math.sin(wp.ph) * 0.7 * mv;
+      if (p.drive) { o.position.y += 0.18; u.legs[0].rotation.z = u.legs[1].rotation.z = 1.3; const vv = (S.vehicles || []).find(q => q.id === p.drive); if (vv) o.rotation.y = -vv.face; }
       u.arms[0].rotation.z = -Math.sin(wp.ph) * 0.6 * mv;
       for (const k in u.tools) u.tools[k].visible = k === p.tool;
       const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
@@ -1645,12 +1697,44 @@
     }
     for (; ri < ringPool.length; ri++) ringPool[ri].visible = false;
 
+    // Bunker-Luken (draußen) und Ausgänge (drinnen) – einmal gebaut, dann nur noch Leuchten
+    if (!hatchObjs) {
+      hatchObjs = [];
+      for (let k = 0; k < G.DUN.n; k++) {
+        const h = G.hatchPos(k), e = G.dunExit(k);
+        const out = new T.Group(), ki = new Kit()
+          .lit(BX(1.8, 0.2, 1.8), '#5a5a5e', 0, 0.1, 0).lit(BX(1.9, 0.08, 0.2), '#d8a82a', 0, 0.2, 0.85).lit(BX(1.9, 0.08, 0.2), '#d8a82a', 0, 0.2, -0.85)
+          .lit(CY(0.55, 0.6, 0.18, 14), '#6a6e76', 0, 0.28, 0).lit(CY(0.45, 0.45, 0.06, 14), '#3a3e46', 0, 0.39, 0)
+          .lit(TO(0.25, 0.04, 5, 14), '#9aa0a8', 0, 0.44, 0, Math.PI / 2, 0, 0).lit(BX(0.06, 0.9, 0.06), '#4a4a4e', 0.75, 0.6, 0.75).lit(BX(0.4, 0.3, 0.04), '#c8b070', 0.75, 1.0, 0.76);
+        const m = new T.Mesh(ki.build().lit, matLit); m.castShadow = true; out.add(m); out.position.set(h.x / TS, 0, h.y / TS); scene.add(out);
+        const inn = new T.Group(), ke = new Kit();
+        for (let s = 0; s < 6; s++) ke.lit(BX(0.6, 0.05, 0.05), '#8a8e96', 0, 0.3 + s * 0.4, 0);
+        ke.lit(BX(0.05, 2.4, 0.05), '#6a6e76', 0, 1.2, 0.3).lit(BX(0.05, 2.4, 0.05), '#6a6e76', 0, 1.2, -0.3).lit(CY(0.5, 0.5, 0.1, 12), '#4a4e56', 0, 2.45, 0);
+        const m2 = new T.Mesh(ke.build().lit, matLit); inn.add(m2); inn.position.set(e.x / TS, 0, e.y / TS); scene.add(inn);
+        hatchObjs.push({ h, e, o1: out, o2: inn });
+      }
+    }
+    for (const hb of hatchObjs) {
+      glowAt(hb.h.x / TS + 0.75, 1.0, hb.h.y / TS + 0.76, 0.9, '#ffcf6a', 0.35 + 0.2 * Math.sin(at * 3));
+      glowAt(hb.e.x / TS, 2.5, hb.e.y / TS, 1.6, '#cfe8ff', 0.5);
+    }
+    const vseen = new Set();
+    for (const v of S.vehicles || []) {
+      vseen.add(v.id);
+      let o = vehObjs.get(v.id); if (!o) { o = buggyModel(); vehObjs.set(v.id, o); }
+      const vx = v.x / TS, vz = v.y / TS, w = phase('v' + v.id, vx, vz, 16);
+      o.position.set(vx, terrainH(vx, vz), vz); o.rotation.y = -v.face;
+      for (const wh of o.userData.wheels) wh.rotation.z = -w.ph * 2.5;
+      if (v.driver >= 0 && w.mv > 0.3 && night > 0.3) { glowAt(vx + Math.cos(v.face) * 1.0, 0.5, vz + Math.sin(v.face) * 1.0, 1.4, '#fff2c8', 0.5); }
+    }
+    for (const [id, o] of vehObjs) if (!vseen.has(id)) { scene.remove(o); vehObjs.delete(id); }
+
     // Truhen
     const cseen = new Set();
     for (const c of S.chests) {
       cseen.add(c.id);
       let o = chestObjs.get(c.id);
-      if (!o) { o = chestModel(); chestObjs.set(c.id, o); }
+      if (!o) { o = chestModel(); if (c.dun !== undefined) o.scale.setScalar(1.5); chestObjs.set(c.id, o); }
       o.position.set(c.x / TS, Math.sin(at * 3 + c.id) * 0.06, c.y / TS);
       o.rotation.y = Math.sin(at * 0.7 + c.id) * 0.3;
       glowAt(c.x / TS, 0.4, c.y / TS, 1.4, '#ffe27a', 0.35 + 0.25 * Math.sin(at * 4 + c.id));

@@ -229,12 +229,45 @@ const input = { down: false, sx: 0, sy: 0, aim: null };
 const keys = {};
 
 // Ressourcen: 1 = Baum, 2 = Fels, 3 = Golderz
-const RES_HP = [0, 30, 35, 24, 255, 40, 255, 30];   // 7 = Schrott (Autowrack/Fässer) → Eisen   // 4 = Leere (unzerstörbar), 5 = Schattenkristall, 6 = Berg (unzerstörbar)
-const SOLID_RES = k => k === 4 || k === 6;
+const RES_HP = [0, 30, 35, 24, 255, 40, 255, 30, 255];   // 8 = Ruinen-/Bunkermauer (unzerstörbar, eckig)   // 7 = Schrott (Autowrack/Fässer) → Eisen   // 4 = Leere (unzerstörbar), 5 = Schattenkristall, 6 = Berg (unzerstörbar)
+const SOLID_RES = k => k === 4 || k === 6 || k === 8;
 // ---------- Biome: 0 Wiese, 2 Wüste, 3 Schnee, 4 Sumpf, 5 Schattenreich (eigene Dimension hinter einem Portal)
-const BIOME_NAME = ['Wiese', 'Wald', 'Wüste', 'Schneeland', 'Sumpf', 'Schattenreich'];
+const BIOME_NAME = ['Wiese', 'Wald', 'Wüste', 'Schneeland', 'Sumpf', 'Schattenreich', 'Ruinenstadt', 'Bunker'];
 const DIM = { x0: MAP - 72, y0: 6, x1: MAP - 8, y1: 70 };   // Schattenreich: abgeschotteter Bereich in der Ecke
 const inDim = (tx, ty) => tx >= DIM.x0 && tx < DIM.x1 && ty >= DIM.y0 && ty < DIM.y1;
+// ---------- Neue Orte (4.0): Ruinenstädte, Bunker-Dungeons (abgeschottet oben links), Fahrzeuge
+const DUN = { x0: 10, y0: 8, n: 3, w: 42, h: 46 };   // drei Bunker nebeneinander
+const inDun = (tx, ty) => tx >= DUN.x0 - 1 && tx < DUN.x0 + DUN.n * DUN.w + 1 && ty >= DUN.y0 - 1 && ty < DUN.y0 + DUN.h + 1;
+const dunOf = tx => Math.floor((tx - DUN.x0) / DUN.w);
+const dunRoom = (k, i, j) => ({ x: DUN.x0 + k * DUN.w + 3 + i * 13, y: DUN.y0 + 3 + j * 14, w: 10, h: 11 });   // Räume im 3×3-Raster
+const dunExit = k => { const r = dunRoom(k, 1, 2); return { x: (r.x + r.w / 2) * TS, y: (r.y + r.h - 2) * TS }; };
+const DUN_NAME = ['Bunker Alpha', 'Fabrik Beta', 'Labor Gamma'];
+const CITY_R = 34;
+const isStreet = (x, y) => ((x + 1500) % 15) < 3 || ((y + 1500) % 15) < 3;
+const sRand = (n) => { let h = Math.imul((n | 0) ^ 0x5bd1e995, 2654435761) >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13; return (h >>> 0) / 4294967296; };
+function cityCenters() {
+  const sd = (S && S.seed) || 1, out = [];
+  for (let k = 0; k < 2; k++) for (let t = 0; t < 30; t++) {
+    const a = sRand(sd * 7 + k * 101 + t * 13) * TAU, d = MAP * (0.22 + 0.16 * sRand(sd + k * 37 + t));
+    const x = Math.round(MAP / 2 + Math.cos(a) * d), y = Math.round(MAP / 2 + Math.sin(a) * d);
+    if (x < CITY_R + 12 || y < CITY_R + 12 || x > MAP - CITY_R - 12 || y > MAP - CITY_R - 12) continue;
+    if (Math.abs(x - (DIM.x0 + DIM.x1) / 2) < 70 && y < DIM.y1 + 40 || x < DUN.x0 + DUN.n * DUN.w + 40 && y < DUN.y0 + DUN.h + 40) continue;
+    if (out.some(c => Math.hypot(c.x - x, c.y - y) < CITY_R * 3)) continue;
+    out.push({ x, y }); break;
+  }
+  return out;
+}
+// Bunker-Eingänge in der normalen Welt (aus dem Seed, damit alle dieselben Plätze kennen)
+function hatchPos(k) {
+  const sd = (S && S.seed) || 1;
+  for (let t = 0; t < 60; t++) {
+    const a = sRand(sd * 3 + k * 977 + t * 31) * TAU, d = MAP * (0.18 + 0.2 * sRand(sd + k * 53 + t * 7));
+    const tx = Math.round(MAP / 2 + Math.cos(a) * d), ty = Math.round(MAP / 2 + Math.sin(a) * d);
+    if (tx < 24 || ty < 24 || tx > MAP - 24 || ty > MAP - 24 || inDim(tx, ty) || inDun(tx, ty)) continue;
+    return { x: (tx + 0.5) * TS, y: (ty + 0.5) * TS, tx, ty };
+  }
+  return { x: (MAP / 2 + 20 + k * 6) * TS, y: (MAP / 2) * TS, tx: MAP / 2 + 20 + k * 6, ty: MAP / 2 };
+}
 const biomeAtW = (x, y) => { if (!S || !S.biome) return 0; const tx = clamp(Math.floor(x / TS), 0, MAP - 1), ty = clamp(Math.floor(y / TS), 0, MAP - 1); return S.biome[ty * MAP + tx]; };
 function genVariant() {
   const sd = S.seed | 0;
@@ -247,10 +280,14 @@ function genBiomes() {
   S.biome = new Uint8Array(MAP * MAP);
   const sd = S.seed || 1, c = MAP / 2, a0 = (sd % 628) / 100;
   const centers = [2, 3, 4, 2, 3, 4].map((b, k) => { const d = MAP * (k < 3 ? 0.27 : 0.4), a = a0 + k * 2.09 + (k >= 3 ? 1.05 : 0); return { b, x: c + Math.cos(a) * d, y: c + Math.sin(a) * d }; });
-  const s1 = sd % 97, s2 = sd % 89, s3 = sd % 83;
+  const s1 = sd % 97, s2 = sd % 89, s3 = sd % 83, cities = cityCenters();
   for (let y = 0; y < MAP; y++) for (let x = 0; x < MAP; x++) {
     const i = y * MAP + x;
     if (inDim(x, y)) { S.biome[i] = 5; continue; }
+    if (inDun(x, y)) { S.biome[i] = 7; continue; }
+    let city = false;
+    for (const cc of cities) { const n2 = Math.sin(x * 0.21 + s1) * 2 + Math.sin(y * 0.17 + s2) * 2; if (Math.max(Math.abs(x - cc.x), Math.abs(y - cc.y)) + n2 < CITY_R) { city = true; break; } }
+    if (city) { S.biome[i] = 6; continue; }
     const n = Math.sin(x * 0.07 + s1) * 7 + Math.sin(y * 0.061 + s2) * 7 + Math.sin((x + y) * 0.043 + s3) * 6 + Math.sin((x - y) * 0.12 + s1) * 3;
     if (Math.hypot(x - c, y - c) + n < MAP * 0.12) continue;
     let best = 0, bd = 1e9;
@@ -605,7 +642,7 @@ function genMap() {
     if (b === 2) { if (R[i] === 1 && r < 0.75) R[i] = 0; else if (R[i] === 2 && r < 0.35) R[i] = 3; else if (!R[i] && r < 0.006) R[i] = 3; }
     else if (b === 3) { if (!R[i] && r < 0.012) R[i] = 2; }
     else if (b === 4) { if (R[i] === 2 && r < 0.5) R[i] = 0; else if (!R[i] && r < 0.03) R[i] = 1; }
-    else if (b === 5) R[i] = 0;
+    else if (b === 5 || b === 6 || b === 7) R[i] = 0;
   }
   // Schrott der alten Welt: einzelne Wracks + ein paar Schrottplätze
   for (let i = 0; i < MAP * MAP; i++) { const b = S.biome[i]; if (!R[i] && (b === 0 || b === 2 || b === 4) && Math.random() < 0.0045) R[i] = 7; }
@@ -615,7 +652,7 @@ function genMap() {
     for (let n = 0; n < 14; n++) { const x = cx + randi(-4, 4), y = cy + randi(-4, 4); if (inMap(x, y) && S.biome[y * MAP + x] !== 5) R[y * MAP + x] = 7; }
   }
   // Gebirge: Ring um die ganze Karte + einige Bergketten (für Zombies unpassierbar)
-  const nearDim = (x, y) => x >= DIM.x0 - 4 && x < DIM.x1 + 4 && y >= DIM.y0 - 4 && y < DIM.y1 + 4;
+  const nearDim = (x, y) => (x >= DIM.x0 - 4 && x < DIM.x1 + 4 && y >= DIM.y0 - 4 && y < DIM.y1 + 4) || inDun(x - 3, y - 3) || inDun(x + 3, y + 3) || S.biome[y * MAP + x] === 6;
   for (let y = 0; y < MAP; y++) for (let x = 0; x < MAP; x++) {
     const e = Math.min(x, y, MAP - 1 - x, MAP - 1 - y), w = 4 + Math.sin(x * 0.09 + y * 0.05 + S.seed % 7) * 1.5 + Math.sin((x - y) * 0.13) * 1.2;
     if (e < w && !nearDim(x, y)) R[y * MAP + x] = 6;
@@ -647,6 +684,8 @@ function genMap() {
   }
   for (let k = 0; k < 70; k++) { const x = randi(DIM.x0 + 3, DIM.x1 - 4), y = randi(DIM.y0 + 3, DIM.y1 - 4); if (!R[y * MAP + x]) R[y * MAP + x] = 5; }
   for (let y = dcy - 4; y <= dcy + 4; y++) for (let x = dcx - 4; x <= dcx + 4; x++) R[y * MAP + x] = 0;
+  genCities(); genDungeons();
+  for (let k = 0; k < DUN.n; k++) { const h = hatchPos(k); for (let y = h.ty - 2; y <= h.ty + 2; y++) for (let x = h.tx - 2; x <= h.tx + 2; x++) if (inMap(x, y)) R[y * MAP + x] = 0; }
   // Startbereich in der Mitte etwas lichten
   const c = MAP / 2 | 0;
   for (let y = c - 3; y <= c + 3; y++) for (let x = c - 3; x <= c + 3; x++) R[y * MAP + x] = 0;
@@ -654,6 +693,68 @@ function genMap() {
   for (let i = 0; i < MAP * MAP; i++) if (R[i]) { S.rhp[i] = RES_HP[R[i]]; S.resCount[R[i]]++; }
   S.resTarget = S.resCount.slice();
   calcMountains();
+}
+// Ruinenstadt: Straßenraster, Hausruinen aus Mauern mit Türen und Lücken, Autowracks, Truhen in manchen Häusern
+function genCities() {
+  const R = S.res;
+  for (const cc of cityCenters()) {
+    for (let gy = Math.floor((cc.y - CITY_R) / 15); gy <= Math.ceil((cc.y + CITY_R) / 15); gy++)
+      for (let gx = Math.floor((cc.x - CITY_R) / 15); gx <= Math.ceil((cc.x + CITY_R) / 15); gx++) {
+        const lx = gx * 15 + 3, ly = gy * 15 + 3;   // Grundstück 12×12 zwischen den Straßen
+        if (!inMap(lx + 6, ly + 6) || S.biome[(ly + 6) * MAP + lx + 6] !== 6) continue;
+        const r = Math.random();
+        if (r < 0.12) { for (let k = 0; k < 6; k++) { const x = lx + randi(1, 10), y = ly + randi(1, 10); if (S.biome[y * MAP + x] === 6) R[y * MAP + x] = Math.random() < 0.5 ? 1 : 7; } continue; }   // verwilderter Park / Schrottplatz
+        const w = randi(6, 11), h = randi(6, 11), x0 = lx + randi(0, 11 - w), y0 = ly + randi(0, 11 - h);
+        const door = randi(0, 3);
+        for (let y = y0; y <= y0 + h; y++) for (let x = x0; x <= x0 + w; x++) {
+          if (S.biome[y * MAP + x] !== 6) continue;
+          const edge = x === x0 || y === y0 || x === x0 + w || y === y0 + h;
+          if (!edge) continue;
+          const mx = x0 + (w >> 1), my = y0 + (h >> 1);
+          const isDoor = (door === 0 && y === y0 && Math.abs(x - mx) <= 1) || (door === 1 && y === y0 + h && Math.abs(x - mx) <= 1) || (door === 2 && x === x0 && Math.abs(y - my) <= 1) || (door === 3 && x === x0 + w && Math.abs(y - my) <= 1);
+          if (isDoor || Math.random() < 0.12) continue;   // Tür und eingestürzte Stellen
+          R[y * MAP + x] = 8;
+        }
+        if (w >= 8 && Math.random() < 0.5) { const px = x0 + (w >> 1); for (let y = y0 + 1; y < y0 + h; y++) if (Math.random() < 0.8 && y !== y0 + (h >> 1)) R[y * MAP + px] = 8; }
+        for (let k = 0; k < 2; k++) { const x = x0 + randi(1, w - 1), y = y0 + randi(1, h - 1); if (!R[y * MAP + x] && Math.random() < 0.4) R[y * MAP + x] = 7; }
+        if (Math.random() < 0.22) { const x = x0 + randi(1, w - 1), y = y0 + randi(1, h - 1); if (!R[y * MAP + x]) S.chests.push({ id: S.nextChest++, x: (x + 0.5) * TS, y: (y + 0.5) * TS, city: true }); }
+      }
+    // Autowracks auf den Straßen
+    for (let y = cc.y - CITY_R; y <= cc.y + CITY_R; y++) for (let x = cc.x - CITY_R; x <= cc.x + CITY_R; x++)
+      if (inMap(x, y) && S.biome[y * MAP + x] === 6 && isStreet(x, y) && !R[y * MAP + x] && Math.random() < 0.03) R[y * MAP + x] = 7;
+  }
+}
+// Bunker-Dungeons: 3×3 Räume mit Gängen, alles andere Mauer. Eingang unten Mitte, Beute-Raum oben.
+function genDungeons() {
+  const R = S.res;
+  for (let y = DUN.y0 - 1; y < DUN.y0 + DUN.h + 1; y++) for (let x = DUN.x0 - 1; x < DUN.x0 + DUN.n * DUN.w + 1; x++) if (inMap(x, y)) R[y * MAP + x] = 8;
+  S.dunRooms = [];
+  for (let k = 0; k < DUN.n; k++) {
+    const carve = (x0, y0, w, h) => { for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) R[y * MAP + x] = 0; };
+    for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) { const r = dunRoom(k, i, j); carve(r.x, r.y, r.w, r.h); }
+    // Gänge: zufälliger Baum über alle Räume + ein paar Extras
+    const seen = new Set(['1,2']), stack = [[1, 2]];
+    const link = (a, b) => {
+      const ra = dunRoom(k, a[0], a[1]), rb = dunRoom(k, b[0], b[1]);
+      if (a[1] === b[1]) { const y = ra.y + 4 + randi(0, 2), x0 = Math.min(ra.x, rb.x) + ra.w, x1 = Math.max(ra.x, rb.x); carve(x0, y, x1 - x0, 2); }
+      else { const x = ra.x + 4 + randi(0, 2), y0 = Math.min(ra.y, rb.y) + ra.h, y1 = Math.max(ra.y, rb.y); carve(x, y0, 2, y1 - y0); }
+    };
+    while (stack.length) {
+      const cur = stack[stack.length - 1];
+      const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(d => [cur[0] + d[0], cur[1] + d[1]]).filter(n => n[0] >= 0 && n[0] < 3 && n[1] >= 0 && n[1] < 3 && !seen.has(n + ''));
+      if (!nb.length) { stack.pop(); continue; }
+      const n = nb[randi(0, nb.length - 1)]; seen.add(n + ''); link(cur, n); stack.push(n);
+    }
+    for (let e = 0; e < 2; e++) { const a = [randi(0, 1), randi(0, 2)]; link(a, [a[0] + 1, a[1]]); }
+    // Kisten / Schrott / Trümmer in den Räumen
+    const rooms = [];
+    for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) {
+      const r = dunRoom(k, i, j); rooms.push({ x: (r.x + r.w / 2) * TS, y: (r.y + r.h / 2) * TS, i, j });
+      if (i === 1 && j === 2) continue;
+      for (let n = 0; n < 3; n++) { const x = r.x + randi(1, r.w - 2), y = r.y + randi(1, r.h - 2); if (Math.random() < 0.6) R[y * MAP + x] = Math.random() < 0.6 ? 7 : 2; }
+    }
+    S.dunRooms[k] = { rooms, loot: rooms.filter(r => r.j === 0)[randi(0, 2)] };
+  }
 }
 // Berghöhe = Abstand zum Bergrand (für hohe Gipfel in der Mitte von Gebirgen)
 function calcMountains() {
@@ -713,7 +814,7 @@ function chestTick(dt) {
     S.chestT -= dt;
     if (S.chestT <= 0) {
       S.chestT = rand(18, 30) / Math.min(4, hqs.length);
-      if (S.chests.length < 3 * hqs.length) {
+      if (S.chests.filter(c => !c.city && c.dun === undefined).length < 3 * hqs.length) {
         const hq = hqs[randi(0, hqs.length - 1)], hx = hq.tx + 1, hy = hq.ty + 1;
         for (let tries = 0; tries < 60; tries++) {
           const a = rand(0, TAU), d = rand(9, 32);
@@ -731,7 +832,7 @@ function chestTick(dt) {
     }
   }
   for (const c of S.chests) {
-    if (c.open) continue;
+    if (c.open || c.locked) continue;
     const q = S.players.find(pl => pl.dead <= 0 && Math.hypot(pl.x - c.x, pl.y - c.y) < 34);
     if (q) withTeam(teamOf(q), () => openChest(c, q));
   }
@@ -741,6 +842,18 @@ function openChest(c, q) {
   c.open = true;
   const m = 1 + 0.15 * (S.night - 1), r = Math.random();
   let txt;
+  if (c.dun !== undefined) {
+    // Bunker-Beute: viel Material, Verbrauchsgegenstände und Gold
+    const n = Math.round(rand(120, 220) * m * lootMul()); S.gold += n; S.goldEarned += n; S.iron = (S.iron || 0) + 8;
+    giveMat(q, 'c', randi(3, 6)); giveMat(q, 'e', randi(3, 6)); giveMat(q, 'h', randi(2, 5));
+    for (const id of ['med', 'gren', 'molo']) q.cons[id] = Math.min(CONS_MAX, (q.cons[id] | 0) + randi(1, 2));
+    giveXp(q, 120);
+    burst(c.x, c.y, '#ffe27a', 50, 240, 0.9, 4); ring(c.x, c.y, 90, 0.5, '#ffe27a');
+    floatText(c.x, c.y - 24, '+' + n + ' Gold, +8 Eisen, Material & Ausrüstung!', '#ffe27a', 16);
+    SFX.play('upgrade', c.x, c.y);
+    toastAll((q.name || 'Jemand') + ' hat ' + DUN_NAME[c.dun] + ' geplündert!', '#ffe27a');
+    return;
+  }
   if (r < 0.32) { const n = Math.round(rand(30, 70) * m); S.wood += n; txt = '+' + n + ' Holz'; }
   else if (r < 0.62) { const n = Math.round(rand(30, 70) * m); S.stone += n; txt = '+' + n + ' Stein'; }
   else if (r < 0.9) { const n = Math.round(rand(60, 140) * m * lootMul()); S.gold += n; S.goldEarned += n; txt = '+' + n + ' Gold'; }
@@ -1040,13 +1153,13 @@ function collideTiles(e, isPlayer, ignoreRes) {
   const y0 = Math.max(0, Math.floor((e.y - r) / TS)), y1 = Math.min(MAP - 1, Math.floor((e.y + r) / TS));
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
     const i = ty * MAP + tx;
-    if (S.res[i]) {
+    if (S.res[i] && S.res[i] !== 8) {
       if (ignoreRes || (isPlayer && S.res[i] === 6)) continue;   // Spieler können auf Berge steigen
       const cx = (tx + 0.5) * TS, cy = (ty + 0.5) * TS, rr = r + RES_R;
       const dx = e.x - cx, dy = e.y - cy, d2 = dx * dx + dy * dy;
       if (d2 < rr * rr) { const d = Math.sqrt(d2) || 0.01; e.x = cx + dx / d * rr; e.y = cy + dy / d * rr; }
-    } else if (S.bmap[i]) {
-      const btype = S.bById.get(S.bmap[i]).type;
+    } else if (S.bmap[i] || S.res[i] === 8) {
+      const btype = S.res[i] === 8 ? 'ruin' : S.bById.get(S.bmap[i]).type;
       if (btype === 'trap' || (isPlayer && btype === 'door' && S.bById.get(S.bmap[i]).team === tidOf(e))) continue;
       if (isPlayer && e.z > 24 && (btype === 'wall' || btype === 'door')) continue;   // über Mauern springen
       const rx = tx * TS, ry = ty * TS;
@@ -1135,6 +1248,7 @@ function placeError(type, tx, ty) {
     const me = (CT || homeTeam()).id;
     for (const h of allHQs()) if (h.team !== me && Math.max(Math.abs(h.tx - tx), Math.abs(h.ty - ty)) < 80) return 'Zu nah an einer anderen Basis (mind. 80 Felder Abstand)';
     if (inDim(tx, ty)) return 'Nicht im Schattenreich';
+    if (inDun(tx, ty) || S.biome[ty * MAP + tx] === 7) return 'Nicht im Bunker';
   } else {
     const hx = S.hq.tx + 1.5, hy = S.hq.ty + 1.5, cx = tx + sz / 2, cy = ty + sz / 2;
     if (Math.max(Math.abs(cx - hx), Math.abs(cy - hy)) > buildRange()) return 'Außerhalb des Baubereichs – Reaktor aufwerten vergrößert ihn';
@@ -1143,7 +1257,7 @@ function placeError(type, tx, ty) {
   for (let y = ty; y < ty + sz; y++) for (let x = tx; x < tx + sz; x++) {
     if (!inMap(x, y) || x < 1 || y < 1 || x >= MAP - 1 || y >= MAP - 1) return 'Ungültige Position';
     const i = y * MAP + x;
-    if (S.res[i]) return 'Blockiert durch ' + (S.res[i] === 1 ? 'Baum' : S.res[i] === 3 ? 'Golderz' : S.res[i] === 4 ? 'die Leere' : S.res[i] === 5 ? 'Kristall' : S.res[i] === 6 ? 'einen Berg' : S.res[i] === 7 ? 'Schrott' : 'Fels');
+    if (S.res[i]) return 'Blockiert durch ' + (S.res[i] === 1 ? 'Baum' : S.res[i] === 3 ? 'Golderz' : S.res[i] === 4 ? 'die Leere' : S.res[i] === 5 ? 'Kristall' : S.res[i] === 6 ? 'einen Berg' : S.res[i] === 7 ? 'Schrott' : S.res[i] === 8 ? 'eine Mauer' : 'Fels');
     if (S.portal && Math.hypot((x + 0.5) * TS - S.portal.x, (y + 0.5) * TS - S.portal.y) < TS * 1.6) return 'Hier steht das Portal';
     if (S.bmap[i]) return 'Blockiert durch Gebäude';
   }
@@ -1467,7 +1581,7 @@ function edgePoint() {
     const a = rand(0, TAU), d = rand(Math.max(44, buildRange() + 16), Math.max(52, buildRange() + 24));
     const tx = clamp(Math.round(hx + Math.cos(a) * d), 1, MAP - 2), ty = clamp(Math.round(hy + Math.sin(a) * d), 1, MAP - 2);
     const i = ty * MAP + tx;
-    if (!S.res[i] && !S.bmap[i]) return { tx, ty };
+    if (!S.res[i] && !S.bmap[i] && S.biome[i] !== 5 && S.biome[i] !== 7) return { tx, ty };
   }
   return { tx: 1, ty: 1 };
 }
@@ -1557,6 +1671,43 @@ function portalTick(p, dt) {
     p.dimVisits = (p.dimVisits || 0) + 1;
   } else toastFor(p, 'Zurück in der normalen Welt.', '#cfe8ff');
 }
+// ---------- Bunker: betreten über Luken in der Welt, drinnen Wächter + Beute-Truhe, füllt sich nach 4 Minuten wieder
+function nearHatch(p) {
+  for (let k = 0; k < DUN.n; k++) {
+    const h = hatchPos(k); if (Math.hypot(p.x - h.x, p.y - h.y) < 1.6 * TS) return { k, out: true };
+    const e = dunExit(k); if (Math.hypot(p.x - e.x, p.y - e.y) < 1.6 * TS) return { k, out: false };
+  }
+  return null;
+}
+function useHatch(p) {
+  const h = nearHatch(p); if (!h || p.drive) return false;
+  if (h.out) {
+    const e = dunExit(h.k); p.x = e.x; p.y = e.y - 2.4 * TS;
+    dunFill(h.k);
+    toastFor(p, '🔦 ' + DUN_NAME[h.k] + ' – oben wartet eine Beute-Truhe. Vorsicht, Wächter!', '#ffcf8a');
+  } else { const o = hatchPos(h.k); p.x = o.x; p.y = o.y + 1.6 * TS; toastFor(p, 'Zurück an der Oberfläche.', '#cfe8ff'); }
+  p.tp++; sfxFor(p, 'zap'); burst(p.x, p.y, '#ffcf8a', 20, 160, 0.6, 3);
+  return true;
+}
+function dunFill(k) {
+  if (!S.dun) S.dun = [];
+  const d = S.dun[k] || (S.dun[k] = { readyAt: 0 });
+  if (!S.dunRooms || !S.dunRooms[k] || S.t < d.readyAt) return;
+  if (S.zombies.some(z => z.guard === k && !z.dead)) return;
+  d.readyAt = S.t + 240;
+  const N = Math.max(1, S.night), types = ['normal', 'normal', 'runner', 'armored', 'spitter', ...(N >= 3 ? ['brute'] : []), ...(N >= 5 ? ['shaman'] : [])];
+  for (const r of S.dunRooms[k].rooms) {
+    if (r.i === 1 && r.j === 2) continue;
+    const n = 1 + (r === S.dunRooms[k].loot ? 2 : randi(0, 1)) + Math.floor(N / 4);
+    for (let q = 0; q < n; q++) {
+      const z = spawnZombie(types[randi(0, types.length - 1)], { tx: Math.floor(r.x / TS) + randi(-2, 2), ty: Math.floor(r.y / TS) + randi(-2, 2) });
+      z.guard = k; z.hp *= 1.3; z.maxHp *= 1.3;
+    }
+  }
+  const L = S.dunRooms[k].loot;
+  S.chests = S.chests.filter(c => c.dun !== k);
+  S.chests.push({ id: S.nextChest++, x: L.x, y: L.y - TS, dun: k });
+}
 function dimTick(dt) {
   if (!S.portal) { const h0 = allHQs()[0]; if (h0) withTeam(S.teams.get(h0.team), makePortal); }
   if (!S.portal) return;
@@ -1590,9 +1741,11 @@ function dimTick(dt) {
 }
 // Schattenwesen jagen nur Spieler im Schattenreich, ohne Wegsuche
 function shadeTick(z, dt) {
-  const D = ZDEF.shade;
-  let best = null, bd = 700;
-  for (const q of S.players) { if (q.dead > 0 || q.afk || S.biome[tileAt(q.x, q.y)] !== 5) continue; const d = Math.hypot(q.x - z.x, q.y - z.y); if (d < bd) { bd = d; best = q; } }
+  const D = ZDEF[z.type], guard = typeof z.guard === 'number';
+  let best = null, bd = guard ? 520 : 700;
+  for (const q of S.players) {
+    if (q.dead > 0 || q.afk) continue;
+    if (guard ? (S.biome[tileAt(q.x, q.y)] !== 7 || dunOf(q.x / TS) !== z.guard) : S.biome[tileAt(q.x, q.y)] !== 5) continue; const d = Math.hypot(q.x - z.x, q.y - z.y); if (d < bd) { bd = d; best = q; } }
   let tx, ty, sp = D.speed * z.spMul * (z.frostT > 0 ? 0.6 : 1);
   if (best) {
     tx = best.x; ty = best.y;
@@ -1600,8 +1753,9 @@ function shadeTick(z, dt) {
   } else {
     if (!z.wx || Math.hypot(z.wx - z.x, z.wy - z.y) < 20) { z.wx = z.x + rand(-200, 200); z.wy = z.y + rand(-200, 200); }
     tx = z.wx; ty = z.wy; sp *= 0.35;
+    if (guard) { if (!z.hx) { z.hx = z.x; z.hy = z.y; } if (Math.hypot(z.wx - z.hx, z.wy - z.hy) > 150) { z.wx = z.hx; z.wy = z.hy; } }
     z.idleT = (z.idleT || 0) + dt;
-    if (z.idleT > 40) { z.dead = true; return; }   // verschwindet, wenn lange niemand da ist
+    if (z.idleT > (guard ? 120 : 40)) { z.dead = true; return; }   // verschwindet, wenn lange niemand da ist
   }
   if (best) z.idleT = 0;
   const dx = tx - z.x, dy = ty - z.y, d = Math.hypot(dx, dy);
@@ -1613,7 +1767,7 @@ let lastBiome = -1;
 function biomeNotice() {
   if (!S || !S.player || !S.biome || mode !== 'play') return;
   const b = biomeAtW(S.player.x, S.player.y);
-  if (b !== lastBiome) { if (lastBiome >= 0) toast((['🌿', '🌲', '🏜', '❄', '🐸', '🌀'][b]) + ' ' + BIOME_NAME[b] + (b === 4 ? ' – der Schlamm bremst dich' : ''), b === 5 ? '#d8b4ff' : '#cfe8ff'); lastBiome = b; }
+  if (b !== lastBiome) { if (lastBiome >= 0) toast((['🌿', '🌲', '🏜', '❄', '🐸', '🌀', '🏚', '🔦'][b]) + ' ' + BIOME_NAME[b] + (b === 4 ? ' – der Schlamm bremst dich' : b === 6 ? ' – in den Ruinen liegen Truhen und Schrott' : ''), b === 5 ? '#d8b4ff' : '#cfe8ff'); lastBiome = b; }
 }
 function weatherTick(dt) {
   if (S.weather !== 2 || !S.started) return;
@@ -1715,13 +1869,14 @@ function killZombie(z) {
 }
 function hurtPlayer(p, dmg) {
   if (p.dead > 0 || p.afk || p.invT > 0 || p.z > 6) return;   // in der Luft weicht man aus
-  dmg *= (1 - 0.07 * (p.sk.armor || 0)) * (1 - armorRed(p));
+  dmg *= (1 - 0.07 * (p.sk.armor || 0)) * (1 - armorRed(p)) * (p.drive ? 0.5 : 1);
   p.hp -= dmg; p.lastHurt = S.t; p.flash = 0.15;
   burst(p.x, p.y, '#c0392b', 8, 130, 0.45, 2.5);
   shakeFor(p, 2.5);
   sfxFor(p, 'hurt');
   if (p.hp <= 0) {
     p.hp = 0; p.dead = 5;
+    if (p.drive) { const v = vById(p.drive); if (v) v.driver = -1; p.drive = 0; }
     burst(p.x, p.y, '#c0392b', 40, 220, 0.9, 3.5);
     sfxFor(p, 'die');
     toastFor(p, 'Du bist gestorben – Respawn in 5 Sekunden', '#ff7b6b');
@@ -1812,7 +1967,7 @@ function toggleView() {
 const mouseLocked = () => typeof document !== 'undefined' && !!canvas && document.pointerLockElement === canvas;
 function jump(p) {
   p = p || S.player;
-  if (!p || p.dead > 0 || p.z > 0.5 || mode !== 'play') return;
+  if (!p || p.dead > 0 || p.z > 0.5 || mode !== 'play' || p.drive) return;
   p.vz = 345; p.z = 0.1;
   if (p.afk) setAfk(p, false);
   SFX.play('swing', p.x, p.y);
@@ -1851,7 +2006,7 @@ function nearestPlayer(x, y) {
 function updZombie(z, dt) {
   const D = ZDEF[z.type];
   z.flash -= dt; z.atkCd -= dt; z.lunge = Math.max(0, z.lunge - dt); z.slowT = (z.slowT || 0) - dt; z.frostT = (z.frostT || 0) - dt;
-  if (D.shade) { shadeTick(z, dt); return; }
+  if (D.shade || typeof z.guard === 'number') { shadeTick(z, dt); return; }
   if (z.type === 'shaman') {
     z.healT = (z.healT === undefined ? 2 : z.healT) - dt;
     if (z.healT <= 0) {
@@ -2091,6 +2246,58 @@ function actCraftEq(kind, id) {
   if (err) { toast(err, '#ff7b6b'); SFX.play('error', undefined, undefined, true); }
 }
 // Verbrauchsgegenstand benutzen (Host). a = Zielpunkt
+// ---------- Buggy: aus Schrott gebaut, schnell, überfährt Zombies, braucht Sprit (Chemie)
+const BUGGY_COST = { w: 0, s: 40, g: 80, i: 25, e: 4, h: 3 };
+const vById = id => S.vehicles && S.vehicles.find(v => v.id === id);
+function buildBuggy(p) { return withTeam(teamOf(p), () => {
+  if (!S.vehicles) S.vehicles = [];
+  if (S.vehicles.some(v => v.owner === p.id)) return 'Du hast schon einen Buggy';
+  if (!eqCostOk(p, BUGGY_COST)) return 'Nicht genug Material: ' + eqCostText(BUGGY_COST);
+  if (S.biome[tileAt(p.x, p.y)] === 7) return 'Nicht im Bunker';
+  eqPay(p, BUGGY_COST);
+  S.vehicles.push({ id: (S.nextVeh = (S.nextVeh || 0) + 1), x: p.x + Math.cos(p.face) * 50, y: p.y + Math.sin(p.face) * 50, face: p.face, owner: p.id, fuel: 100, driver: -1 });
+  burst(p.x, p.y, '#c8a040', 26, 160, 0.6, 3); sfxFor(p, 'upgrade');
+  toastFor(p, '🚙 Buggy gebaut! Geh hin und drück F (Handy: Einsteigen)', '#ffe27a');
+  return null;
+}); }
+function refuel(p) {
+  const v = S.vehicles && S.vehicles.find(q => q.owner === p.id);
+  if (!v) return 'Kein Buggy';
+  if (v.fuel >= 99) return 'Der Tank ist voll';
+  if (!(p.mat.h > 0)) return 'Zum Tanken brauchst du 1 🧪 Chemie';
+  p.mat.h--; v.fuel = Math.min(100, v.fuel + 40); sfxFor(p, 'click'); toastFor(p, '⛽ Getankt: ' + Math.round(v.fuel) + ' %', '#ffe27a');
+  return null;
+}
+function nearVehicle(p) { let best = null, bd = 1.9 * TS; for (const v of S.vehicles || []) { if (v.driver >= 0) continue; const d = Math.hypot(v.x - p.x, v.y - p.y); if (d < bd) { bd = d; best = v; } } return best; }
+// Eine Taste für alles in der Nähe: aussteigen, einsteigen, Bunker-Luke
+function interact(p) {
+  if (!p || p.dead > 0) return;
+  if (p.drive) { const v = vById(p.drive); p.drive = 0; if (v) { v.driver = -1; p.x = v.x + Math.cos(v.face + Math.PI / 2) * 36; p.y = v.y + Math.sin(v.face + Math.PI / 2) * 36; p.tp++; } return; }
+  const v = nearVehicle(p);
+  if (v) { p.drive = v.id; v.driver = p.id; p.x = v.x; p.y = v.y; p.tp++; sfxFor(p, 'click'); if (v.fuel <= 0) toastFor(p, 'Tank leer – tanke im Inventar (I → Ausrüstung) mit 🧪 Chemie', '#ff9a7a'); return; }
+  useHatch(p);
+}
+function actInteract() {
+  if (NET.role === 'client') { netSendR({ t: 'act' }); return; }
+  interact(S.player);
+}
+function vehicleTick(p, dt) {
+  const v = vById(p.drive);
+  if (!v) { p.drive = 0; return; }
+  const dx = p.x - v.x, dy = p.y - v.y, d = Math.hypot(dx, dy), sp = d / Math.max(dt, 0.001);
+  if (d > 0.5) v.face = Math.atan2(dy, dx);
+  v.x = p.x; v.y = p.y;
+  if (!S.isClient) {
+    v.fuel = Math.max(0, v.fuel - d / TS * 0.3);
+    if (sp > 140) forZ(p.x, p.y, 70, z => {
+      if ((z.ramT || 0) > S.t || Math.hypot(z.x - p.x, z.y - p.y) > 26 + z.r) return;
+      z.ramT = S.t + 0.5; z.lastHit = p;
+      const a = Math.atan2(z.y - p.y, z.x - p.x);
+      hurtZombie(z, sp * 0.14 * (1 + 0.3 * (hqLvl() - 1)), { x: Math.cos(a) * 420, y: Math.sin(a) * 420 });
+      addShake(2, p.x, p.y);
+    });
+  }
+}
 function useCons(p, id, a) {
   if (!p || p.dead > 0 || (p.useCd || 0) > 0 || !(p.cons[id] > 0)) return;
   const C = CONS.find(c => c.id === id); if (!C) return;
@@ -2181,7 +2388,8 @@ function movePlayer(p, dt) {
   let mx = p.inp.mx, my = p.inp.my;
   const ml = Math.hypot(mx, my);
   const onMtn = S.res[tileAt(p.x, p.y)] === 6;
-  const spd = 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0) + armorSpd(p)) * (p.rageT > 0 ? 1.2 : 1) * (biomeAtW(p.x, p.y) === 4 && !onMtn ? 0.85 : 1) * (onMtn ? 0.75 : 1);
+  const veh = p.drive ? vById(p.drive) : null;
+  const spd = (veh ? (veh.fuel > 0 ? 2.3 : 0.4) : 1) * 190 * (1 + 0.06 * (p.sk ? p.sk.spd : 0) + armorSpd(p)) * (p.rageT > 0 ? 1.2 : 1) * (biomeAtW(p.x, p.y) === 4 && !onMtn ? 0.85 : 1) * (onMtn ? 0.75 : 1);
   // Sprung
   if (p.z > 0 || p.vz > 0) { p.vz -= 1500 * dt; p.z = Math.max(0, p.z + p.vz * dt); if (p.z <= 0) { p.vz = 0; if (!HEADLESS) burst(p.x, p.y + 8, '#a89a88', 4, 60, 0.35, 2.5); } }
   if (ml > 0) { mx /= ml; my /= ml; p.x += mx * spd * dt; p.y += my * spd * dt; p.walk += dt * 10; }
@@ -2231,7 +2439,8 @@ function updPlayer(p, dt) {
       hurtZombie(z, critDmg(p, dmg), { x: Math.cos(a) * 380, y: Math.sin(a) * 380 });
     });
   }
-  if (p.inp.down && p.cd <= 0 && !(p.danceT > 0)) playerAttack(p);
+  if (p.drive) vehicleTick(p, dt);
+  if (p.inp.down && p.cd <= 0 && !(p.danceT > 0) && !p.drive) playerAttack(p);
 }
 function playerAttack(p) {
   if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
@@ -2596,7 +2805,7 @@ function farSpawn() {
   const others = [...allHQs().map(h => bCenter(h)), ...S.players.map(p => ({ x: p.x, y: p.y }))];
   for (let need = 110; need >= 20; need -= 15) for (let tries = 0; tries < 120; tries++) {
     const tx = randi(30, MAP - 31), ty = randi(30, MAP - 31), i = ty * MAP + tx;
-    if (S.res[i] || S.bmap[i] || inDim(tx, ty) || S.biome[i] === 5) continue;
+    if (S.res[i] || S.bmap[i] || inDim(tx, ty) || S.biome[i] === 5 || S.biome[i] === 7) continue;
     const x = (tx + 0.5) * TS, y = (ty + 0.5) * TS;
     if (others.every(o => Math.hypot(o.x - x, o.y - y) > need * TS)) return { x, y };
   }
@@ -3011,12 +3220,13 @@ function netHostTick(dt) {
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
         S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0)],
     p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '', [p.eq.h, p.eq.v, p.eq.g, p.eq.b, p.mat.c, p.mat.e, p.mat.h, p.cons.med, p.cons.gren, p.cons.molo]]),
-    ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
+    ch: S.chests.filter(c => !c.open).map(c => [c.id, c.x | 0, c.y | 0, c.dun !== undefined ? 1 : 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
     tm: [...S.teams.values()].map(t => [t.id, r2(t.wood), r2(t.stone), r2(t.gold), r2(t.iron || 0), Math.floor(t.goldEarned || 0), t.name || '']),
     an: (S.animals || []).map(a => [a.id, ATYPES.indexOf(a.type), a.x | 0, a.y | 0, r2(a.face), Math.round(100 * a.hp / a.maxHp), a.flash > 0 ? 1 : 0, a.vx | 0, a.vy | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0, z.frostT > 0 ? 1 : 0, z.golden ? 1 : 0]),
     fi: S.fires.map(f => [f.x | 0, f.y | 0, f.r | 0, r2(f.t)]),
+    ve: (S.vehicles || []).map(v => [v.id, v.x | 0, v.y | 0, r2(v.face), v.driver, Math.round(v.fuel), v.owner]),
     pr: S.projs.map(q => [PKINDS.indexOf(q.k), q.x | 0, q.y | 0, q.k === 'bomb' ? ((q.tx - q.sx) / q.T) | 0 : q.vx | 0, q.k === 'bomb' ? ((q.ty - q.sy) / q.T) | 0 : q.vy | 0, q.h | 0]),
     bd,
   });
@@ -3053,6 +3263,11 @@ function hostHandleClient(m, p) {
     hostEgg(p, String(m.id));
   } else if (m.t === 'craftEq') {
     const err = craftEquip(p, m.k === 'a' ? 'a' : 'c', String(m.id));
+    if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
+  } else if (m.t === 'act') {
+    interact(p);
+  } else if (m.t === 'veh') {
+    const err = m.a === 'fuel' ? refuel(p) : buildBuggy(p);
     if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
   } else if (m.t === 'use') {
     useCons(p, String(m.id), { x: clamp(+m.x || 0, 0, WORLD), y: clamp(+m.y || 0, 0, WORLD) });
@@ -3189,7 +3404,9 @@ function clientSnapshot(m) {
   });
   S.projs = m.pr.map(a => ({ k: PKINDS[a[0]], x: a[1], y: a[2], vx: a[3], vy: a[4], h: a[5], r: 6 }));
   S.fires = (m.fi || []).map(a => ({ x: a[0], y: a[1], r: a[2], t: a[3], tick: 1 }));
-  if (m.ch) S.chests = m.ch.map(a => ({ id: a[0], x: a[1], y: a[2] }));
+  S.vehicles = (m.ve || []).map(a => ({ id: a[0], x: a[1], y: a[2], face: a[3], driver: a[4], fuel: a[5], owner: a[6] }));
+  { const me = S.player, mv = S.vehicles.find(v => v.driver === me.id); me.drive = mv ? mv.id : 0; if (mv) { mv.x = me.x; mv.y = me.y; } }
+  if (m.ch) S.chests = m.ch.map(a => ({ id: a[0], x: a[1], y: a[2], dun: a[3] ? 0 : undefined }));
   if (m.po) { S.portal = { x: m.po[0], y: m.po[1] }; S.portal2 = { x: m.po[2], y: m.po[3] }; }
   for (const a of m.bd) {
     const b = S.bById.get(a[0]);
@@ -3458,11 +3675,11 @@ function buildMinimap() {
   }
   g.putImageData(img, 0, 0);
 }
-const MM_BIOME = [[58, 84, 48], [58, 84, 48], [200, 172, 108], [222, 232, 240], [52, 68, 42], [36, 22, 52]];
-const MM_RES = [null, [34, 92, 40], [120, 120, 128], [214, 176, 52], [8, 4, 14], [190, 120, 255], null, [168, 92, 50]];
+const MM_BIOME = [[58, 84, 48], [58, 84, 48], [200, 172, 108], [222, 232, 240], [52, 68, 42], [36, 22, 52], [92, 90, 86], [30, 32, 36]];
+const MM_RES = [null, [34, 92, 40], [120, 120, 128], [214, 176, 52], [8, 4, 14], [190, 120, 255], null, [168, 92, 50], [150, 146, 138]];
 function mmColor(i) {
   const k = S.res[i], b = S.biome ? S.biome[i] : 0;
-  if (!k) return MM_BIOME[b];
+  if (!k) return b === 6 && isStreet(i % MAP, i / MAP | 0) ? [64, 64, 68] : MM_BIOME[b] || MM_BIOME[0];
   if (k === 1 && b === 2) return [70, 140, 60];
   if (k === 1 && b === 3) return [200, 220, 230];
   if (k === 2 && b === 5) return [60, 50, 80];
@@ -4206,6 +4423,7 @@ function drawTouchUI() {
     ['⤒', 'Springen', () => jump()],
     ['🛠', 'Bauen', () => toggleCraft()],
     ['☰', 'Mehr', () => { touch.more = !touch.more; }],
+    ...(S.player.drive || nearVehicle(S.player) || nearHatch(S.player) ? [[S.player.drive ? '⏏' : nearVehicle(S.player) ? '🚙' : '🔦', 'Aktion', () => actInteract()]] : []),
     ...CONS.filter(c => S.player.cons && S.player.cons[c.id] > 0).map(c => [c.icon, c.name, () => actUse(c.id)]),
   ];
   if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
@@ -4442,6 +4660,13 @@ function drawHUD() {
     ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = c; circle(cx, cy, 1.5); ctx.fill();
     if (!isTouch && !mouseLocked()) text('Linksklick = Maus fangen · oder rechte Maustaste halten und bewegen = umsehen', cx, cy + 34, 13, '#ffe27a', 'center', '600');
+  }
+  // Hinweis für Interaktion (Buggy, Bunker)
+  if (mode === 'play' && p.dead <= 0) {
+    const h = !p.drive && nearHatch(p), v = !p.drive && nearVehicle(p);
+    const msg = p.drive ? '🚙 ' + (isTouch ? 'Aussteigen: Knopf rechts' : 'F = Aussteigen') + ' · Sprit ' + Math.round((vById(p.drive) || { fuel: 0 }).fuel) + ' %'
+      : v ? '🚙 ' + (isTouch ? 'Einsteigen: Knopf rechts' : 'F = Einsteigen') : h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
+    if (msg) { ctx.font = 'bold 15px ' + FONT; const w = ctx.measureText(msg).width + 30; panel(VW / 2 - w / 2, VH * 0.62, w, 34, 0.85); text(msg, VW / 2, VH * 0.62 + 17, 15, '#ffe27a', 'center'); }
   }
   // Ressourcen
   panel(12, 12, 200, 144);
@@ -4973,9 +5198,26 @@ function drawEquipTab(x, y, w, h) {
     } else text('★ Höchste Stufe', cx + cw / 2, cy + ch - 22, 13, '#ffd36b', 'center', '700');
   });
   let cy0 = y + 26 + rowsA * (ch + 8) + 8;
+  // Fahrzeug
+  {
+    const v = (S.vehicles || []).find(q => q.owner === p.id), vy = y + h - 58;
+    card(x, vy, w, 54, !!v);
+    text('🚙 Buggy', x + 12, vy + 18, 14, '#fff', 'left', '700');
+    if (!v) {
+      text('Schnell, überfährt Zombies, braucht Sprit (🧪 Chemie)', x + 12, vy + 38, 10, '#bbb', 'left', '600');
+      costLine(BUGGY_COST, x + w - 330, vy + 18);
+      btn(x + w - 140, vy + 14, 128, 'Bauen', withTeam(teamOf(p), () => eqCostOk(p, BUGGY_COST)), () => { if (NET.role === 'client') netSendR({ t: 'veh', a: 'build' }); else { const e = buildBuggy(p); if (e) toast(e, '#ff7b6b'); } });
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(x + 110, vy + 12, 160, 10);
+      ctx.fillStyle = v.fuel > 30 ? '#8fe08f' : '#ff9a5a'; ctx.fillRect(x + 110, vy + 12, 160 * v.fuel / 100, 10);
+      text('Sprit ' + Math.round(v.fuel) + ' %', x + 280, vy + 17, 12, '#ddd', 'left', '600');
+      text(isTouch ? 'Einsteigen: hingehen, Knopf rechts' : 'Einsteigen/Aussteigen: F', x + 12, vy + 38, 10, '#bbb', 'left', '600');
+      btn(x + w - 170, vy + 14, 158, 'Tanken (1 🧪 = +40 %)', (p.mat.h | 0) > 0 && v.fuel < 99, () => { if (NET.role === 'client') netSendR({ t: 'veh', a: 'fuel' }); else { const e = refuel(p); if (e) toast(e, '#ff7b6b'); } });
+    }
+  }
   text('🎒 VERBRAUCHSGEGENSTÄNDE', x + 4, cy0 + 8, 13, '#ffcf8a', 'left', '700');
   text(isTouch ? 'Benutzen: Knöpfe rechts' : 'Benutzen: Tasten L · G · Z (oder anklicken oben links)', x + w - 4, cy0 + 8, 12, '#aaa', 'right', '600');
-  const ccols = w > 560 ? 3 : 2, ccw = (w - (ccols - 1) * 8) / ccols, cch = Math.max(96, Math.min(120, y + h - cy0 - 26));
+  const ccols = w > 560 ? 3 : 2, ccw = (w - (ccols - 1) * 8) / ccols, cch = Math.max(96, Math.min(120, y + h - 64 - cy0 - 26));
   CONS.forEach((C, i) => {
     const cx = x + (i % ccols) * (ccw + 8), cy = cy0 + 22 + Math.floor(i / ccols) * (cch + 8), n = p.cons[C.id] | 0;
     card(cx, cy, ccw, cch, n > 0);
@@ -5358,7 +5600,7 @@ if (!HEADLESS) {
     if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyI') { toggleCraft(); return; }
-    if (e.code === 'KeyF') { selectBuild('trap'); return; }
+    if (e.code === 'KeyF') { if (S.player.drive || nearVehicle(S.player) || nearHatch(S.player)) actInteract(); else selectBuild('trap'); return; }
     if (e.code === 'KeyJ') { selectBuild('frost'); return; }
     if (e.code === 'Space') { jump(); return; }
     if (e.code === 'KeyO' || e.code === 'F5') { e.preventDefault(); toggleView(); return; }
@@ -5534,7 +5776,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { cityCenters, hatchPos, dunExit, DUN, isStreet, buildBuggy, interact, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,

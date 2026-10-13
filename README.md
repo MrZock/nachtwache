@@ -52,6 +52,12 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 - **Neue Materialien** gehören jedem Spieler selbst: 🧵 Stoff (Zombies, Tiere), 🔌 Elektronik (Schrott, Panzerzombies, Bosse), 🧪 Chemie (Spucker, Schamanen, Schrott). Truhen geben von allem etwas.
 - Markieren jetzt mit **Y**.
 
+## Neue Orte (4.0, Etappe 2)
+
+- **Ruinenstädte** (2 pro Karte): Straßenraster mit Asphalt, mehrstöckige Betonruinen mit Fensterhöhlen, eingestürzte Wände, Autowracks (Schrott → Eisen & Material) und **Truhen in manchen Häusern**.
+- **Bunker-Dungeons**: 3 Luken auf der Karte (**F** = betreten). Drinnen ist es dunkel (Taschenlampe), 9 Räume mit Gängen, **Wächter-Zombies** und oben eine **große Beute-Truhe** (Gold, Eisen, Material, Medkits/Granaten/Molotows). Nach 4 Minuten füllt sich ein Bunker wieder auf.
+- **Buggy** (Inventar → Ausrüstung): schnell, überfährt Zombies, halber Schaden für den Fahrer, braucht Sprit (1 🧪 Chemie = +40 %). **F** = ein-/aussteigen.
+
 ## Windows-Version
 
 Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Spieldateien wie die Web-Version:
