@@ -4245,7 +4245,14 @@ function drawHUD() {
         text(Math.ceil(p.abCd) + '', ax + as / 2, ay + as / 2 + 1, 15, '#fff', 'center');
       }
       if (!isTouch) text('Shift', ax + as / 2, ay + as + 7, 9, '#aaa', 'center', '600');
-    } else text(p.lvl >= ABIL_LVL ? '⚡?' : '🔒', ax + as / 2, ay + as / 2 + 1, p.lvl >= ABIL_LVL ? 14 : 16, p.lvl >= ABIL_LVL && Math.sin(animT * 6) > 0 ? '#ffe27a' : '#888', 'center');
+    } else {
+      // noch keine Fähigkeit: Schloss bis Level 5, danach im Skill-Menü auswählen
+      const ready = p.lvl >= ABIL_LVL, blink = ready && Math.sin(animT * 6) > 0;
+      text(ready ? '⚡' : '🔒', ax + as / 2, ay + 13, 13, '#fff', 'center');
+      text(ready ? 'WÄHLEN' : 'LV ' + ABIL_LVL, ax + as / 2, ay + as - 9, 9, blink ? '#ffe27a' : ready ? '#ffb070' : '#bbb', 'center', '700');
+      if (!isTouch && input.sx >= ax && input.sx <= ax + as && input.sy >= ay && input.sy <= ay + as)
+        text(p.lvl >= ABIL_LVL ? 'Spezial-Fähigkeit: im Skill-Menü (K) auswählen' : 'Spezial-Fähigkeit (Wirbelsturm, Sturmangriff, Heilwelle, Kriegsschrei) – ab Level ' + ABIL_LVL, ax + as / 2, ay - 12, 12, '#ffe27a', 'center', '600');
+    }
     ui.push({ x: ax, y: ay, w: as, h: as, fn: () => { if (A) actAbility(); else { skillsOpen = true; forgeOpen = false; } } });
     if (p.rageT > 0) text('🔥 ' + Math.ceil(p.rageT) + ' s', VW / 2, y - 48, 13, '#ff8a5a', 'center');
   }
@@ -4908,8 +4915,9 @@ if (!HEADLESS) {
     SFX.init();
     if (mouseLocked()) { e = { button: e.button, clientX: VW / 2, clientY: VH / 2 }; }
     else if (R3 && R3.fp && mode === 'play' && !isTouch && e.button === 0 && !hitUI(e.clientX, e.clientY) && !skillsOpen && !forgeOpen && !mapOpen && !listOpen) {
-      try { canvas.requestPointerLock(); } catch (err) {}
-      return;
+      // Maus fangen versuchen – aber trotzdem sofort zuschlagen (klappt auch, wenn der Browser das Fangen verweigert)
+      try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) {}
+      e = { button: 0, clientX: VW / 2, clientY: VH / 2 };
     }
     input.sx = e.clientX; input.sy = e.clientY;
     const u = mouseLocked() ? null : hitUI(e.clientX, e.clientY);
@@ -4924,8 +4932,11 @@ if (!HEADLESS) {
     if (e.button !== 0) return;
     if (u) { u.fn(); return; }
     if (S.place) { input.down = true; tryPlaceAtAim(false); return; }
-    const wp = aimPoint(), b = buildingAtWorld(wp.x, wp.y);
-    if (b) { tickleCheck(b); S.sel = S.sel === b ? null : b; SFX.play('click'); return; }
+    // Ego-Perspektive: Linksklick schlägt immer zu (Gebäude wählen = rechte Maustaste)
+    if (!(R3 && R3.fp)) {
+      const wp = aimPoint(), b = buildingAtWorld(wp.x, wp.y);
+      if (b) { tickleCheck(b); S.sel = S.sel === b ? null : b; SFX.play('click'); return; }
+    }
     S.sel = null;
     input.down = true;
   });

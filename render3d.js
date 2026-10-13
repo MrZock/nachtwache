@@ -227,8 +227,17 @@
     rubble = inst(new Kit().lit(BX(0.7, 0.3, 0.5), '#a8a49c', 0, 0.15, 0, 0, 0.2, 0.1).lit(BX(0.4, 0.25, 0.4), '#8a8680', 0.4, 0.12, 0.25, 0.3, 0.5, 0)
       .lit(BX(0.5, 0.12, 0.3), '#b8b4ac', -0.3, 0.06, -0.3, 0, 0.8, 0).lit(CY(0.02, 0.02, 0.6, 4), '#8a4a2a', 0.1, 0.35, 0, 0.5, 0, 0.6)
       .lit(CY(0.02, 0.02, 0.5, 4), '#8a4a2a', -0.1, 0.3, 0.1, -0.4, 0, 0.7).build().lit, matInst, 1200, true);
-    lamps = inst(new Kit().lit(CY(0.05, 0.07, 2.2, 6), '#4a4a4e', 0, 1.1, 0).lit(BX(0.6, 0.05, 0.05), '#4a4a4e', 0.28, 2.18, 0, 0, 0, -0.4)
-      .lit(BX(0.25, 0.08, 0.14), '#3a3a3e', 0.52, 2.0, 0, 0, 0, -0.3).lit(BX(0.18, 0.1, 0.22), '#2a2a2e', 0, 0.05, 0).build().lit, matInst, 600, true);
+    // rostige Straßenlaterne: Sockel, Mast, Ausleger mit Strebe, Lampenschirm (Licht sitzt bei LAMP_HEAD)
+    lamps = inst(new Kit()
+      .lit(BX(0.34, 0.12, 0.34), '#3a3634', 0, 0.06, 0).lit(CY(0.1, 0.13, 0.36, 8), '#4a4440', 0, 0.3, 0)
+      .lit(CY(0.05, 0.065, 2.0, 8), '#5a4e46', 0, 1.46, 0).lit(CY(0.075, 0.075, 0.06, 8), '#7a4a2a', 0, 0.9, 0)
+      .lit(CY(0.075, 0.075, 0.06, 8), '#7a4a2a', 0, 1.9, 0).lit(SP(0.07, 6, 4), '#4a4440', 0, 2.48, 0)
+      .lit(BX(0.68, 0.06, 0.06), '#5a4e46', 0.32, 2.4, 0)
+      .lit(CY(0.022, 0.022, 0.5, 5), '#6a4a34', 0.17, 2.2, 0, 0, 0, -0.9)
+      .lit(CO(0.2, 0.16, 4), '#3e3a38', 0.62, 2.3, 0, 0, Math.PI / 4, 0)
+      .lit(BX(0.18, 0.05, 0.18), '#fff0c8', 0.62, 2.2, 0)
+      .lit(BX(0.08, 0.3, 0.012), '#8a5a30', 0.03, 1.2, 0.055, 0, 0, 0, 1, 1, 1, 0.2)
+      .build().lit, matInst, 600, true);
 
     // ---- Zombies: Körperteile (Maße für Radius 1, Blick nach +x)
     zLeg = inst(new Kit().lit(BX(0.36, 0.9, 0.36), '#ffffff', 0, -0.45, 0).lit(BX(0.3, 0.12, 0.3), '#8a8a8a', 0, -0.62, 0.0)
@@ -967,7 +976,17 @@
         // Ruinen der alten Welt (nur Optik, blockiert nichts)
         if (bi !== 5 && !(S.hq && Math.abs(tx - S.hq.tx - 1) < 5 && Math.abs(ty - S.hq.ty - 1) < 5)) {
           if (v % 61 === 22 && nrub < 1200) { setInst(rubble, nrub, px, 0, pz, 1, 1, 1, v); rubble.setColorAt(nrub, col.setRGB(0.75, 0.73, 0.7)); nrub++; continue; }
-          if (v % 131 === 40 && nlamp < 600) { setInst(lamps, nlamp, px, 0, pz, 1, 1, 1, v, 0, (v % 3) * 0.08); lamps.setColorAt(nlamp, WHITE); nlamp++; if (v % 2 && night > 0.3) glowAt(px + 0.5, 1.95, pz, 0.8, '#ffb050', night * (Math.sin(at * 17 + v) > -0.6 ? 0.8 : 0.1)); continue; }
+          if (v % 131 === 40 && nlamp < 600) {
+            const ry = v * 0.37, tilt = (v % 3) * 0.06;
+            setInst(lamps, nlamp, px, 0, pz, 1, 1, 1, ry, 0, tilt); lamps.setColorAt(nlamp, WHITE); nlamp++;
+            if (v % 2 && night > 0.3) {
+              // Lampenkopf mitdrehen, damit das Licht wirklich im Schirm sitzt
+              const lx = 0.62 * Math.cos(tilt) - 2.16 * Math.sin(tilt), ly = 0.62 * Math.sin(tilt) + 2.16 * Math.cos(tilt);
+              const on = Math.sin(at * 17 + v) > -0.6 ? 1 : 0.15;
+              glowAt(px + lx * Math.cos(ry), ly, pz - lx * Math.sin(ry), 0.7, '#ffb050', night * 0.9 * on);
+            }
+            continue;
+          }
         }
         if (bi === 2 || bi === 3 || bi === 5) {
           if (bi === 5 && v % 13 === 0) glowAt(px + Math.sin(at * 0.7 + i) * 0.4, 0.3 + ((at * 0.4 + hash(i) * 3) % 3), pz, 0.22, '#c890ff', 0.7);
