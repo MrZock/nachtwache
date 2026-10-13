@@ -1578,7 +1578,8 @@ function startNight() {
   S.spawnPts = []; S.spawnQueue = [];
   const dur = Math.min(40, 18 + N * 2), nPts = Math.min(6, 2 + Math.floor(N / 3));
   for (const hq of allHQs()) withTeam(S.teams.get(hq.team), () => {
-    // jede Basis bekommt ihre eigene Welle (größer, wenn mehr Leute dazugehören)
+    // jede Basis bekommt ihre eigene Welle (größer, wenn mehr Leute dazugehören) – verlassene Basen haben Ruhe
+    if (!teamMembers(hq.team).length) return;
     const members = Math.max(1, teamMembers(hq.team).length);
     const plan = nightPlan(N);
     const f = (members <= 1 ? 1 : 1 + 0.35 * (members - 1)) * (S.bloodMoon ? 1.3 : 1), target = Math.round(plan.length * f);
@@ -1607,6 +1608,7 @@ function startDay() {
   S.phase = 'day'; S.phaseT = DAY_LEN; S.spawnQueue = [];
   const wr = Math.random();
   S.weather = S.night < 3 ? 0 : wr < 0.5 ? 0 : wr < 0.8 ? 1 : 2;
+  if (saveSlot >= 0) saveNow(true).then(ok => { if (ok) toast('💾 Automatisch gespeichert', '#8fe08f'); });
   banner('TAG ' + S.night, S.weather === 2 ? '⛈ Ein Gewitter zieht auf – Blitze treffen nachts die Zombies!' : S.weather === 1 ? '🌧 Regen – Zombies kommen im Schlamm langsamer voran.' : 'Nacht ' + S.survived + ' überlebt! Zombies verbrennen im Sonnenlicht.', '#ffe27a');
   SFX.play('chime');
 }
@@ -2574,10 +2576,12 @@ function followCam(dt) {
 
 function startGame() {
   if (NET.role === 'client') return;
-  newGame({});
+  const L = pendingLoad; pendingLoad = null;
+  if (L) applySave(L); else newGame({});
   mode = 'play'; modeT = 0;
   SFX.init();
-  banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Jeder baut seine eigene Basis – Clans (/clan) teilen sich eine' : (isTouch ? 'Tippe auf eine freie Fläche' : 'Linksklick auf eine freie Fläche'), '#ffd36b');
+  if (L) banner('Spielstand ' + (saveSlot + 1) + ' geladen', 'Tag ' + S.night + (S.phase === 'night' ? ' – es ist Nacht, verteidige den Reaktor!' : ' – weiter geht\'s'), '#8fe08f');
+  else banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Jeder baut seine eigene Basis – Clans (/clan) teilen sich eine' : (isTouch ? 'Tippe auf eine freie Fläche' : 'Linksklick auf eine freie Fläche'), '#ffd36b');
   if (NET.role === 'host') {
     const gids = [...NET.peers.keys()];
     NET.peers.clear();
@@ -2599,6 +2603,228 @@ function gameOver() {
   if (NET.role === 'host') { netHostTick(1); netSendR({ t: 'O', r: Object.assign({}, r) }); }
   finishResult(r);
   SFX.play('die', undefined, undefined, true);
+}
+
+// =====================================================================
+// Speichern & Laden (4.0): 3 Spielstände · Autosave jeden Morgen und beim Verlassen
+//  - Gespeichert wird beim Host (bzw. im Einzelspieler) die ganze Welt.
+//  - Mitspieler bekommen beim nächsten Beitritt ihren Charakter (Level, Skills, Ausrüstung, Basis) über ihren Namen zurück.
+//  - Windows-App: Dateien im Ordner „Dokumente/BLACKOUT“, im Browser: localStorage.
+//  - Format: erste Zeile Kurzinfo fürs Menü (JSON), danach die Welt (JSON, Karte komprimiert).
+// =====================================================================
+const SAVE_VER = 1, SAVE_SLOTS = 3;
+let saveSlot = -1, pendingLoad = null, slotPick = null, slotConfirm = '', slotMsg = '';
+const slotInfo = [];
+const SAVE_IO = {
+  dsk: () => typeof window !== 'undefined' && window.BLACKOUT_SAVE,
+  read(k) { try { const d = SAVE_IO.dsk(); return d ? d.read(k) : localStorage.getItem('nachtwache.save' + k); } catch (e) { return null; } },
+  write(k, str) { try { const d = SAVE_IO.dsk(); if (d) return !!d.write(k, str); localStorage.setItem('nachtwache.save' + k, str); return true; } catch (e) { return false; } },
+  del(k) { try { const d = SAVE_IO.dsk(); if (d) d.del(k); else localStorage.removeItem('nachtwache.save' + k); } catch (e) {} },
+};
+function readSlotInfo(k) {
+  const str = SAVE_IO.read(k);
+  if (!str) return (slotInfo[k] = null);
+  try { return (slotInfo[k] = JSON.parse(str.slice(0, str.indexOf('\n')))); } catch (e) { return (slotInfo[k] = { bad: true }); }
+}
+function refreshSlots() { for (let k = 0; k < SAVE_SLOTS; k++) readSlotInfo(k); }
+// Charakter eines Spielers (gehört dem Spieler, nicht der Welt)
+function charOf(p) {
+  return { name: p.name || '', clan: p.clan || '', x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp), lvl: p.lvl, xp: Math.round(p.xp), sp: p.sp,
+    sk: Object.assign({}, p.sk), tl: Object.assign({}, p.tl), eq: Object.assign({}, p.eq), mat: Object.assign({}, p.mat), cons: Object.assign({}, p.cons), tool: p.tool, team: tidOf(p) };
+}
+function applyChar(p, c, pos) {
+  p.lvl = Math.max(1, c.lvl | 0); p.xp = +c.xp || 0; p.sp = c.sp | 0;
+  p.sk = Object.assign(newSkills(), c.sk); p.tl = Object.assign(newTools(), c.tl);
+  p.eq = Object.assign({ h: 0, v: 0, g: 0, b: 0 }, c.eq); p.mat = Object.assign({ c: 0, e: 0, h: 0 }, c.mat); p.cons = Object.assign({ med: 0, gren: 0, molo: 0 }, c.cons);
+  if (c.tool && p.tl[c.tool] > 0) p.tool = c.tool;
+  if (pos && c.x > 0 && c.y > 0 && c.x < WORLD && c.y < WORLD) { p.x = c.x; p.y = c.y; p.tp = (p.tp || 0) + 1; }
+  recalcMaxHp(p); p.hp = clamp(+c.hp || p.maxHp, 1, p.maxHp); p.dead = 0;
+}
+function worldState() {
+  const me = S.player, chars = [];
+  for (const q of S.players) if (q !== me && q.name) chars.push(charOf(q));
+  if (S.savedChars) for (const c of S.savedChars.values()) if (!chars.some(o => o.name.toLowerCase() === c.name.toLowerCase())) chars.push(c);
+  const night = S.phase === 'night';
+  return {
+    v: SAVE_VER, map: MAP, seed: S.seed, tgt: S.resTarget.slice(),
+    g: { t: S.t, phase: S.phase, phaseT: S.phaseT, night: S.night, survived: S.survived, nightT: S.nightT, started: S.started, kills: S.kills,
+      weather: S.weather || 0, stormSurvived: S.stormSurvived || 0, bossKills: S.bossKills || 0, chestsOpened: S.chestsOpened || 0, bloodMoon: !!S.bloodMoon,
+      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {} },
+    po: S.portal ? [S.portal.x, S.portal.y, S.portal2.x, S.portal2.y] : null,
+    teams: [...S.teams.values()].map(t => ({ id: t.id, name: t.name, wood: Math.floor(t.wood), stone: Math.floor(t.stone), gold: Math.floor(t.gold), iron: Math.floor(t.iron || 0), goldEarned: Math.floor(t.goldEarned || 0) })),
+    bld: S.buildings.filter(b => !b.dead).map(b => [b.id, b.type, b.tx, b.ty, b.lvl, Math.round(b.hp), b.spent.w | 0, b.spent.s | 0, b.spent.g | 0, b.team]),
+    me: charOf(me), chars,
+    clans: [...S.clans.values()].map(c => ({ name: c.name, open: !!c.open, leader: (pById(c.leader) || {}).name || '' })),
+    z: night ? S.zombies.filter(z => !z.dead && z.guard === undefined && ZDEF[z.type] && z.type !== 'shade').map(z => [z.type, Math.round(z.x), Math.round(z.y), Math.round(z.hp), Math.round(z.maxHp), z.golden ? 1 : 0]) : [],
+    sq: night ? S.spawnQueue.map(q => ({ type: q.type, at: q.at, pt: q.pt })) : [], sp: night ? S.spawnPts.slice() : [],
+  };
+}
+function saveInfo() {
+  return { v: SAVE_VER, at: Date.now(), night: S.night, phase: S.phase, kills: S.kills, lvl: S.player.lvl, hq: hqLvl(), name: S.player.name || '',
+    online: NET.role === 'host', others: S.players.length - 1 + (S.savedChars ? S.savedChars.size : 0) };
+}
+function canSave() { return saveSlot >= 0 && !!S && !!S.player && S.started && !S.isClient && NET.role !== 'client' && mode !== 'menu' && mode !== 'over'; }
+const saveText = (info, w, res, rhp) => JSON.stringify(info) + '\n' + JSON.stringify(Object.assign(w, { res, rhp }));
+// Speichern mit komprimierter Karte (alles Nötige wird sofort kopiert – danach darf sich die Welt ändern)
+async function saveNow(quiet) {
+  if (!canSave()) return false;
+  const k = saveSlot, info = saveInfo(), w = worldState(), res = S.res.slice(), rhp = S.rhp.slice();
+  const [r, h] = await Promise.all([packU8(res), packU8(rhp)]);
+  const ok = SAVE_IO.write(k, saveText(info, w, r, h));
+  readSlotInfo(k);
+  if (!quiet) toast(ok ? '💾 Gespeichert (Spielstand ' + (k + 1) + ')' : '⚠ Speichern fehlgeschlagen – zu wenig Speicherplatz?', ok ? '#8fe08f' : '#ff7b6b');
+  return ok;
+}
+// Beim Schließen des Fensters: sofort, ohne Kompression
+function saveNowSync() {
+  if (!canSave()) return false;
+  const ok = SAVE_IO.write(saveSlot, saveText(saveInfo(), worldState(), 'R' + u8ToB64(S.res), 'R' + u8ToB64(S.rhp)));
+  readSlotInfo(saveSlot);
+  return ok;
+}
+async function decodeSave(str) {
+  if (!str) throw new Error('leer');
+  const w = JSON.parse(str.slice(str.indexOf('\n') + 1));
+  if (!w || w.v !== SAVE_VER || w.map !== MAP) throw new Error('falsche Version');
+  w.res = await unpackU8(w.res); w.rhp = await unpackU8(w.rhp);
+  if (w.res.length !== MAP * MAP || w.rhp.length !== MAP * MAP) throw new Error('Karte unvollständig');
+  return w;
+}
+function dunRoomsOf(k) {
+  const rooms = [];
+  for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) { const r = dunRoom(k, i, j); rooms.push({ x: (r.x + r.w / 2) * TS, y: (r.y + r.h / 2) * TS, i, j }); }
+  return { rooms, loot: rooms.filter(r => r.j === 0)[randi(0, 2)] };
+}
+// Welt aus einem entpackten Spielstand aufbauen (synchron)
+function applySave(w) {
+  newGame({ noMap: true });
+  S.seed = w.seed; S.res = w.res; S.rhp = w.rhp;
+  genVariant(); genBiomes(); calcMountains();
+  S.resCount = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  for (let i = 0; i < MAP * MAP; i++) if (S.res[i]) S.resCount[S.res[i]]++;
+  S.resTarget = w.tgt || S.resCount.slice();
+  S.dunRooms = []; for (let k = 0; k < DUN.n; k++) S.dunRooms[k] = dunRoomsOf(k);
+  const g = w.g || {};
+  for (const k of ['t', 'phase', 'phaseT', 'night', 'survived', 'nightT', 'started', 'kills', 'weather', 'stormSurvived', 'bossKills', 'chestsOpened', 'bloodMoon',
+    'bloodSurvived', 'bomberKills', 'animalKills', 'nextId', 'nextZid', 'nextChest', 'eggUsed']) if (g[k] !== undefined) S[k] = g[k];
+  if (w.po) { S.portal = { x: w.po[0], y: w.po[1] }; S.portal2 = { x: w.po[2], y: w.po[3] }; }
+  // Basen abwesender Mitspieler heißen „s:<name>“, bis sie zurückkommen
+  const away = new Map();
+  for (const c of w.chars || []) if (c.team && c.team.startsWith('p:') && c.name) away.set(c.team, 's:' + c.name.toLowerCase());
+  S.teams = new Map();
+  for (const t of w.teams || []) { const id = away.get(t.id) || t.id; S.teams.set(id, Object.assign(newTeam(id, t.name), { wood: t.wood, stone: t.stone, gold: t.gold, iron: t.iron, goldEarned: t.goldEarned })); }
+  for (const a of w.bld || []) {
+    const [id, type, tx, ty, lvl, hp, sw, ss, sg, team0] = a, d = BDEF[type];
+    if (!d || !inMap(tx, ty)) continue;
+    const team = away.get(team0) || team0, L = clamp(lvl | 0, 1, 5);
+    const b = { id, type, tx, ty, size: d.size, lvl: L, hp: clamp(hp, 1, d.hp[L - 1]), maxHp: d.hp[L - 1], cd: rand(0, 0.5), flash: 0, angle: -Math.PI / 2,
+      spent: { w: sw, s: ss, g: sg }, dead: false, acc: 0, nodes: { t: 0, r: 0 }, born: -99, team };
+    S.buildings.push(b); S.bById.set(id, b);
+    for (let y = ty; y < ty + d.size; y++) for (let x = tx; x < tx + d.size; x++) S.bmap[y * MAP + x] = id;
+    const t = ensureTeam(team); t.counts[type] = (t.counts[type] || 0) + 1;
+    if (type === 'hq') t.hq = b;
+    if (type === 'harv') countNodes(b);
+    S.nextId = Math.max(S.nextId, id + 1);
+  }
+  const me = S.player;
+  me.name = playerName; me.skin = skinStr(mySkin);
+  if (w.me) { me.clan = w.me.clan || ''; applyChar(me, w.me, true); }
+  S.savedChars = new Map();
+  for (const c of w.chars || []) if (c.name) S.savedChars.set(c.name.toLowerCase(), c);
+  S.clans = new Map();
+  for (const c of w.clans || []) S.clans.set(c.name, { name: c.name, leader: me.clan === c.name ? me.id : -1, invites: new Set(), open: !!c.open });
+  for (const a of w.z || []) {
+    if (!ZDEF[a[0]]) continue;
+    const z = spawnZombie(a[0], { tx: clamp(Math.floor(a[1] / TS), 0, MAP - 1), ty: clamp(Math.floor(a[2] / TS), 0, MAP - 1) });
+    z.x = z.lx = a[1]; z.y = z.ly = a[2]; z.hp = a[3]; z.maxHp = a[4]; z.golden = !!a[5];
+  }
+  S.spawnQueue = w.sq || []; S.spawnPts = w.sp || [];
+  S.place = S.hq ? null : 'hq';
+  S.navVer++; NET.bDirty = true;
+  camX = me.x - VW / 2; camY = me.y - VH / 2;
+  if (!HEADLESS) buildMinimap();
+}
+// Mitspieler kommt zurück: Charakter und Basis anhand des Namens wiederherstellen
+function restoreChar(p) {
+  if (!S.savedChars || !p.name || p.restored) return;
+  const key = p.name.toLowerCase(), c = S.savedChars.get(key);
+  if (!c) return;
+  S.savedChars.delete(key); p.restored = true;
+  const cl = c.clan && S.clans.get(c.clan);
+  if (cl) { p.clan = cl.name; if (!pById(cl.leader)) cl.leader = p.id; }
+  else {
+    const t = S.teams.get('s:' + key);
+    if (t) {
+      const mine = S.teams.get(tidOf(p));
+      if (mine && !mine.hq && !S.buildings.some(b => b.team === mine.id)) S.teams.delete(mine.id);
+      retagTeam(t, tidOf(p), p.name);
+    }
+  }
+  applyChar(p, c, true);
+  const msg = '💾 ' + p.name + ' ist zurück (Level ' + p.lvl + ')';
+  toastFor(p, 'Willkommen zurück! Level, Ausrüstung und Basis sind wieder da.', '#8fe08f');
+  addChat('', msg, '#8fe08f'); hostEv(['c', '', msg, 103]);
+  NET.bDirty = true;
+}
+// Spieler geht: Charakter merken, Basis bleibt stehen (bis er zurückkommt)
+function rememberChar(q) {
+  if (!q.name) return null;
+  if (!S.savedChars) S.savedChars = new Map();
+  const c = charOf(q); S.savedChars.set(q.name.toLowerCase(), c);
+  return c;
+}
+// ---------- Menü: Spielstand wählen
+function openSlots(how) { refreshSlots(); slotPick = how; slotConfirm = ''; slotMsg = ''; SFX.play('click'); }
+async function slotStart(k, load) {
+  const how = slotPick || 'single';
+  slotMsg = '';
+  let L = null;
+  if (load) {
+    try { L = await decodeSave(SAVE_IO.read(k)); }
+    catch (e) { slotMsg = 'Spielstand ' + (k + 1) + ' lässt sich nicht laden (' + e.message + ').'; return; }
+  } else if (slotInfo[k]) SAVE_IO.del(k);
+  slotPick = null; slotConfirm = '';
+  saveSlot = k; pendingLoad = L;
+  if (how === 'host') lanConnect('host'); else { netClose(); startGame(); }
+}
+// Nach dem Game Over: ab dem letzten Morgen weiterspielen
+async function reloadSlot() {
+  if (saveSlot < 0) return;
+  try { pendingLoad = await decodeSave(SAVE_IO.read(saveSlot)); } catch (e) { toast('Spielstand lässt sich nicht laden', '#ff7b6b'); return; }
+  startGame();
+}
+function fmtDate(ms) { const d = new Date(ms), z = n => (n < 10 ? '0' : '') + n; return z(d.getDate()) + '.' + z(d.getMonth() + 1) + '. ' + z(d.getHours()) + ':' + z(d.getMinutes()); }
+function drawSlotPicker() {
+  const w = Math.min(600, VW - 24), rowH = 84, h = 100 + SAVE_SLOTS * (rowH + 10) + (slotMsg ? 22 : 0), x = VW / 2 - w / 2, y = Math.max(12, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.97);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('💾 ' + (slotPick === 'host' ? 'Welt zum Hosten wählen' : 'Spielstand wählen'), x + 18, y + 26, 20, '#ffe27a');
+  text('×', x + w - 20, y + 25, 22, '#aaa', 'center');
+  ui.push({ x: x + w - 40, y: y + 4, w: 36, h: 36, fn: () => { slotPick = null; } });
+  const dsk = SAVE_IO.dsk();
+  text('Automatisch gespeichert wird jeden Morgen und beim Verlassen' + (dsk ? ' – Ordner: ' + dsk.dir : '.'), x + 18, y + 52, 11, '#aaa', 'left', '600');
+  for (let k = 0; k < SAVE_SLOTS; k++) {
+    const cy = y + 70 + k * (rowH + 10), inf = slotInfo[k];
+    ctx.fillStyle = inf ? 'rgba(255,190,110,0.08)' : 'rgba(255,255,255,0.04)'; rr(x + 12, cy, w - 24, rowH, 8); ctx.fill();
+    ctx.strokeStyle = 'rgba(200,110,50,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+    text('SPIELSTAND ' + (k + 1), x + 26, cy + 20, 14, '#ffb070', 'left', '700');
+    const bw = Math.min(150, (w - 60) / 3.4), bx = x + w - 24 - bw;
+    if (!inf) {
+      text('leer', x + 26, cy + 46, 14, '#888', 'left', '600');
+      button('▶ NEUES SPIEL', bx, cy + 22, bw, 40, () => slotStart(k, false), true, true);
+      continue;
+    }
+    if (inf.bad) text('beschädigt', x + 26, cy + 46, 14, '#ff9a8a', 'left', '600');
+    else {
+      text('Tag ' + inf.night + (inf.phase === 'night' ? ' (Nacht)' : '') + ' · Level ' + inf.lvl + ' · Reaktor ' + inf.hq + ' · ' + inf.kills + ' Kills', x + 26, cy + 44, 13, '#eee', 'left', '600');
+      text(fmtDate(inf.at) + (inf.online ? ' · 🌐 Online-Welt' + (inf.others ? ' mit ' + inf.others + ' Mitspieler' + (inf.others > 1 ? 'n' : '') : '') : ''), x + 26, cy + 64, 11, '#aaa', 'left', '600');
+      button('▶ WEITER', bx, cy + 10, bw, 34, () => slotStart(k, true), true, true);
+    }
+    const sw = (bw - 6) / 2, nNew = 'n' + k, nDel = 'd' + k;
+    button(slotConfirm === nNew ? 'Sicher?' : 'NEU', bx, cy + 48, sw, 28, () => { if (slotConfirm === nNew) slotStart(k, false); else slotConfirm = nNew; }, false, true);
+    button(slotConfirm === nDel ? 'Sicher?' : 'LÖSCHEN', bx + sw + 6, cy + 48, sw, 28, () => { if (slotConfirm === nDel) { SAVE_IO.del(k); readSlotInfo(k); slotConfirm = ''; } else slotConfirm = nDel; }, false, true);
+  }
+  if (slotMsg) text(slotMsg, x + w / 2, y + h - 18, 13, '#ff9a8a', 'center', '600');
 }
 
 // =====================================================================
@@ -2789,9 +3015,15 @@ function hostPeerGone(gid) {
   if (!q || q === S.player) return;
   const msg = pName(q) + ' hat das Spiel verlassen.';
   addChat('', msg, '#ff9a7a'); hostEv(['c', '', msg, 101]);
+  const ch = rememberChar(q);
   clanLeave(q, true);
+  if (ch && !S.clans.has(ch.clan)) ch.clan = '';
   const qt = S.teams.get(tidOf(q));
-  if (qt && qt.id.startsWith('p:') && qt !== homeTeam()) { dismantleTeam(qt, null); S.teams.delete(qt.id); }
+  if (qt && qt.id.startsWith('p:') && qt !== homeTeam()) {
+    const keep = q.name && 's:' + q.name.toLowerCase();
+    if (keep && !S.teams.has(keep) && (qt.hq || S.buildings.some(b => b.team === qt.id))) retagTeam(qt, keep, q.name);
+    else { dismantleTeam(qt, null); S.teams.delete(qt.id); }
+  }
   S.players = S.players.filter(o => o !== q);
   if (mode !== 'menu') toast(msg, '#ff9a7a');
 }
@@ -3062,8 +3294,8 @@ function runCommand(p, text) {
     hostGiveEgg(p, 'party');
   } else sysMsg(p, 'Unbekannter Befehl „/' + cmd + '“ – schreib /hilfe');
 }
-function leaveGame() { netClose(); mode = 'menu'; newGame(); }
-function startSingle() { netClose(); startGame(); }
+function leaveGame() { saveNow(true); saveSlot = -1; netClose(); mode = 'menu'; newGame(); }
+function startSingle() { openSlots('single'); }
 function netClose(reason) {
   const was = NET.role;
   NET.role = null; NET.ev = []; NET.lastRecv = 0; NET.peer = false; NET.peers.clear();
@@ -3184,6 +3416,7 @@ function hostHandleClient(m, p) {
     if (m.skin && /^[0-9.]{1,40}$/.test(m.skin)) p.skin = skinStr(skinParse(m.skin));
     const old = p.name; p.name = cleanText(m.name, 16) || p.name;
     if (old && old !== p.name) { addChat('', old + ' heißt jetzt ' + p.name, '#aaa'); hostEv(['c', '', old + ' heißt jetzt ' + p.name, 101]); }
+    restoreChar(p);
   } else if (m.t === 'chat') {
     const text = cleanText(m.text, 120);
     if (!text) return;
@@ -5385,7 +5618,7 @@ function drawOverlays() {
     const bw = small ? Math.min(250, (VW - 60) / 3) : 300, bh = small ? 46 : 54;
     if (small) {
       button('▶ EINZELSPIELER', cx - bw * 1.5 - 10, y, bw, bh, startSingle, true);
-      button('ONLINE HOSTEN', cx - bw / 2, y, bw, bh, () => lanConnect('host'));
+      button('ONLINE HOSTEN', cx - bw / 2, y, bw, bh, () => openSlots('host'));
       button('ONLINE BEITRETEN', cx + bw / 2 + 10, y, bw, bh, () => lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info'));
       y += bh + 10;
       button('NAME: ' + playerName, cx - bw * 1.5 - 10, y, bw, 34, setName, false, true);
@@ -5393,17 +5626,17 @@ function drawOverlays() {
       button('🎨 SKIN', cx + bw / 2 + 10, y, bw / 2 - 3, 34, () => { skinOpen = true; }, false, true);
       button('⚙ EINSTELL.', cx + bw + 17, y, bw / 2 - 7, 34, () => { settingsOpen = true; }, false, true);
       y += 46;
-      if (DESKTOP) { button('✖ BEENDEN', cx - bw / 2, y, bw, 34, () => window.close(), false, true); y += 44; }
+      if (DESKTOP) { button('✖ BEENDEN', cx - bw / 2, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true); y += 44; }
     } else {
       const bx = cx - bw / 2;
       button('▶ EINZELSPIELER', bx, y, bw, bh + 6, startSingle, true); y += bh + 18;
-      button('ONLINE HOSTEN', bx, y, bw, bh, () => lanConnect('host')); y += bh + 10;
+      button('ONLINE HOSTEN', bx, y, bw, bh, () => openSlots('host')); y += bh + 10;
       button('ONLINE BEITRETEN', bx, y, bw, bh, () => lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info')); y += bh + 16;
       button('NAME: ' + playerName + '  ✎', bx, y, bw / 2 - 5, 34, setName, false, true);
       button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
       button('🎨 SKIN ANPASSEN', bx, y, bw / 2 - 5, 34, () => { skinOpen = true; }, false, true);
       button('⚙ EINSTELLUNGEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { settingsOpen = true; }, false, true); y += 44;
-      if (DESKTOP) { button('✖ BEENDEN', bx, y, bw, 34, () => window.close(), false, true); y += 44; }
+      if (DESKTOP) { button('✖ BEENDEN', bx, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true); y += 44; }
       y += 4;
     }
     if (menuMsg) { text(menuMsg, cx, y, 15, '#ff9a8a', 'center'); y += 24; }
@@ -5431,6 +5664,7 @@ function drawOverlays() {
     if (achOpen) drawAchList();
     if (skinOpen) drawSkinEditor();
     if (settingsOpen) drawSettings();
+    if (slotPick) drawSlotPicker();
   } else if (mode === 'paused') {
     titleText(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 60, '#e8dcd0');
     text('Nacht ' + S.night + ' · ' + S.kills + ' Kills · ' + S.buildings.length + ' Gebäude', cx, VH * 0.3 + 48, 17, '#ccc', 'center', '600');
@@ -5438,6 +5672,8 @@ function drawOverlays() {
     button('Fortsetzen (ESC)', cx - 120, VH * 0.48, 240, 50, () => { mode = 'play'; }, true);
     button('⚙ Einstellungen', cx - 120, VH * 0.48 + 62, 240, 44, () => { settingsOpen = true; });
     button(NET.role ? 'Spiel verlassen' : 'Hauptmenü', cx - 120, VH * 0.48 + 116, 240, 44, leaveGame);
+    if (canSave()) button('💾 Jetzt speichern', cx - 120, VH * 0.48 + 170, 240, 40, () => saveNow(), false, true);
+    else if (NET.role === 'client') text('Die Welt speichert der Host – dein Charakter kommt mit deinem Namen zurück.', cx, VH * 0.48 + 190, 13, '#aaa', 'center', '600');
     if (settingsOpen) drawSettings();
   } else if (mode === 'over') {
     const r = lastResult;
@@ -5458,6 +5694,8 @@ function drawOverlays() {
       if (NET.role === 'client') text('Warte, bis der Host ein neues Spiel startet …', cx, hy + 56, 16, '#cfe8ff', 'center', '600');
       else button('Neues Spiel (ENTER)', cx - 130, hy + 30, 260, 52, startGame, true);
       button(NET.role ? 'Spiel verlassen' : 'Hauptmenü', cx - 130, hy + 92, 260, 44, leaveGame);
+      const si = saveSlot >= 0 && NET.role !== 'client' ? slotInfo[saveSlot] : null;
+      if (si && !si.bad) button('↺ Ab Tag ' + si.night + ' weiterspielen (Spielstand ' + (saveSlot + 1) + ')', cx - 170, hy + 146, 340, 40, reloadSlot, false, true);
     }
   }
 }
@@ -5492,6 +5730,8 @@ function hitUI(x, y) {
   return null;
 }
 if (!HEADLESS) {
+  window.addEventListener('pagehide', () => saveNowSync());
+  window.addEventListener('beforeunload', () => saveNowSync());
   canvas = document.getElementById('game'); ctx = canvas.getContext('2d');
   lightC = document.createElement('canvas'); lctx = lightC.getContext('2d');
   lightSprite = makeLightSprite();
@@ -5512,7 +5752,8 @@ if (!HEADLESS) {
     if (e.code === 'KeyM' && mode === 'play') { mapOpen = !mapOpen; SFX.play('click'); return; }
     if (e.code === 'Escape' && achOpen) { achOpen = false; return; }
     if (e.code === 'Escape' && skinOpen) { skinOpen = false; return; }
-    if (mode === 'menu') { if (e.code === 'Enter' || e.code === 'Space') startSingle(); return; }
+    if (e.code === 'Escape' && slotPick) { slotPick = null; return; }
+    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick) startSingle(); return; }
     if (mode === 'over') { if ((e.code === 'Enter' || e.code === 'Space') && modeT > 1 && NET.role !== 'client') startGame(); return; }
     if (e.code === 'Escape' && settingsOpen) { settingsOpen = false; return; }
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
@@ -5709,7 +5950,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,

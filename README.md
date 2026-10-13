@@ -58,6 +58,15 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 - **Bunker-Dungeons**: 3 Luken auf der Karte (**F** = betreten). Drinnen ist es dunkel: Wandlampen, Notlichter, Rohre, je Bunker eigene Einrichtung (Kisten, Maschinen, Labortanks). 9 Räume mit Gängen, **Wächter-Zombies** und oben ein **goldener Wärter**, der die große Beute trägt (Gold, Eisen, Material, Medkits/Granaten/Molotows). Nach 4 Minuten füllt sich ein Bunker wieder auf.
 - Die Minimap zeigt Bunker und Schattenreich nur, wenn man drin ist – dann nur diesen Bereich.
 
+## Speichern & Laden (4.0, Etappe 3)
+
+- **3 Spielstände**: „Einzelspieler“ und „Online hosten“ öffnen die Auswahl – *Weiter*, *Neu* oder *Löschen* (mit Rückfrage).
+- **Automatisch gespeichert** wird jeden Morgen, beim Verlassen und beim Schließen des Fensters; im Pause-Menü gibt es zusätzlich „Jetzt speichern“.
+- Gespeichert wird die ganze Welt: Karte (abgebaute Bäume/Felsen), alle Basen und Gebäude, Rohstoffe, Tag/Nacht (nachts samt Zombies und restlicher Welle), Level, Skills, Waffen, Rüstung, Material und Verbrauchsgegenstände.
+- **Online**: Der Host speichert die Welt. Mitspieler bekommen beim nächsten Beitritt mit **demselben Namen** ihren Charakter und ihre Basis zurück. Wer mitten im Spiel geht, dessen Basis bleibt stehen (und bekommt nachts keine eigene Welle), bis er wiederkommt.
+- **Game Over**: Der letzte Morgen bleibt gespeichert – „Ab Tag X weiterspielen“ versucht die Nacht noch einmal.
+- Browser: im Speicher des Browsers (localStorage). Windows-App: Dateien `Dokumente/BLACKOUT/Spielstand 1–3.txt` (gleich für Online- und Offline-Start; Löschen benennt die Datei in `.alt` um).
+
 ## Windows-Version
 
 Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Spieldateien wie die Web-Version:
@@ -66,6 +75,7 @@ Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Sp
 - Online-Modus läuft über denselben Server wie die Web-Version – Web- und Windows-Spieler können zusammen spielen
 - Mit Internet lädt die App immer die aktuelle Web-Version (gleicher Stand für alle, Updates ohne Neuinstallation); ohne Internet startet die mitgelieferte Version
 - Einladungslinks aus der App zeigen auf die Web-Version; beim Beitreten wird die Spielversion geprüft (`NET_VER` in `game.js`)
+- Spielstände als Dateien in `Dokumente/BLACKOUT` (ab App-Version 4.0.0; ältere Apps speichern im App-Speicher)
 
 Selbst bauen (Node.js nötig):
 
@@ -76,8 +86,8 @@ npm run build
 ```
 
 Danach liegen in `desktop/dist/`:
-- `BLACKOUT-Setup-3.0.0.exe` – Installer mit Desktop- und Startmenü-Verknüpfung
-- `BLACKOUT-3.0.0-portable.exe` – startet direkt ohne Installation
+- `BLACKOUT-Setup-4.0.0.exe` – Installer mit Desktop- und Startmenü-Verknüpfung
+- `BLACKOUT-4.0.0-portable.exe` – startet direkt ohne Installation
 
 Zum Ausprobieren ohne Bauen: `npm start` im Ordner `desktop`.
 
