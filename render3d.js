@@ -25,7 +25,7 @@
   let zBody, zHead, zArm, zEye, zSpark;
   let projBox, projSphere, parts;
   let boltLines, ghost, ghostRing, selBox, selRing;
-  const buildingObjs = new Map(), chestObjs = new Map(), playerObjs = new Map();
+  const buildingObjs = new Map(), chestObjs = new Map(), playerObjs = new Map(), animalObjs = new Map();
   const ringPool = [], pingPool = [];
 
   function lambert(color, extra) { return new T.MeshLambertMaterial(Object.assign({ color }, extra || {})); }
@@ -151,7 +151,15 @@
     const cyl = (rt, rb, h, seg) => geo('c' + rt + '_' + rb + '_' + h + '_' + (seg || 12), () => new T.CylinderGeometry(rt, rb, h, seg || 12));
     const base = (h, c) => add(box(s * 0.94, h, s * 0.94), M(c || lc), 0, h / 2, 0);
     const turret = new T.Group(); const spin = []; let bob = null;
+    let spikes = null;
     switch (b.type) {
+      case 'trap': {
+        add(box(0.94, 0.08, 0.94), M('#4a3f36'), 0, 0.04, 0);
+        spikes = new T.Group(); grp.add(spikes);
+        for (let yy = 0; yy < 3; yy++) for (let xx = 0; xx < 3; xx++)
+          add(geo('spike', () => new T.ConeGeometry(0.07, 0.3, 6)), M(b.lvl > 2 ? '#d8dce8' : '#9a9aa4'), -0.28 + xx * 0.28, 0.12, -0.28 + yy * 0.28, spikes);
+        break;
+      }
       case 'wall':
         add(box(0.98, 0.95, 0.98), M(lc), 0, 0.475, 0);
         add(box(0.9, 0.12, 0.9), M('#' + col.set(lc).offsetHSL(0, 0, 0.08).getHexString()), 0, 1.01, 0);
@@ -237,7 +245,7 @@
       }
     }
     grp.scale.y = 1 + (b.lvl - 1) * 0.07;
-    grp.userData = { lvl: b.lvl, type: b.type, turret, spin, bob, mats, bobY: bob ? bob.position.y : 0 };
+    grp.userData = { lvl: b.lvl, type: b.type, turret, spin, bob, mats, bobY: bob ? bob.position.y : 0, spikes };
     scene.add(grp);
     return grp;
   }
@@ -268,6 +276,38 @@
     for (const k in tools) tool.add(tools[k]);
     scene.add(grp);
     grp.userData = { body, tool, tools, shirt };
+    return grp;
+  }
+
+  // ---------------------------------------------------------------- Tier-Modelle
+  function makeAnimal(an) {
+    const D = G.ADEF[an.type], grp = new T.Group(), s = an.r / G.TS;
+    const fur = lambert(D.color), dark = lambert('#3a2a1a');
+    const mk = (geom, m, x, y, z, sx, sy, sz) => { const o = new T.Mesh(geom, m); o.position.set(x, y, z); o.scale.set(sx || 1, sy || 1, sz || 1); o.castShadow = true; grp.add(o); return o; };
+    const sph = geo('asph', () => new T.SphereGeometry(1, 12, 9)), legG = geo('aleg', () => new T.CylinderGeometry(0.05, 0.04, 1, 6).translate(0, -0.5, 0));
+    const legH = an.type === 'rabbit' ? 0.12 : 0.32;
+    mk(sph, fur, 0, legH + s * 0.6, 0, s * 1.15, s * 0.7, s * 0.75);
+    mk(sph, fur, s * 1.05, legH + s * 0.95, 0, s * 0.45, s * 0.42, s * 0.42);
+    mk(sph, lambert('#111111'), s * 1.42, legH + s * 1.05, s * 0.18, 0.03, 0.03, 0.03);
+    mk(sph, lambert('#111111'), s * 1.42, legH + s * 1.05, -s * 0.18, 0.03, 0.03, 0.03);
+    const legs = [];
+    for (const [lx, lz] of [[0.55, 0.4], [0.55, -0.4], [-0.55, 0.4], [-0.55, -0.4]]) legs.push(mk(legG, dark, lx * s, legH + 0.02, lz * s, 1, legH + 0.02, 1));
+    if (an.type === 'deer') {
+      const ant = lambert('#d8c090');
+      for (const sd of [-1, 1]) {
+        const a1 = mk(geo('antler', () => new T.BoxGeometry(0.03, 0.32, 0.03)), ant, s * 1.0, legH + s * 1.45, sd * s * 0.22); a1.rotation.x = sd * 0.5;
+        const a2 = mk(geo('antler', null), ant, s * 0.95, legH + s * 1.6, sd * s * 0.38); a2.rotation.x = sd * 1.1; a2.scale.y = 0.6;
+      }
+      mk(sph, lambert('#f0e0c8'), -s * 1.1, legH + s * 0.75, 0, s * 0.2, s * 0.2, s * 0.2);
+    } else if (an.type === 'rabbit') {
+      for (const sd of [-1, 1]) { const e = mk(sph, fur, s * 0.9, legH + s * 1.6, sd * s * 0.18, s * 0.12, s * 0.55, s * 0.08); e.rotation.x = sd * 0.25; }
+      mk(sph, lambert('#ffffff'), -s * 1.15, legH + s * 0.7, 0, s * 0.3, s * 0.3, s * 0.3);
+    } else {
+      for (const sd of [-1, 1]) { const t = mk(geo('tusk', () => new T.ConeGeometry(0.03, 0.14, 5).rotateZ(-Math.PI / 2.4)), lambert('#f2ead8'), s * 1.45, legH + s * 0.8, sd * s * 0.2); }
+      mk(sph, dark, s * 1.48, legH + s * 0.9, 0, s * 0.18, s * 0.15, s * 0.22);
+    }
+    grp.userData = { fur, legs, legH };
+    scene.add(grp);
     return grp;
   }
 
@@ -308,6 +348,7 @@
       lastS = S; buildGround(S);
       for (const o of buildingObjs.values()) disposeGroup(o); buildingObjs.clear();
       for (const o of chestObjs.values()) scene.remove(o); chestObjs.clear();
+      for (const o of animalObjs.values()) scene.remove(o); animalObjs.clear();
     }
 
     // Kamera: schräg von oben, folgt dem Spieler
@@ -325,7 +366,8 @@
     sun.color.set(night > 0.3 ? '#9fb0ff' : '#fff0d6');
     hemi.intensity = 1.1 - night * 0.85;
     hemi.color.set(night > 0.5 ? '#6a7ab0' : '#e8f2ff');
-    fogColor.set('#7fa6c4').lerp(col.set('#04060f'), night);
+    fogColor.set('#7fa6c4').lerp(col.set(S.bloodMoon ? '#2a0306' : '#04060f'), night);
+    if (S.bloodMoon && night > 0.3) hemi.color.set('#b03838');
     scene.background.copy(fogColor); scene.fog.color.copy(fogColor);
     scene.fog.near = 30 - night * 8; scene.fog.far = 64 - night * 18;
 
@@ -402,6 +444,7 @@
       u.turret.rotation.y = -b.angle;
       for (const sp of u.spin) sp.o.rotation[sp.axis] = at * sp.speed;
       if (u.bob) u.bob.position.y = u.bobY + Math.sin(at * 2.5 + b.id) * 0.08;
+      if (u.spikes) u.spikes.position.y = b.spike > 0 ? 0.08 : -0.1;
       const fl = b.flash > 0 ? 0.55 : 0;
       if (u.flashOn !== fl) { u.flashOn = fl; for (const m of u.mats) { if (!m.userData.e0) m.userData.e0 = m.emissive.clone(); m.emissive.copy(m.userData.e0).lerp(col.set('#ffffff'), fl); } }
     }
@@ -442,6 +485,20 @@
     zArm.count = na; zArm.instanceMatrix.needsUpdate = true; if (zArm.instanceColor) zArm.instanceColor.needsUpdate = true;
     zEye.count = ne; zEye.instanceMatrix.needsUpdate = true; if (zEye.instanceColor) zEye.instanceColor.needsUpdate = true;
     zSpark.count = ns; zSpark.instanceMatrix.needsUpdate = true;
+
+    // Tiere
+    const aseen = new Set();
+    for (const an of S.animals || []) {
+      aseen.add(an.id);
+      let o = animalObjs.get(an.id);
+      if (!o) { o = makeAnimal(an); animalObjs.set(an.id, o); }
+      const u = o.userData, moving = Math.abs(an.vx || 0) + Math.abs(an.vy || 0) > 1;
+      o.position.set(an.x / TS, moving ? Math.abs(Math.sin(an.walk || 0)) * 0.05 : 0, an.y / TS);
+      o.rotation.y = -(an.face || 0);
+      u.legs.forEach((l, k) => { l.rotation.z = moving ? Math.sin((an.walk || 0) * 1.5 + (k % 2 ? Math.PI : 0)) * 0.5 : 0; });
+      u.fur.emissive.set(an.flash > 0 ? '#ffffff' : '#000000');
+    }
+    for (const [id, o] of animalObjs) if (!aseen.has(id)) { scene.remove(o); animalObjs.delete(id); }
 
     // Spieler
     const pseen = new Set();
@@ -585,6 +642,11 @@
       if (!p.ok) continue;
       G.hpBar(p.x, p.y, z.type === 'boss' ? 70 : Math.max(24, z.r * 2), z.hp / z.maxHp, z.type === 'boss' ? '#d87bff' : '#e74c3c');
     }
+    for (const an of S.animals || []) {
+      if (an.hp >= an.maxHp) continue;
+      const pa = project(an.x, an.y, 1.1);
+      if (pa.ok) G.hpBar(pa.x, pa.y, 26, an.hp / an.maxHp, '#e0a050');
+    }
     for (const b of S.buildings) {
       if (b.hp >= b.maxHp) continue;
       const c = G.bCenter(b), p = project(c.x, c.y, b.type === 'hq' ? 4 : b.type === 'wall' || b.type === 'door' ? 1.4 : 2.6);
@@ -595,7 +657,7 @@
       const p = project(q.x, q.y, 1.45);
       if (!p.ok) continue;
       if (q.hp < q.maxHp) G.hpBar(p.x, p.y, 34, q.hp / q.maxHp, q === S.player ? '#4fc3f7' : '#ff8a80');
-      if (S.players.length > 1) G.text(q.name || ('P' + (q.id + 1)), p.x, p.y - 12, 12, q === S.player ? '#cfe8ff' : '#ffb0a8', 'center', 'bold');
+      if (S.players.length > 1 || q.afk) G.text((q.name || ('P' + (q.id + 1))) + (q.afk ? ' 💤 AFK' : ''), p.x, p.y - 12, 12, q === S.player ? '#cfe8ff' : '#ffb0a8', 'center', 'bold');
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     for (const tx of S.texts) {
