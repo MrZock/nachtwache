@@ -9,11 +9,13 @@ Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz
 - **Allein:** `index.html` im Browser öffnen → „Einzelspieler“.
 - **Zu zweit online:** Online-Version öffnen → einer klickt „Online hosten“ und bekommt einen **Raum-Code**, der andere klickt „Online beitreten“ und gibt den Code ein (oder öffnet den Einladungslink).
 
-**Steuerung:** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · Q/E/R Spitzhacke/Schwert/Bogen · 1–0 Gebäude · Gebäude anklicken → Upgrade (U) / Verkaufen (X) · T/Enter Chat · G Markierung · K Skills · M Karte · F Stachelfalle · ESC Pause/Menü · N Ton
+**Steuerung:** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · Q/E/R Spitzhacke/Schwert/Bogen · C/V/B Speer/Streitaxt/Feuerstab · H Schmiede · 1–0 Gebäude · Gebäude anklicken → Upgrade (U) / Verkaufen (X) · T/Enter Chat · G Markierung · K Skills · M Karte · F Stachelfalle · ESC Pause/Menü · N Ton
 
-**Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Jedes Level gibt einen Skillpunkt für Stärke, Schütze, Sammler, Ausdauer, Flinkheit oder Plünderer (je 5 Stufen, Menü mit K).
+**Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Jedes Level gibt einen Skillpunkt für Stärke, Schütze, Sammler, Ausdauer, Flinkheit, Plünderer, Präzision (kritische Treffer), Rüstung oder Lebensraub (je 5 Stufen, Menü mit K).
 
-**Handy:** im Querformat spielen. Links ziehen = laufen (Joystick), rechts tippen/halten = angreifen & abbauen, im Baumodus tippen/wischen = bauen. Knöpfe am rechten Rand für Menü, Karte, Skills, Chat und Markierung. Im Menü gibt es einen Vollbild-Knopf.
+**Schmiede (H):** Speer (große Reichweite), Streitaxt (Rundumschlag, fällt Bäume schneller) und Feuerstab (explodierende Feuerbälle) freischalten. Alle Werkzeuge lassen sich bis Stufe 5 aufwerten (Stein → Eisen → Stahl → Kristall → Gold): mehr Schaden, die Spitzhacke baut mehr pro Schlag ab, der Bogen schießt ab Stufe 3 zwei und ab Stufe 5 drei Pfeile. Höchststufe = Goldspeicher-Stufe + 1.
+
+**Handy:** im Querformat spielen. Links ziehen = laufen (Joystick), rechts tippen/halten = angreifen & abbauen, im Baumodus tippen/wischen = bauen. Knöpfe am rechten Rand für Menü, Karte, Skills, Schmiede, Chat und Markierung. Im Menü gibt es einen Vollbild-Knopf.
 
 **Chat-Befehle:** `/afk` – AFK-Modus (kein Rauswurf, auch wenn der Tab im Hintergrund ist; Zombies ignorieren dich) · `/hilfe` – alle Befehle.
 

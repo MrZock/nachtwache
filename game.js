@@ -224,11 +224,14 @@ const PLAYER_COL = ['#3a6ea8', '#b8433f'];
 // ---------- Level & Skills
 const SKILLS = [
   { id: 'str',  icon: '⚔', name: 'Stärke',     max: 5, desc: l => '+' + (l * 15) + '% Nahkampfschaden' },
-  { id: 'bow',  icon: '➶', name: 'Schütze',    max: 5, desc: l => '+' + (l * 12) + '% Bogenschaden, ' + (l * 6) + '% schneller' },
+  { id: 'bow',  icon: '➶', name: 'Schütze',    max: 5, desc: l => '+' + (l * 12) + '% Fernkampfschaden, ' + (l * 6) + '% schneller' },
   { id: 'gath', icon: '⛏', name: 'Sammler',    max: 5, desc: l => (l * 20) + '% Chance auf doppelte Ausbeute' },
   { id: 'vit',  icon: '❤', name: 'Ausdauer',   max: 5, desc: l => '+' + (l * 15) + ' Max-HP, +' + l + ' HP/s Regeneration' },
   { id: 'spd',  icon: '➤', name: 'Flinkheit',  max: 5, desc: l => '+' + (l * 6) + '% Laufgeschwindigkeit' },
   { id: 'loot', icon: '$', name: 'Plünderer',  max: 5, desc: l => '+' + (l * 15) + '% Gold von Zombies & Truhen' },
+  { id: 'crit', icon: '✦', name: 'Präzision',  max: 5, desc: l => (l * 7) + '% Chance auf doppelten Schaden' },
+  { id: 'armor', icon: '🛡', name: 'Rüstung',  max: 5, desc: l => '-' + (l * 7) + '% erlittener Schaden' },
+  { id: 'vamp', icon: '❣', name: 'Lebensraub', max: 5, desc: l => 'Heilt dich um ' + (l * 3) + '% deines Schadens' },
 ];
 const xpNeed = L => Math.round(40 + (L - 1) * 30 + (L - 1) * (L - 1) * 4);
 let skillsOpen = false;
@@ -250,6 +253,8 @@ const ACHIEVEMENTS = [
   { id: 'hq5',     name: 'Festung',           desc: 'Goldspeicher auf Stufe 5',              ok: S => !!S.hq && S.hq.lvl >= 5 },
   { id: 'hunter',  name: 'Jäger',             desc: 'Erlege 10 Tiere',                       ok: S => (S.animalKills || 0) >= 10 },
   { id: 'coop',    name: 'Zusammen stark',    desc: 'Überlebe 3 Nächte zu zweit',            ok: S => S.players.length > 1 && S.survived >= 3 },
+  { id: 'arsenal', name: 'Waffenarsenal',     desc: 'Schalte alle Waffen frei',              ok: S => TOOL_ORDER.every(k => S.player.tl[k] > 0) },
+  { id: 'smith',   name: 'Meisterschmied',    desc: 'Bringe ein Werkzeug auf Stufe 5',       ok: S => TOOL_ORDER.some(k => S.player.tl[k] >= 5) },
 ];
 const achDone = new Set(store.get(ACH_KEY, []));
 const achQueue = [];
@@ -295,12 +300,13 @@ function drawAchList() {
     text(a.desc, cx + 38, cy + 28, 11, done ? '#ddd' : '#888', 'left', '600');
   });
 }
-function newSkills() { return { str: 0, bow: 0, gath: 0, vit: 0, spd: 0, loot: 0 }; }
+function newSkills() { return { str: 0, bow: 0, gath: 0, vit: 0, spd: 0, loot: 0, crit: 0, armor: 0, vamp: 0 }; }
+function newTools() { return { pick: 1, sword: 1, bow: 1, spear: 0, axe: 0, staff: 0 }; }
 function mkPlayer(id) {
   return { id, x: WORLD / 2, y: WORLD / 2, r: 14, hp: 100, maxHp: 100, dead: 0, face: 0, tool: 'sword', cd: 0, swing: 0,
            lastHurt: -99, flash: 0, walk: 0, tp: 0, remote: false, lastInput: 0,
            inp: { mx: 0, my: 0, ax: 0, ay: 0, down: false }, tx: 0, ty: 0,
-           lvl: 1, xp: 0, sp: 0, sk: newSkills(), afk: false };
+           lvl: 1, xp: 0, sp: 0, sk: newSkills(), tl: newTools(), afk: false };
 }
 function newGame(opts) {
   opts = opts || {};
@@ -1057,12 +1063,13 @@ function mageChain(x, y, first, dmg, jumps) {
   lightFlash(x, y, 160, 0.2);
   SFX.play('zap', x, y);
 }
-function explode(x, y, rad, dmg, big) {
+function explode(x, y, rad, dmg, big, owner) {
   forZ(x, y, rad + 40, z => {
     const d = Math.hypot(z.x - x, z.y - y);
     if (d < rad + z.r) {
       const f = 1 - 0.5 * clamp(d / rad, 0, 1);
       const a = Math.atan2(z.y - y, z.x - x);
+      if (owner) { z.lastHit = owner; lifeSteal(owner, dmg * f * 0.5); }
       hurtZombie(z, dmg * f, { x: Math.cos(a) * (big ? 260 : 160), y: Math.sin(a) * (big ? 260 : 160) });
     }
   });
@@ -1213,6 +1220,7 @@ function killZombie(z) {
 }
 function hurtPlayer(p, dmg) {
   if (p.dead > 0 || p.afk) return;
+  dmg *= 1 - 0.07 * (p.sk.armor || 0);
   p.hp -= dmg; p.lastHurt = S.t; p.flash = 0.15;
   burst(p.x, p.y, '#c0392b', 8, 130, 0.45, 2.5);
   shakeFor(p, 2.5);
@@ -1409,10 +1417,61 @@ function separate() {
 // Spieler
 // =====================================================================
 const TOOLS = {
-  pick:  { name: 'Spitzhacke', key: 'Q', cd: 0.33, dmg: 12, reach: 52 },
-  sword: { name: 'Schwert',    key: 'E', cd: 0.38, dmg: 32, reach: 64 },
+  pick:  { name: 'Spitzhacke', key: 'Q', cd: 0.33, dmg: 12, reach: 52, arc: 0.9, kb: 220 },
+  sword: { name: 'Schwert',    key: 'E', cd: 0.38, dmg: 32, reach: 64, arc: 1.1, kb: 220 },
   bow:   { name: 'Bogen',      key: 'R', cd: 0.55, dmg: 20, reach: 600 },
+  spear: { name: 'Speer',      key: 'C', cd: 0.5,  dmg: 30, reach: 112, arc: 0.36, kb: 300, unlock: { w: 60, s: 40, g: 40 }, hq: 1 },
+  axe:   { name: 'Streitaxt',  key: 'V', cd: 0.8,  dmg: 56, reach: 72, arc: 3.2, kb: 340, unlock: { w: 150, s: 80, g: 100 }, hq: 2 },
+  staff: { name: 'Feuerstab',  key: 'B', cd: 0.9,  dmg: 34, reach: 520, unlock: { w: 100, s: 150, g: 250 }, hq: 2 },
 };
+const TOOL_ORDER = Object.keys(TOOLS);
+// Kosten, um ein Werkzeug von Stufe L auf L+1 zu bringen
+const TOOL_UP = [null, { w: 40, s: 40, g: 30 }, { w: 110, s: 110, g: 110 }, { w: 240, s: 240, g: 300 }, { w: 480, s: 480, g: 700 }];
+const TMET = ['#a9a9a9', '#dfe6ee', '#7fb4ff', '#c890ff', '#ffd36b'];
+const TLV_NAME = ['Stein', 'Eisen', 'Stahl', 'Kristall', 'Gold'];
+const toolMul = L => 1 + 0.3 * (L - 1);
+const toolMet = (p, id) => TMET[clamp(((p.tl && p.tl[id]) || 1) - 1, 0, 4)];
+function toolDesc(id, L) {
+  if (id === 'pick') return 'Baut Holz, Stein & Gold ab' + (L > 1 ? ' · +' + (L - 1) + ' pro Schlag' : '');
+  if (id === 'sword') return 'Starker Nahkampf mit Rückstoß';
+  if (id === 'bow') return 'Fernkampf, Pfeile kostenlos' + (L >= 5 ? ' · 3 Pfeile' : L >= 3 ? ' · 2 Pfeile' : ' · ab Stufe 3: 2 Pfeile');
+  if (id === 'spear') return 'Große Reichweite, durchbohrt ganze Reihen';
+  if (id === 'axe') return 'Rundumschlag, fällt Bäume doppelt so schnell';
+  return 'Feuerball, explodiert im Umkreis';
+}
+function toolCost(p, id) { const L = p.tl[id] || 0; return L ? TOOL_UP[L] : TOOLS[id].unlock; }
+function toolError(p, id) {
+  const T = TOOLS[id];
+  if (!T) return 'Unbekanntes Werkzeug';
+  const L = p.tl[id] || 0;
+  if (L >= 5) return 'Schon auf Maximalstufe';
+  if (!L && T.hq && hqLvl() < T.hq) return 'Benötigt Goldspeicher Stufe ' + T.hq;
+  if (L && L >= hqLvl() + 1) return 'Erst den Goldspeicher aufwerten';
+  if (!canAfford(toolCost(p, id))) return 'Nicht genug Rohstoffe';
+  return null;
+}
+function upgradeTool(p, id) {
+  const err = toolError(p, id);
+  if (err) return err;
+  pay(toolCost(p, id));
+  const L = ++p.tl[id];
+  burst(p.x, p.y, TMET[L - 1], 22, 150, 0.6, 3);
+  ring(p.x, p.y, 60, 0.4, TMET[L - 1]);
+  sfxFor(p, 'upgrade');
+  toastFor(p, L === 1 ? TOOLS[id].name + ' freigeschaltet! (Taste ' + TOOLS[id].key + ')' : TOOLS[id].name + ' → Stufe ' + L + ' (' + TLV_NAME[L - 1] + ')', TMET[L - 1]);
+  if (L === 1 && !p.remote) p.tool = id;
+  return null;
+}
+let forgeOpen = false;
+function actTool(id) {
+  if (NET.role === 'client') { netSendR({ t: 'tool', id }); SFX.play('click'); return; }
+  const err = upgradeTool(S.player, id);
+  if (err) { toast(err, '#ff7b6b'); SFX.play('error', undefined, undefined, true); }
+}
+function critDmg(p, d) { return p.sk.crit && Math.random() < 0.07 * p.sk.crit ? d * 2 : d; }
+function lifeSteal(p, d) {
+  if (p && p.sk && p.sk.vamp && p.dead <= 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + d * 0.03 * p.sk.vamp);
+}
 function aimPoint() {
   if (input.aim) return input.aim;
   if (R3 && R3.ready) { const w = R3.pick(input.sx, input.sy); if (w) return w; }
@@ -1473,25 +1532,37 @@ function updPlayer(p, dt) {
   if (p.inp.down && p.cd <= 0) playerAttack(p);
 }
 function playerAttack(p) {
-  const T = TOOLS[p.tool] || TOOLS.sword, mul = 1 + 0.3 * (hqLvl() - 1);
-  const bow = p.tool === 'bow', melee = (1 + 0.15 * p.sk.str), ranged = (1 + 0.12 * p.sk.bow);
-  p.cd = T.cd * (bow ? 1 - 0.06 * p.sk.bow : 1); p.swing = 0.22;
+  if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
+  const T = TOOLS[p.tool] || TOOLS.sword, L = p.tl[p.tool] || 1, mul = (1 + 0.3 * (hqLvl() - 1)) * toolMul(L);
+  const ranged = p.tool === 'bow' || p.tool === 'staff', melee = (1 + 0.15 * p.sk.str), rangedM = (1 + 0.12 * p.sk.bow);
+  p.cd = T.cd * (ranged ? 1 - 0.06 * p.sk.bow : 1); p.swing = 0.22;
   if (p.tool === 'bow') {
-    const sp = 760, a = p.face;
-    S.projs.push({ k: 'parrow', x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: T.reach / sp, dmg: T.dmg * mul * ranged, r: 4, owner: p.id });
+    const sp = 760, n = L >= 5 ? 3 : L >= 3 ? 2 : 1;
+    for (let k = 0; k < n; k++) {
+      const a = p.face + (k - (n - 1) / 2) * 0.09;
+      S.projs.push({ k: 'parrow', x: p.x + Math.cos(a) * 16, y: p.y + Math.sin(a) * 16, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: T.reach / sp, dmg: critDmg(p, T.dmg * mul * rangedM), r: 4, owner: p.id });
+    }
     SFX.play('bow', p.x, p.y);
+    return;
+  }
+  if (p.tool === 'staff') {
+    const sp = 520, a = p.face;
+    S.projs.push({ k: 'fire', x: p.x + Math.cos(a) * 20, y: p.y + Math.sin(a) * 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: T.reach / sp, dmg: critDmg(p, T.dmg * mul * rangedM), splash: TS * (1.1 + 0.12 * L), r: 7, owner: p.id });
+    SFX.play('zap', p.x, p.y);
     return;
   }
   // Nahkampf: Zombies im Bogen vor dem Spieler
   let hitAny = false;
-  const reach = T.reach, arc = p.tool === 'sword' ? 1.1 : 0.9;
+  const reach = T.reach + (p.tool === 'sword' || p.tool === 'spear' ? (L - 1) * 5 : 0), arc = T.arc;
   forZ(p.x, p.y, reach + 40, z => {
     const d = Math.hypot(z.x - p.x, z.y - p.y);
     if (d > reach + z.r) return;
     if (Math.abs(angDiff(Math.atan2(z.y - p.y, z.x - p.x), p.face)) > arc) return;
-    const ka = Math.atan2(z.y - p.y, z.x - p.x);
+    const ka = Math.atan2(z.y - p.y, z.x - p.x), base = T.dmg * mul * melee, dmg = critDmg(p, base);
     z.lastHit = p;
-    hurtZombie(z, T.dmg * mul * melee, { x: Math.cos(ka) * 220, y: Math.sin(ka) * 220 });
+    hurtZombie(z, dmg, { x: Math.cos(ka) * T.kb, y: Math.sin(ka) * T.kb });
+    lifeSteal(p, dmg);
+    if (dmg > base) floatText(z.x, z.y - z.r - 22, 'KRITISCH!', '#ffe27a', 13);
     burst(z.x, z.y, '#5f9a3a', 5, 120, 0.35, 2.5);
     hitAny = true;
   });
@@ -1501,23 +1572,25 @@ function playerAttack(p) {
     hurtAnimal(an, T.dmg * mul * melee, p); hitAny = true;
   }
   if (hitAny) SFX.play('hit', p.x, p.y);
-  // Spitzhacke: Ressourcen abbauen (Bäume, Felsen, Golderz – sie gehen nach und nach kaputt)
-  if (p.tool === 'pick') {
+  if (p.tool === 'axe') ring(p.x, p.y, reach, 0.18, TMET[L - 1]);
+  // Spitzhacke (alles) bzw. Streitaxt (nur Bäume): Ressourcen abbauen
+  if (p.tool === 'pick' || p.tool === 'axe') {
+    const axe = p.tool === 'axe';
     let best = -1, bd = 1e9;
     const ptx = Math.floor(p.x / TS), pty = Math.floor(p.y / TS);
     for (let y = pty - 2; y <= pty + 2; y++) for (let x = ptx - 2; x <= ptx + 2; x++) {
       if (!inMap(x, y)) continue;
       const i = y * MAP + x;
-      if (!S.res[i]) continue;
+      if (!S.res[i] || (axe && S.res[i] !== 1)) continue;
       const cx = (x + 0.5) * TS, cy = (y + 0.5) * TS, d = Math.hypot(cx - p.x, cy - p.y);
       if (d > reach + RES_R) continue;
-      if (Math.abs(angDiff(Math.atan2(cy - p.y, cx - p.x), p.face)) > 1.0) continue;
+      if (Math.abs(angDiff(Math.atan2(cy - p.y, cx - p.x), p.face)) > (axe ? 1.4 : 1.0)) continue;
       if (d < bd) { bd = d; best = i; }
     }
     if (best >= 0) {
       const kind = S.res[best], cx = (best % MAP + 0.5) * TS, cy = ((best / MAP | 0) + 0.5) * TS;
       S.wobble.set(best, { t: 0.25, a: p.face }); hostEv(['w', best, +p.face.toFixed(2)]);
-      let amt = mineRes(best, 1 + Math.floor((hqLvl() - 1) / 2));
+      let amt = mineRes(best, (axe ? 2 : 1) + Math.floor((hqLvl() - 1) / 2) + (L - 1));
       if (amt > 0 && Math.random() < 0.2 * p.sk.gath) { amt *= 2; burst(cx, cy, '#ffffff', 6, 100, 0.4, 2.5); }
       giveXp(p, kind === 3 ? amt * 2 : amt);
       if (kind === 1) { S.wood += amt; SFX.play('chop', cx, cy); burst(cx, cy, '#a0763f', 6, 120, 0.45, 2.5); burst(cx, cy, '#4f8a3a', 4, 90, 0.6, 3); floatText(cx, cy - 18, '+' + amt + ' Holz', '#e0b070', 13); }
@@ -1562,13 +1635,14 @@ function updProjs(dt) {
     forZ(pr.x, pr.y, pr.r + 40, z => {
       if ((z.x - pr.x) ** 2 + (z.y - pr.y) ** 2 < (z.r + pr.r) ** 2) { hitZ = z; return false; }
     });
-    if (pr.k === 'ball') {
-      if (hitZ || pr.life <= 0) { pr.dead = true; explode(pr.x, pr.y, pr.splash, pr.dmg, false); }
+    if (pr.k === 'ball' || pr.k === 'fire') {
+      if (pr.k === 'fire' && !HEADLESS && Math.random() < 0.6) burst(pr.x, pr.y, '#ff9a3a', 1, 30, 0.3, 2.5);
+      if (hitZ || pr.life <= 0) { pr.dead = true; explode(pr.x, pr.y, pr.splash, pr.dmg, false, pr.owner !== undefined ? S.players[pr.owner] : null); }
       continue;
     }
     if (hitZ) {
       const sp = Math.hypot(pr.vx, pr.vy);
-      if (pr.owner !== undefined) hitZ.lastHit = S.players[pr.owner];
+      if (pr.owner !== undefined) { hitZ.lastHit = S.players[pr.owner]; lifeSteal(S.players[pr.owner], pr.dmg); }
       hurtZombie(hitZ, pr.dmg, { x: pr.vx / sp * 60, y: pr.vy / sp * 60 });
       burst(pr.x, pr.y, '#e8e0c0', 4, 90, 0.25, 2);
       if (pr.k === 'parrow') SFX.play('hit', pr.x, pr.y);
@@ -1665,7 +1739,7 @@ function gameOver() {
 //    und bekommt ~20x pro Sekunde einen Schnappschuss + Effekt-Events zurück.
 //  - Verbindungsaufbau per Copy-&-Paste-Codes (kein eigener Server nötig).
 // =====================================================================
-const ZTYPES = Object.keys(ZDEF), BTYPES = Object.keys(BDEF), PKINDS = ['arrow', 'parrow', 'ball', 'bomb', 'glob'], TOOLIDS = ['pick', 'sword', 'bow'];
+const ZTYPES = Object.keys(ZDEF), BTYPES = Object.keys(BDEF), PKINDS = ['arrow', 'parrow', 'ball', 'bomb', 'glob', 'fire'], TOOLIDS = TOOL_ORDER;
 const RTC_CFG = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
 const r2 = v => Math.round(v * 100) / 100;
 
@@ -1874,7 +1948,7 @@ function runCommand(p, text) {
   if (cmd === 'afk') setAfk(p, !p.afk);
   else if (cmd === 'hilfe' || cmd === 'help' || cmd === '?') {
     sysMsg(p, 'Befehle: /afk – AFK an/aus (kein Rauswurf, Zombies ignorieren dich)');
-    sysMsg(p, '/hilfe – diese Liste · Tasten: M Karte, K Skills, G Markierung, N Ton');
+    sysMsg(p, '/hilfe – diese Liste · Tasten: M Karte, K Skills, H Schmiede, G Markierung, N Ton');
   } else sysMsg(p, 'Unbekannter Befehl „/' + cmd + '“ – schreib /hilfe');
 }
 function leaveGame() { netClose(); mode = 'menu'; newGame(); }
@@ -1975,7 +2049,7 @@ function netHostTick(dt) {
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
         S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0],
-    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0]),
+    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k])]),
     ch: S.chests.map(c => [c.id, c.x | 0, c.y | 0]),
     an: (S.animals || []).map(a => [a.id, ATYPES.indexOf(a.type), a.x | 0, a.y | 0, r2(a.face), Math.round(100 * a.hp / a.maxHp), a.flash > 0 ? 1 : 0, a.vx | 0, a.vy | 0]),
     z: S.zombies.map(z => [z.id, ZTYPES.indexOf(z.type), z.x | 0, z.y | 0, r2(z.face), Math.round(100 * z.hp / z.maxHp), z.flash > 0 ? 1 : 0, z.lunge > 0 ? 1 : 0, z.vx | 0, z.vy | 0]),
@@ -1991,6 +2065,7 @@ function hostHandleClient(m) {
     if (p.afk && (m.d || Math.hypot(nx - p.x, ny - p.y) > 3)) setAfk(p, false);
     if (mode !== 'over' && p.dead <= 0) { p.x = nx; p.y = ny; }
     p.face = +m.f || 0; p.tool = TOOLIDS[m.tool] || 'sword';
+    if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
     p.inp.down = !!m.d; p.lastInput = S.t;
   } else if (m.t === 'name') {
     const old = p.name; p.name = cleanText(m.name, 16) || p.name;
@@ -2004,6 +2079,9 @@ function hostHandleClient(m) {
     SFX.play('chat', undefined, undefined, true);
   } else if (m.t === 'skill') {
     spendSkill(p, String(m.id));
+  } else if (m.t === 'tool') {
+    const err = upgradeTool(p, String(m.id));
+    if (err) netSendR({ t: 'T', text: err, color: '#ff7b6b', err: 1 });
   } else if (m.t === 'pin') {
     addPing(clamp(+m.x || 0, 0, WORLD), clamp(+m.y || 0, 0, WORLD), 1);
   } else if (m.t === 'C' && mode !== 'over') {
@@ -2084,6 +2162,7 @@ function clientSnapshot(m) {
       p.lvl = a[12]; p.xp = a[13]; p.sp = a[14];
       SKILLS.forEach((s, k) => { p.sk[s.id] = a[15][k] || 0; });
     }
+    if (a[17]) TOOL_ORDER.forEach((k, i) => { p.tl[k] = a[17][i] || 0; });
     if (p === S.player) {
       if (a[10] !== p.tp) { p.tp = a[10]; p.x = a[1]; p.y = a[2]; }
     } else {
@@ -2566,15 +2645,29 @@ function drawPlayer(p) {
   const skin = p.flash > 0 ? '#ff8080' : '#f0c9a0';
   // Werkzeug
   ctx.save();
-  if (p.tool !== 'bow') { ctx.rotate(-0.9 + sw * 1.9); }
+  const met = toolMet(p, p.tool);
+  if (p.tool === 'spear') { ctx.rotate(-0.25); ctx.translate(sw * 18, 0); }
+  else if (p.tool === 'axe') ctx.rotate(-1.6 + sw * 3.2);
+  else if (p.tool !== 'bow') { ctx.rotate(-0.9 + sw * 1.9); }
   ctx.translate(14, 10);
   if (p.tool === 'pick') {
     ctx.fillStyle = '#7a5530'; ctx.fillRect(0, -2, 24, 4);
-    ctx.strokeStyle = '#b8bcc8'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(22, 0, 10, -1.3, 1.3); ctx.stroke();
+    ctx.strokeStyle = met; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(22, 0, 10, -1.3, 1.3); ctx.stroke();
   } else if (p.tool === 'sword') {
     ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-2, -2, 8, 4);
     ctx.fillStyle = '#c9a227'; ctx.fillRect(5, -6, 3, 12);
-    ctx.fillStyle = '#e8eef5'; ctx.beginPath(); ctx.moveTo(8, -3); ctx.lineTo(32, -2); ctx.lineTo(36, 0); ctx.lineTo(32, 2); ctx.lineTo(8, 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = met; ctx.beginPath(); ctx.moveTo(8, -3); ctx.lineTo(32, -2); ctx.lineTo(36, 0); ctx.lineTo(32, 2); ctx.lineTo(8, 3); ctx.closePath(); ctx.fill();
+  } else if (p.tool === 'spear') {
+    ctx.fillStyle = '#7a5530'; ctx.fillRect(-8, -1.5, 44, 3);
+    ctx.fillStyle = met; ctx.beginPath(); ctx.moveTo(35, -4.5); ctx.lineTo(48, 0); ctx.lineTo(35, 4.5); ctx.closePath(); ctx.fill();
+  } else if (p.tool === 'axe') {
+    ctx.fillStyle = met; ctx.beginPath(); ctx.ellipse(24, 0, 7, 13, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#6a4526'; ctx.fillRect(-2, -2, 32, 4);
+  } else if (p.tool === 'staff') {
+    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-4, -2, 32, 4);
+    ctx.fillStyle = 'rgba(255,150,50,' + (0.3 + 0.15 * Math.sin(animT * 8)) + ')'; circle(31, 0, 10); ctx.fill();
+    ctx.fillStyle = met === TMET[0] ? '#ff7a2a' : met; circle(31, 0, 5); ctx.fill();
   } else {
     ctx.translate(-2, -10);
     const pull = p.cd > 0.2 ? 0 : 4;
@@ -2749,6 +2842,10 @@ function render(dt) {
       ctx.fillStyle = '#ddd'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-1, -3); ctx.lineTo(-1, 3); ctx.fill();
       ctx.fillStyle = '#c04040'; ctx.fillRect(-15, -2.5, 4, 5);
       ctx.restore();
+    } else if (pr.k === 'fire') {
+      ctx.fillStyle = 'rgba(255,140,40,0.35)'; circle(pr.x, pr.y, 13); ctx.fill();
+      ctx.fillStyle = '#ffb347'; circle(pr.x, pr.y, 7); ctx.fill();
+      ctx.fillStyle = '#fff3c0'; circle(pr.x, pr.y, 3); ctx.fill();
     } else if (pr.k === 'ball') {
       ctx.fillStyle = '#1a1a1a'; circle(pr.x, pr.y, 6); ctx.fill();
       ctx.fillStyle = '#555'; circle(pr.x - 2, pr.y - 2, 2); ctx.fill();
@@ -2879,7 +2976,8 @@ function drawTouchUI() {
   const btns = [
     ['☰', 'Menü', () => { mode = 'paused'; }],
     ['🗺', 'Karte', () => { mapOpen = !mapOpen; }],
-    ['★', 'Skills', () => { skillsOpen = !skillsOpen; }],
+    ['★', 'Skills', () => { skillsOpen = !skillsOpen; forgeOpen = false; }],
+    ['⚒', 'Schmiede', () => { forgeOpen = !forgeOpen; skillsOpen = false; }],
     ['💬', 'Chat', () => chatOpen()],
     ['📍', 'Markieren', () => { touch.pingMode = !touch.pingMode; if (touch.pingMode) toast('Tippe auf die Stelle, die du markieren willst', '#7fd8ff'); }],
   ];
@@ -2888,7 +2986,7 @@ function drawTouchUI() {
   const bs = 50, x = VW - bs - 12, y0 = S.hq ? 70 : 14;
   btns.forEach((b, i) => {
     const y = y0 + i * (bs + 10);
-    const on = (b[1] === 'Markieren' && touch.pingMode) || (b[1] === 'Karte' && mapOpen) || (b[1] === 'Skills' && skillsOpen);
+    const on = (b[1] === 'Markieren' && touch.pingMode) || (b[1] === 'Karte' && mapOpen) || (b[1] === 'Skills' && skillsOpen) || (b[1] === 'Schmiede' && forgeOpen);
     ctx.fillStyle = on ? 'rgba(255,226,122,0.45)' : 'rgba(12,16,22,0.7)'; circle(x + bs / 2, y + bs / 2, bs / 2); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
     text(b[0], x + bs / 2, y + bs / 2 + 1, 22, '#fff', 'center');
@@ -3012,7 +3110,9 @@ function drawHUD() {
 
   // Werkzeug- & Bauleiste
   const slots = [];
-  ['pick', 'sword', 'bow'].forEach(k => slots.push({ kind: 'tool', id: k }));
+  TOOL_ORDER.forEach(k => { if (p.tl[k] > 0) slots.push({ kind: 'tool', id: k }); });
+  slots.push({ kind: 'forge', id: 'forge' });
+  const nTool = slots.length;
   BAR_ORDER.forEach(([k, key]) => { if (k !== 'hq' || !S.hq) slots.push({ kind: 'build', id: k, key }); });
   const mmS = mmSize(), gap = 5;
   const areaR = VW - mmS - 28, areaL = VW > 1100 ? mmS + 28 : 12;
@@ -3048,8 +3148,8 @@ function drawHUD() {
   ui.push({ x: lx, y: y - 34, w: 62, h: 26, fn: () => { skillsOpen = !skillsOpen; } });
   panel(x - 4, y - 4, totalW + 8, SW + 8);
   slots.forEach((s, i) => {
-    if (i === 3) x += 14;
-    const sel = s.kind === 'tool' ? (!S.place && p.tool === s.id) : S.place === s.id;
+    if (i === nTool) x += 14;
+    const sel = s.kind === 'forge' ? forgeOpen : s.kind === 'tool' ? (!S.place && p.tool === s.id) : S.place === s.id;
     const hov = input.sx >= x && input.sx <= x + SW && input.sy >= y && input.sy <= y + SW;
     if (hov) hoverSlot = { s, x, y };
     let afford = true;
@@ -3059,16 +3159,19 @@ function drawHUD() {
     ctx.strokeStyle = sel ? '#ffe27a' : 'rgba(255,255,255,0.15)'; ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
     ctx.save();
     if (!afford) ctx.globalAlpha = 0.35;
-    if (s.kind === 'tool') drawToolIcon(s.id, x + SW / 2, y + SW / 2, SW);
+    if (s.kind === 'tool') drawToolIcon(s.id, x + SW / 2, y + SW / 2, SW, toolMet(p, s.id));
+    else if (s.kind === 'forge') drawToolIcon('forge', x + SW / 2, y + SW / 2, SW);
     else {
       const sz = BDEF[s.id].size, sc = (SW - 12) / (sz * TS);
       ctx.translate(x + 6, y + 6); ctx.scale(sc, sc);
       drawBuildingShape(s.id, 1, sz * TS, -Math.PI / 4, animT, false);
     }
     ctx.restore();
-    text(s.kind === 'tool' ? TOOLS[s.id].key : String(s.key), x + 5, y + 9, 11, '#fff', 'left');
+    text(s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key), x + 5, y + 9, 11, '#fff', 'left');
+    if (s.kind === 'tool' && p.tl[s.id] > 1) text(String(p.tl[s.id]), x + SW - 5, y + SW - 8, 11, TMET[p.tl[s.id] - 1], 'right');
+    if (s.kind === 'forge' && TOOL_ORDER.some(k => !toolError(p, k)) && Math.sin(animT * 5) > 0) { ctx.fillStyle = '#8fe08f'; circle(x + SW - 6, y + 6, 4); ctx.fill(); }
     const sx = x;
-    ui.push({ x, y, w: SW, h: SW, fn: () => { if (s.kind === 'tool') selectTool(s.id); else selectBuild(s.id); } });
+    ui.push({ x, y, w: SW, h: SW, fn: () => { if (s.kind === 'forge') { forgeOpen = !forgeOpen; skillsOpen = false; SFX.play('click'); } else if (s.kind === 'tool') selectTool(s.id); else selectBuild(s.id); } });
     x = sx + SW + gap;
   });
   if (hoverSlot) drawSlotTooltip(hoverSlot);
@@ -3133,10 +3236,11 @@ function drawHUD() {
   drawChat();
   // Steuerungshinweis
   if (!isTouch && VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
-    const lines = [R3 ? 'WASD laufen · Maus zielen · Linksklick angreifen · Mausrad Zoom' : 'WASD laufen · Maus zielen · Linksklick angreifen', 'Q/E/R Werkzeug · 1–0 Bauen · G Markierung · T Chat', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
+    const lines = [R3 ? 'WASD laufen · Maus zielen · Linksklick angreifen · Mausrad Zoom' : 'WASD laufen · Maus zielen · Linksklick angreifen', 'Q E R C V B Waffen · H Schmiede · 1–0 Bauen · G Markierung · T Chat', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
     lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
   }
   if (skillsOpen) drawSkills();
+  if (forgeOpen) drawForge();
   if (mapOpen) drawBigMap();
   drawTouchUI();
   drawAchPopup(1 / 60);
@@ -3174,15 +3278,32 @@ function drawChat() {
   });
   ctx.globalAlpha = 1;
 }
-function drawToolIcon(id, x, y, s) {
+function drawToolIcon(id, x, y, s, met) {
+  met = met || '#dfe6ee';
   ctx.save(); ctx.translate(x, y); ctx.rotate(-Math.PI / 4); const k = s / 50; ctx.scale(k, k);
-  if (id === 'pick') {
+  if (id === 'forge') {
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#5d5f66'; ctx.beginPath(); ctx.moveTo(-17, -6); ctx.lineTo(15, -6); ctx.quadraticCurveTo(20, -6, 19, -2); ctx.lineTo(8, 0); ctx.lineTo(6, 8); ctx.lineTo(-6, 8); ctx.lineTo(-8, 0); ctx.lineTo(-13, -1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3a3c42'; ctx.fillRect(-10, 8, 20, 5);
+    ctx.fillStyle = '#ffb347'; circle(10, -13, 3); ctx.fill(); circle(4, -16, 2); ctx.fill();
+  } else if (id === 'pick') {
     ctx.fillStyle = '#7a5530'; ctx.fillRect(-16, -2, 30, 4);
-    ctx.strokeStyle = '#c0c4d0'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(12, 0, 12, -1.3, 1.3); ctx.stroke();
+    ctx.strokeStyle = met; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(12, 0, 12, -1.3, 1.3); ctx.stroke();
+  } else if (id === 'spear') {
+    ctx.fillStyle = '#7a5530'; ctx.fillRect(-20, -1.5, 32, 3);
+    ctx.fillStyle = met; ctx.beginPath(); ctx.moveTo(10, -5); ctx.lineTo(22, 0); ctx.lineTo(10, 5); ctx.closePath(); ctx.fill();
+  } else if (id === 'axe') {
+    ctx.fillStyle = met; ctx.beginPath(); ctx.ellipse(10, 0, 7, 13, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#6a4526'; ctx.fillRect(-18, -2, 34, 4);
+  } else if (id === 'staff') {
+    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-18, -2, 30, 4);
+    ctx.fillStyle = 'rgba(255,150,50,0.35)'; circle(14, 0, 10); ctx.fill();
+    ctx.fillStyle = '#ff8a2a'; circle(14, 0, 6); ctx.fill();
+    ctx.fillStyle = '#fff3c0'; circle(13, -1, 2.2); ctx.fill();
   } else if (id === 'sword') {
     ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-18, -2.5, 9, 5);
     ctx.fillStyle = '#c9a227'; ctx.fillRect(-10, -7, 4, 14);
-    ctx.fillStyle = '#e8eef5'; ctx.beginPath(); ctx.moveTo(-6, -3.5); ctx.lineTo(16, -2.5); ctx.lineTo(20, 0); ctx.lineTo(16, 2.5); ctx.lineTo(-6, 3.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = met; ctx.beginPath(); ctx.moveTo(-6, -3.5); ctx.lineTo(16, -2.5); ctx.lineTo(20, 0); ctx.lineTo(16, 2.5); ctx.lineTo(-6, 3.5); ctx.closePath(); ctx.fill();
   } else {
     ctx.rotate(Math.PI / 4);
     ctx.strokeStyle = '#a06a32'; ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(-4, 0, 16, -1.2, 1.2); ctx.stroke();
@@ -3205,9 +3326,9 @@ function actSkill(id) {
 }
 function drawSkills() {
   const p = S.player;
-  const w = Math.min(600, VW - 24), cols = w > 480 ? 2 : 1, cw = (w - 36 - (cols - 1) * 12) / cols, chh = 74;
+  const w = Math.min(820, VW - 24), cols = w > 760 ? 3 : w > 480 ? 2 : 1, cw = (w - 36 - (cols - 1) * 12) / cols, chh = cols === 3 ? 84 : 74;
   const rows = Math.ceil(SKILLS.length / cols), h = 92 + rows * (chh + 10);
-  const x = VW / 2 - w / 2, y = Math.max(80, VH / 2 - h / 2 - 40);
+  const x = VW / 2 - w / 2, y = Math.max(cols === 3 ? 60 : 20, VH / 2 - h / 2 - 40);
   panel(x, y, w, h, 0.94);
   ui.push({ x, y, w, h, fn: () => {} });
   text('Fähigkeiten', x + 18, y + 24, 20, '#ffe27a');
@@ -3225,7 +3346,7 @@ function drawSkills() {
     const descW = cw - 62 - 46;
     const now = lv ? s.desc(lv) : 'noch nicht gelernt', next = lv < s.max ? 'Nächste: ' + s.desc(lv + 1) : 'Maximal!';
     const lines = wrapLines(lv < s.max ? next : now, descW, '600 11px ' + FONT);
-    lines.slice(0, 2).forEach((l, k) => text(l, cx + 62, cy + 50 + k * 14, 11, lv < s.max ? '#9fd0ff' : '#8fe08f', 'left', '600'));
+    lines.slice(0, chh > 80 ? 3 : 2).forEach((l, k) => text(l, cx + 62, cy + 50 + k * 13, 11, lv < s.max ? '#9fd0ff' : '#8fe08f', 'left', '600'));
     if (lv < s.max) {
       const can = p.sp > 0, bx = cx + cw - 40, by = cy + chh / 2 - 15;
       ctx.fillStyle = can ? 'rgba(60,160,80,0.9)' : 'rgba(255,255,255,0.08)'; rr(bx, by, 30, 30, 6); ctx.fill();
@@ -3234,13 +3355,49 @@ function drawSkills() {
     }
   });
 }
+function drawForge() {
+  const p = S.player, rowH = 64;
+  const w = Math.min(660, VW - 24), h = 78 + TOOL_ORDER.length * rowH;
+  const x = VW / 2 - w / 2, y = Math.max(12, VH / 2 - h / 2 - 50);
+  panel(x, y, w, h, 0.95);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('⚒ Schmiede', x + 18, y + 24, 20, '#ffe27a');
+  text('Holz ' + Math.floor(S.wood) + ' · Stein ' + Math.floor(S.stone) + ' · Gold ' + Math.floor(S.gold), x + 18, y + 50, 13, '#ccc', 'left', '600');
+  text('Max. Stufe = Goldspeicher + 1', x + w - 50, y + 24, 12, '#999', 'right', '600');
+  text('×', x + w - 20, y + 23, 20, '#aaa', 'center');
+  ui.push({ x: x + w - 34, y: y + 6, w: 30, h: 30, fn: () => { forgeOpen = false; } });
+  const bw = w > 520 ? 170 : 120;
+  TOOL_ORDER.forEach((id, i) => {
+    const T = TOOLS[id], L = p.tl[id] || 0, cy = y + 66 + i * rowH, cx = x + 14, cw = w - 28;
+    ctx.fillStyle = L ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.025)'; rr(cx, cy, cw, rowH - 6, 8); ctx.fill();
+    ctx.save(); if (!L) ctx.globalAlpha = 0.45;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(cx + 8, cy + 6, 46, 46, 8); ctx.fill();
+    drawToolIcon(id, cx + 31, cy + 29, 46, TMET[Math.max(0, L - 1)]);
+    ctx.restore();
+    text(T.name + ' (' + T.key + ')', cx + 64, cy + 15, 15, L ? '#fff' : '#aaa');
+    for (let k = 0; k < 5; k++) { ctx.fillStyle = k < L ? TMET[k] : 'rgba(255,255,255,0.15)'; rr(cx + 64 + k * 17, cy + 27, 13, 6, 2); ctx.fill(); }
+    if (L) text(TLV_NAME[L - 1] + ' · Schaden ' + Math.round(T.dmg * (1 + 0.3 * (hqLvl() - 1)) * toolMul(L)), cx + 64 + 5 * 17 + 6, cy + 30, 11, TMET[L - 1], 'left', '600');
+    const lines = wrapLines(toolDesc(id, Math.max(1, L)), cw - 64 - bw - 16, '600 11px ' + FONT);
+    text(lines[0] + (lines.length > 1 ? ' …' : ''), cx + 64, cy + 46, 11, '#bbb', 'left', '600');
+    const bx = cx + cw - bw - 8, by = cy + 7, bh = rowH - 20;
+    if (L >= 5) { text('Maximal!', bx + bw / 2, by + bh / 2, 14, '#8fe08f', 'center'); return; }
+    const err = toolError(p, id), cost = toolCost(p, id), ok = !err;
+    ctx.fillStyle = ok ? 'rgba(60,160,80,0.9)' : 'rgba(255,255,255,0.08)'; rr(bx, by, bw, bh, 7); ctx.fill();
+    text(L ? 'Aufwerten → ' + (L + 1) : 'Freischalten', bx + bw / 2, by + 13, 13, ok ? '#fff' : '#bbb', 'center');
+    const sub = err && err !== 'Nicht genug Rohstoffe' ? err : costText(cost);
+    text(sub, bx + bw / 2, by + 31, 10, ok ? '#e8ffe8' : err === 'Nicht genug Rohstoffe' ? '#ff9a8a' : '#ffcf7a', 'center', '600');
+    ui.push({ x: bx, y: by, w: bw, h: bh, fn: () => actTool(id) });
+  });
+}
 function drawSlotTooltip(h) {
   const s = h.s;
   let title, lines = [], cost = null;
-  if (s.kind === 'tool') {
-    const T = TOOLS[s.id]; title = T.name + ' (' + T.key + ')';
-    lines = s.id === 'pick' ? ['Baut Holz & Stein ab.', 'Schwacher Nahkampf.'] : s.id === 'sword' ? ['Starker Nahkampf mit Rückstoß.'] : ['Fernkampf – Pfeile sind kostenlos.'];
-    lines.push('Schaden: ' + Math.round(T.dmg * (1 + 0.3 * (hqLvl() - 1))));
+  if (s.kind === 'forge') {
+    title = 'Schmiede (H)'; lines = ['Neue Waffen freischalten', 'und Werkzeuge aufwerten.'];
+  } else if (s.kind === 'tool') {
+    const T = TOOLS[s.id], L = S.player.tl[s.id] || 1; title = T.name + ' (' + T.key + ') · Stufe ' + L;
+    lines = wrapLines(toolDesc(s.id, L), 220, '600 13px ' + FONT);
+    lines.push('Schaden: ' + Math.round(T.dmg * (1 + 0.3 * (hqLvl() - 1)) * toolMul(L)));
   } else {
     const d = BDEF[s.id]; title = d.name + ' (' + s.key + ')';
     lines = wrapLines(d.desc, 220, '600 13px ' + FONT);
@@ -3402,9 +3559,9 @@ function drawOverlays() {
     ];
     if (isTouch) lines.push('📱 Links ziehen = laufen · rechts tippen/halten = angreifen & abbauen · Knöpfe am Rand');
     else if (!small) lines.push('', 'WASD laufen · Maus zielen · Linksklick angreifen / abbauen',
-      'Q Spitzhacke · E Schwert · R Bogen · 1–0 Gebäude · G Markierung · T Chat',
-      'M Karte · K Skills · /afk im Chat · Gebäude anklicken → U Upgrade / X Verkaufen · N Ton');
-    else lines.push('WASD laufen · Maus zielen & klicken · Q/E/R Werkzeuge · 1–0 Bauen · M Karte · K Skills · T Chat');
+      'Q Spitzhacke · E Schwert · R Bogen · C/V/B neue Waffen · H Schmiede · 1–0 Gebäude',
+      'M Karte · K Skills · G Markierung · T Chat · /afk · Gebäude anklicken → U Upgrade / X Verkaufen');
+    else lines.push('WASD laufen · Maus zielen & klicken · Q–B Waffen · H Schmiede · 1–0 Bauen · M Karte · K Skills');
     y += small ? 30 : 44;
     const lh = small ? 21 : 26;
     lines.forEach((l, i) => text(l, cx, y + i * lh, small ? 13 : 15, i < 3 ? '#e8e8e8' : (isTouch ? '#9fd0ff' : '#aab'), 'center', '600'));
@@ -3463,7 +3620,10 @@ function drawOverlays() {
 // =====================================================================
 // Eingabe
 // =====================================================================
-function selectTool(id) { S.player.tool = id; if (S.hq) S.place = null; SFX.play('click'); }
+function selectTool(id) {
+  if (!(S.player.tl[id] > 0)) { forgeOpen = true; toast(TOOLS[id].name + ' ist noch gesperrt – schalte es in der Schmiede frei', '#ffcf7a'); SFX.play('click'); return; }
+  S.player.tool = id; if (S.hq) S.place = null; SFX.play('click');
+}
 function selectBuild(id) {
   if (id === 'hq' && S.hq) return;
   if (S.place === id && S.hq) { S.place = null; return; }
@@ -3506,7 +3666,7 @@ if (!HEADLESS) {
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
     if (mode !== 'play') return;
     if (e.code === 'Escape') {
-      if (mapOpen) mapOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
+      if (mapOpen) mapOpen = false; else if (forgeOpen) forgeOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
       return;
     }
     if (e.code === 'KeyP') { mode = 'paused'; return; }
@@ -3514,11 +3674,15 @@ if (!HEADLESS) {
     if (dm) { selectBuild(KEY_BUILD[dm[2]]); return; }
     if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOpen(); return; }
     if (e.code === 'KeyG') { const a = aimPoint(); pingAt(a.x, a.y); return; }
-    if (e.code === 'KeyK') { skillsOpen = !skillsOpen; SFX.play('click'); return; }
+    if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
+    if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyF') { selectBuild('trap'); return; }
     if (e.code === 'KeyQ') selectTool('pick');
     else if (e.code === 'KeyE') selectTool('sword');
     else if (e.code === 'KeyR') selectTool('bow');
+    else if (e.code === 'KeyC') selectTool('spear');
+    else if (e.code === 'KeyV') selectTool('axe');
+    else if (e.code === 'KeyB') selectTool('staff');
     else if (e.code === 'KeyU' && S.sel) actUpgrade(S.sel);
     else if ((e.code === 'KeyX' || e.code === 'Delete') && S.sel) actSell(S.sel);
   });
@@ -3598,9 +3762,9 @@ if (!HEADLESS) {
   canvas.addEventListener('wheel', e => {
     if (R3) { R3.zoom(e.deltaY); return; }
     if (mode !== 'play') return;
-    const order = ['pick', 'sword', 'bow'];
-    const i = order.indexOf(S.player.tool);
-    selectTool(order[(i + (e.deltaY > 0 ? 1 : 2)) % 3]);
+    const order = TOOL_ORDER.filter(k => S.player.tl[k] > 0), n = order.length;
+    const i = Math.max(0, order.indexOf(S.player.tool));
+    selectTool(order[(i + (e.deltaY > 0 ? 1 : n - 1)) % n]);
   }, { passive: true });
 
   newGame();
@@ -3644,6 +3808,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 ROOT.NW = {
+  TMET, TOOL_ORDER, upgradeTool, actTool, get forgeOpen() { return forgeOpen; }, set forgeOpen(v) { forgeOpen = v; },
   newGame, update, startGame, get S() { return S; }, get mode() { return mode; }, set mode(m) { mode = m; },
   placeError, placeBuilding, upgradeBuilding, upgradeError, costFor, BDEF, ZDEF, input, findPath, tileAt, TS, MAP, render,
   setView(w, h) { VW = w; VH = h; },

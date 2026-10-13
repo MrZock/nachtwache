@@ -266,16 +266,24 @@
     const tool = new T.Group(); tool.position.set(0.28, 0.5, 0.28); body.add(tool);
     mk(geo('phand', null), skin, 0, 0, 0, tool);
     const tools = {
-      pick: new T.Group(), sword: new T.Group(), bow: new T.Group(),
+      pick: new T.Group(), sword: new T.Group(), bow: new T.Group(), spear: new T.Group(), axe: new T.Group(), staff: new T.Group(),
     };
-    mk(geo('pickHandle', () => new T.BoxGeometry(0.6, 0.05, 0.05).translate(0.3, 0, 0)), lambert('#7a5530'), 0, 0, 0, tools.pick);
-    mk(geo('pickHead', () => new T.BoxGeometry(0.06, 0.06, 0.42)), lambert('#b8bcc8'), 0.58, 0, 0, tools.pick);
-    mk(geo('swordBlade', () => new T.BoxGeometry(0.7, 0.03, 0.08).translate(0.42, 0, 0)), lambert('#e8eef5', { emissive: '#333' }), 0, 0, 0, tools.sword);
+    const metal = lambert('#dfe6ee', { emissive: '#222' }), wood = lambert('#7a5530');
+    mk(geo('pickHandle', () => new T.BoxGeometry(0.6, 0.05, 0.05).translate(0.3, 0, 0)), wood, 0, 0, 0, tools.pick);
+    mk(geo('pickHead', () => new T.BoxGeometry(0.06, 0.06, 0.42)), metal, 0.58, 0, 0, tools.pick);
+    mk(geo('swordBlade', () => new T.BoxGeometry(0.7, 0.03, 0.08).translate(0.42, 0, 0)), metal, 0, 0, 0, tools.sword);
+    mk(geo('spearShaft', () => new T.CylinderGeometry(0.025, 0.025, 1.2, 6).rotateZ(Math.PI / 2).translate(0.35, 0, 0)), wood, 0, 0, 0, tools.spear);
+    mk(geo('spearTip', () => new T.ConeGeometry(0.06, 0.22, 6).rotateZ(-Math.PI / 2)), metal, 1.04, 0, 0, tools.spear);
+    mk(geo('axeHandle', () => new T.BoxGeometry(0.75, 0.05, 0.05).translate(0.35, 0, 0)), lambert('#6a4526'), 0, 0, 0, tools.axe);
+    mk(geo('axeHead', () => new T.CylinderGeometry(0.2, 0.2, 0.04, 14).rotateX(Math.PI / 2).scale(0.55, 1, 1)), metal, 0.62, 0, 0, tools.axe);
+    mk(geo('staffShaft', () => new T.CylinderGeometry(0.03, 0.035, 0.9, 6).rotateZ(Math.PI / 2).translate(0.3, 0, 0)), lambert('#5a3a1a'), 0, 0, 0, tools.staff);
+    const orb = lambert('#ff8a2a', { emissive: '#ff5a00' });
+    mk(geo('staffOrb', () => new T.SphereGeometry(0.09, 10, 8)), orb, 0.78, 0, 0, tools.staff);
     mk(geo('swordGuard', () => new T.BoxGeometry(0.04, 0.05, 0.26)), lambert('#c9a227'), 0.06, 0, 0, tools.sword);
     mk(geo('bowArc', () => new T.TorusGeometry(0.34, 0.03, 5, 14, Math.PI).rotateY(Math.PI / 2)), lambert('#8a5a2a'), 0.05, 0, 0, tools.bow);
     for (const k in tools) tool.add(tools[k]);
     scene.add(grp);
-    grp.userData = { body, tool, tools, shirt };
+    grp.userData = { body, tool, tools, shirt, metal, orb };
     return grp;
   }
 
@@ -513,8 +521,12 @@
       o.rotation.y = -(p.face || 0);
       for (const k in u.tools) u.tools[k].visible = k === p.tool;
       const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
-      u.tool.rotation.y = p.tool === 'bow' ? 0.9 : 0.9 - swp * 2.2;
+      u.tool.rotation.y = p.tool === 'bow' || p.tool === 'staff' ? 0.9 : p.tool === 'spear' ? 0.25 : p.tool === 'axe' ? 1.6 - swp * 3.6 : 0.9 - swp * 2.2;
+      u.tool.position.x = 0.28 + (p.tool === 'spear' ? swp * 0.45 : 0);
       u.tool.rotation.z = p.tool === 'pick' ? swp * 0.6 : 0;
+      const lv = (p.tl && p.tl[p.tool]) || 1;
+      if (u.lv !== lv) { u.lv = lv; u.metal.color.set(G.TMET[Math.min(4, lv - 1)]); }
+      u.orb.emissiveIntensity = 0.7 + 0.3 * Math.sin(at * 8);
       u.shirt.emissive.set(p.flash > 0 ? '#aa2020' : '#000000');
     }
     for (const [id, o] of playerObjs) if (!pseen.has(id)) { scene.remove(o); playerObjs.delete(id); }
@@ -528,10 +540,10 @@
         setInst(projBox, nb, x, 0.9, zz, 0.55, 0.05, 0.05, -Math.atan2(pr.vy, pr.vx));
         projBox.setColorAt(nb, col.set(pr.k === 'arrow' ? '#cfe8ff' : '#f0e0b0')); nb++;
       } else if (nsph < MAXP) {
-        const big = pr.k === 'bomb', hgt = big ? 0.6 + (pr.h || 0) / TS : pr.k === 'glob' ? 0.6 : 0.8;
-        const r = big ? 0.22 : pr.k === 'glob' ? 0.14 : 0.15;
+        const big = pr.k === 'bomb', fire = pr.k === 'fire', hgt = big ? 0.6 + (pr.h || 0) / TS : pr.k === 'glob' ? 0.6 : fire ? 0.9 : 0.8;
+        const r = big ? 0.22 : pr.k === 'glob' ? 0.14 : fire ? 0.2 : 0.15;
         setInst(projSphere, nsph, x, hgt, zz, r, r, r);
-        projSphere.setColorAt(nsph, col.set(pr.k === 'glob' ? '#7fe0a0' : big ? '#222222' : '#1a1a1a')); nsph++;
+        projSphere.setColorAt(nsph, col.set(pr.k === 'glob' ? '#7fe0a0' : fire ? '#ffb347' : big ? '#222222' : '#1a1a1a')); nsph++;
       }
     }
     projBox.count = nb; projBox.instanceMatrix.needsUpdate = true; if (projBox.instanceColor) projBox.instanceColor.needsUpdate = true;
