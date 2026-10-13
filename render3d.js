@@ -169,16 +169,16 @@
     scene.add(outer);
 
     // ---- Natur (instanziert)
-    trunks = inst(new Kit().lit(CY(0.07, 0.12, 0.85, 6), '#6b4626', 0, 0.42, 0).lit(CY(0.13, 0.17, 0.12, 6), '#5a3a20', 0, 0.06, 0).build().lit, matInst, MAXRES, true);
-    pine1 = inst(new Kit().lit(CO(0.62, 0.78, 7), '#ffffff', 0, 0.78, 0, 0, 0, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
-    pine2 = inst(new Kit().lit(CO(0.48, 0.66, 7), '#ffffff', 0, 1.18, 0, 0, 0.3, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
-    pine3 = inst(new Kit().lit(CO(0.32, 0.56, 7), '#ffffff', 0, 1.55, 0, 0, 0.6, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
+    trunks = inst(new Kit().lit(CY(0.075, 0.13, 1.45, 6), '#6b4626', 0, 0.72, 0).lit(CY(0.14, 0.19, 0.14, 6), '#5a3a20', 0, 0.07, 0).lit(BX(0.05, 0.3, 0.05), '#5a3a20', 0.1, 0.9, 0, 0, 0, -0.7).build().lit, matInst, MAXRES, true);
+    pine1 = inst(new Kit().lit(CO(0.7, 0.9, 7), '#ffffff', 0, 1.2, 0, 0, 0, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
+    pine2 = inst(new Kit().lit(CO(0.54, 0.8, 7), '#ffffff', 0, 1.68, 0, 0, 0.3, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
+    pine3 = inst(new Kit().lit(CO(0.36, 0.72, 7), '#ffffff', 0, 2.14, 0, 0, 0.6, 0, 1, 1, 1, 0.1).build().lit, matInst, MAXRES, true);
     oaks = inst(new Kit()
-      .lit(IC(0.5, 0), '#ffffff', 0, 1.15, 0, 0, 0, 0, 1, 0.9, 1, 0.12)
-      .lit(IC(0.36, 0), '#e8ffe0', 0.32, 1.0, 0.2, 0.5, 0, 0, 1, 1, 1, 0.12)
-      .lit(IC(0.38, 0), '#f4fff0', -0.28, 1.05, -0.22, 0, 0.7, 0, 1, 1, 1, 0.12)
-      .lit(IC(0.33, 0), '#ffffff', 0.05, 1.5, -0.05, 0.3, 0.2, 0, 1, 1, 1, 0.12)
-      .lit(IC(0.3, 0), '#dcf0d4', -0.1, 0.95, 0.38, 0, 0, 0.4, 1, 1, 1, 0.12).build().lit, matInst, MAXRES, true);
+      .lit(IC(0.58, 0), '#ffffff', 0, 1.6, 0, 0, 0, 0, 1, 0.9, 1, 0.12)
+      .lit(IC(0.36, 0), '#e8ffe0', 0.36, 1.45, 0.2, 0.5, 0, 0, 1, 1, 1, 0.12)
+      .lit(IC(0.38, 0), '#f4fff0', -0.32, 1.5, -0.24, 0, 0.7, 0, 1, 1, 1, 0.12)
+      .lit(IC(0.33, 0), '#ffffff', 0.05, 2.0, -0.05, 0.3, 0.2, 0, 1, 1, 1, 0.12)
+      .lit(IC(0.3, 0), '#dcf0d4', -0.1, 1.4, 0.4, 0, 0, 0.4, 1, 1, 1, 0.12).build().lit, matInst, MAXRES, true);
     rocks = inst(rockGeometry(), matInst, MAXRES, true);
     ores = inst(new Kit()
       .lit(OC(0.1), '#f6d05a', 0, 0, 0, 0, 0, 0, 0.8, 2.2, 0.8, 0.15)
@@ -207,8 +207,8 @@
       .lit(CY(0.08, 0.09, 0.32, 7), '#f0fff0', 0.24, 0.62, 0, 0, 0, Math.PI / 2).lit(CY(0.08, 0.08, 0.4, 7), '#ffffff', 0.38, 0.85, 0)
       .lit(CY(0.07, 0.08, 0.26, 7), '#f0fff0', -0.2, 0.5, 0.02, 0, 0, Math.PI / 2).lit(CY(0.07, 0.07, 0.3, 7), '#ffffff', -0.32, 0.68, 0.02)
       .lit(SP(0.05, 5, 4), '#ff6a8a', 0, 1.24, 0).build().lit, matInst, MAXRES, true);
-    snowcap = inst(new Kit().lit(CO(0.5, 0.42, 7), '#ffffff', 0, 0.98, 0, 0, 0, 0, 1, 1, 1, 0.04).lit(CO(0.36, 0.36, 7), '#ffffff', 0, 1.36, 0, 0, 0.3, 0, 1, 1, 1, 0.04)
-      .lit(CO(0.24, 0.3, 7), '#ffffff', 0, 1.7, 0, 0, 0.6, 0, 1, 1, 1, 0.04).build().lit, matInst, MAXRES, false);
+    snowcap = inst(new Kit().lit(CO(0.57, 0.48, 7), '#ffffff', 0, 1.46, 0, 0, 0, 0, 1, 1, 1, 0.04).lit(CO(0.4, 0.42, 7), '#ffffff', 0, 1.9, 0, 0, 0.3, 0, 1, 1, 1, 0.04)
+      .lit(CO(0.27, 0.38, 7), '#ffffff', 0, 2.3, 0, 0, 0.6, 0, 1, 1, 1, 0.04).build().lit, matInst, MAXRES, false);
     voids = inst(new Kit().lit(BX(1.02, 1.6, 1.02), '#ffffff', 0, 0.8, 0, 0, 0, 0, 1, 1, 1, 0.15).lit(OC(0.4), '#d0c0ff', 0.1, 1.8, -0.1, 0.3, 0.5, 0, 1, 1.8, 1, 0.1).build().lit,
       new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, emissive: '#120624' }), MAXRES, true);
     crystals = inst(new Kit()

@@ -1655,7 +1655,7 @@ const mouseLocked = () => typeof document !== 'undefined' && !!canvas && documen
 function jump(p) {
   p = p || S.player;
   if (!p || p.dead > 0 || p.z > 0.5 || mode !== 'play') return;
-  p.vz = 440; p.z = 0.1;
+  p.vz = 345; p.z = 0.1;
   if (p.afk) setAfk(p, false);
   SFX.play('swing', p.x, p.y);
 }
@@ -1901,6 +1901,11 @@ function upgradeTool(p, id) {
   return null;
 }
 let forgeOpen = false;
+// Inventar & Bau-Menü (Taste I): alle Gebäude hier, in der Leiste nur die zuletzt benutzten
+let craftOpen = false, craftHover = null;
+let recentB = ['wall', 'arrow', 'mine', 'door'];
+const CRAFT_CATS = [['🛡 Verteidigung', ['wall', 'door', 'trap']], ['🎯 Türme', ['arrow', 'cannon', 'mage', 'bomb', 'frost']], ['⚙ Basis & Wirtschaft', ['mine', 'harv', 'heal']]];
+const buildKey = id => { const e = BAR_ORDER.find(b => b[0] === id); return e ? String(e[1]) : ''; };
 function actTool(id) {
   if (NET.role === 'client') { netSendR({ t: 'tool', id }); SFX.play('click'); return; }
   const err = upgradeTool(S.player, id);
@@ -3950,7 +3955,8 @@ function drawTouchUI() {
     ['☰', 'Menü', () => { mode = 'paused'; }],
     ['🗺', 'Karte', () => { mapOpen = !mapOpen; }],
     ['★', 'Skills', () => { skillsOpen = !skillsOpen; forgeOpen = false; }],
-    ['⚒', 'Schmiede', () => { forgeOpen = !forgeOpen; skillsOpen = false; }],
+    ['⚒', 'Schmiede', () => { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; }],
+    ['🛠', 'Bauen', () => toggleCraft()],
     ['⚡', 'Fähigkeit', () => actAbility()],
     ...(R3 ? [['👁', 'Ansicht', () => toggleView()], ['🔄', 'Drehen', () => R3.rotate(Math.PI / 2)]] : []),
     ['⛶', 'Vollbild', () => toggleFullscreen()],
@@ -3964,7 +3970,7 @@ function drawTouchUI() {
   const perCol = Math.max(3, Math.floor((maxY - y0) / (bs + 10)));
   btns.forEach((b, i) => {
     const col = Math.floor(i / perCol), x = VW - bs - 12 - col * (bs + 10), y = y0 + (i % perCol) * (bs + 10);
-    const on = (b[1] === 'Markieren' && touch.pingMode) || (b[1] === 'Karte' && mapOpen) || (b[1] === 'Skills' && skillsOpen) || (b[1] === 'Schmiede' && forgeOpen) || (b[1] === 'Spieler' && listOpen);
+    const on = (b[1] === 'Markieren' && touch.pingMode) || (b[1] === 'Karte' && mapOpen) || (b[1] === 'Skills' && skillsOpen) || (b[1] === 'Schmiede' && forgeOpen) || (b[1] === 'Bauen' && craftOpen) || (b[1] === 'Spieler' && listOpen);
     if (b[1] === 'Fähigkeit' && S.player.abCd > 0) { ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.moveTo(x + bs / 2, y + bs / 2); ctx.arc(x + bs / 2, y + bs / 2, bs / 2, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(S.player.abCd / ((ABIL.find(a => a.id === S.player.ab) || { cd: 1 }).cd), 0, 1)); ctx.fill(); ctx.restore(); }
     ctx.fillStyle = on ? 'rgba(255,226,122,0.45)' : 'rgba(12,16,22,0.7)'; circle(x + bs / 2, y + bs / 2, bs / 2); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -4208,7 +4214,9 @@ function drawHUD() {
   TOOL_ORDER.forEach(k => { if (p.tl[k] > 0) slots.push({ kind: 'tool', id: k }); });
   slots.push({ kind: 'forge', id: 'forge' });
   const nTool = slots.length;
-  BAR_ORDER.forEach(([k, key]) => { if (k !== 'hq' || !S.hq) slots.push({ kind: 'build', id: k, key }); });
+  if (!S.hq) slots.push({ kind: 'build', id: 'hq', key: '9' });
+  recentB.forEach(k => slots.push({ kind: 'build', id: k, key: buildKey(k) }));
+  slots.push({ kind: 'craft', id: 'craft' });
   const mmS = mmSize(), gap = 5;
   const areaR = VW - mmS - 28, areaL = VW > 1100 ? mmS + 28 : 12;
   const SW = Math.floor(clamp((areaR - areaL - 14) / slots.length - gap, 30, 50));
@@ -4266,7 +4274,7 @@ function drawHUD() {
   panel(x - 4, y - 4, totalW + 8, SW + 8);
   slots.forEach((s, i) => {
     if (i === nTool) x += 14;
-    const sel = s.kind === 'forge' ? forgeOpen : s.kind === 'tool' ? (!S.place && p.tool === s.id) : S.place === s.id;
+    const sel = s.kind === 'craft' ? craftOpen : s.kind === 'forge' ? forgeOpen : s.kind === 'tool' ? (!S.place && p.tool === s.id) : S.place === s.id;
     const hov = input.sx >= x && input.sx <= x + SW && input.sy >= y && input.sy <= y + SW;
     if (hov) hoverSlot = { s, x, y };
     let afford = true;
@@ -4280,23 +4288,29 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(255,255,255,0.05)'; ctx.fillRect(x + 3, y + 3, SW - 6, SW * 0.22);
     ctx.save();
     if (!afford) ctx.globalAlpha = 0.32;
-    const icon = R3 && R3.icon ? (s.kind === 'tool' ? R3.icon('t', s.id, p.tl[s.id] || 1) : s.kind === 'forge' ? R3.icon('f', 'forge') : R3.icon('b', s.id, 1)) : null;
+    const icon = s.kind === 'craft' ? null : R3 && R3.icon ? (s.kind === 'tool' ? R3.icon('t', s.id, p.tl[s.id] || 1) : s.kind === 'forge' ? R3.icon('f', 'forge') : R3.icon('b', s.id, 1)) : null;
     if (icon) { const pad = s.kind === 'tool' ? 2 : 3, bob = sel ? Math.sin(animT * 4) * 1.2 : 0; ctx.drawImage(icon, x + pad, y + pad + bob, SW - pad * 2, SW - pad * 2); }
     else if (s.kind === 'tool') drawToolIcon(s.id, x + SW / 2, y + SW / 2, SW, toolMet(p, s.id));
     else if (s.kind === 'forge') drawToolIcon('forge', x + SW / 2, y + SW / 2, SW);
+    else if (s.kind === 'craft') {
+      // Bau-Menü-Symbol: 2×2 Kisten
+      const c = SW / 2, q = SW * 0.2;
+      for (let k = 0; k < 4; k++) { ctx.fillStyle = k === 3 ? '#ff9a3a' : '#a8774a'; rr(x + c - q - 1 + (k % 2) * (q + 2), y + c - q - 5 + (k >> 1) * (q + 2), q, q, 2); ctx.fill(); }
+      text('BAUEN', x + c, y + SW - 7, 8, sel ? '#ffd0a0' : '#d8c8b8', 'center', '700');
+    }
     else {
       const sz = BDEF[s.id].size, sc = (SW - 12) / (sz * TS);
       ctx.translate(x + 6, y + 6); ctx.scale(sc, sc);
       drawBuildingShape(s.id, 1, sz * TS, -Math.PI / 4, animT, false);
     }
     ctx.restore();
-    { const kl = s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key);
+    { const kl = s.kind === 'craft' ? 'I' : s.kind === 'forge' ? 'H' : s.kind === 'tool' ? TOOLS[s.id].key : String(s.key);
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(x + 2, y + 2, 13, 13, 3); ctx.fill();
       ctx.font = '10px ' + FONT_P; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = sel ? '#ffb070' : '#e8dcd0'; ctx.fillText(kl, x + 8.5, y + 9); }
     if (s.kind === 'tool' && p.tl[s.id] > 1) text(String(p.tl[s.id]), x + SW - 5, y + SW - 8, 11, TMET[p.tl[s.id] - 1], 'right');
     if (s.kind === 'forge' && TOOL_ORDER.some(k => !toolError(p, k)) && Math.sin(animT * 5) > 0) { ctx.fillStyle = '#8fe08f'; circle(x + SW - 6, y + 6, 4); ctx.fill(); }
     const sx = x;
-    ui.push({ x, y, w: SW, h: SW, fn: () => { if (s.kind === 'forge') { forgeOpen = !forgeOpen; skillsOpen = false; SFX.play('click'); } else if (s.kind === 'tool') selectTool(s.id); else selectBuild(s.id); } });
+    ui.push({ x, y, w: SW, h: SW, fn: () => { if (s.kind === 'craft') toggleCraft(); else if (s.kind === 'forge') { forgeOpen = !forgeOpen; skillsOpen = false; SFX.play('click'); } else if (s.kind === 'tool') selectTool(s.id); else selectBuild(s.id); } });
     x = sx + SW + gap;
   });
   if (hoverSlot) drawSlotTooltip(hoverSlot);
@@ -4366,7 +4380,8 @@ function drawHUD() {
   }
   if (skillsOpen) drawSkills();
   if (forgeOpen) drawForge();
-  if (listOpen && !skillsOpen && !forgeOpen) drawPlayerList();
+  if (craftOpen) drawCraft();
+  if (listOpen && !skillsOpen && !forgeOpen && !craftOpen) drawPlayerList();
   if (mapOpen) drawBigMap();
   drawTouchUI();
   drawAchPopup(1 / 60);
@@ -4521,6 +4536,97 @@ function drawPlayerList() {
     text('Lv ' + q.lvl + (q.afk ? ' · 💤' : '') + (q.dead > 0 ? ' · ☠' : '') + (q.ping ? ' · ' + Math.round(q.ping) + ' ms' : ''), x + w - 16, ry + 2, 12, '#ccc', 'right', '600');
   });
 }
+function toggleCraft() {
+  craftOpen = !craftOpen;
+  if (craftOpen) { forgeOpen = false; skillsOpen = false; mapOpen = false; if (mouseLocked()) document.exitPointerLock(); }
+  SFX.play('click');
+}
+function drawCraft() {
+  const p = S.player, w = Math.min(940, VW - 24), side = w >= 700;
+  const invW = side ? 230 : w - 28, gx0 = side ? 14 + invW + 14 : 14;
+  const gw = w - gx0 - 14, cols = Math.max(2, Math.floor(gw / 150)), cw = Math.floor((gw - (cols - 1) * 8) / cols), ch = 118;
+  const cats = S.hq ? CRAFT_CATS : [['⚛ Zuerst den Reaktor bauen', ['hq']]];
+  let rowsH = 0; for (const [, ids] of cats) rowsH += 26 + Math.ceil(ids.length / cols) * (ch + 8);
+  const invH = side ? 0 : 76;
+  const h = Math.min(VH - 24, Math.max(side ? 470 : 0, 64 + invH + rowsH + 40)), x = VW / 2 - w / 2, y = Math.max(12, VH / 2 - h / 2 - 30);
+  panel(x, y, w, h, 0.96);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('🛠 Inventar & Bauen', x + 18, y + 24, 20, '#ffe27a');
+  if (w > 620) text('Gebäude anklicken → platzieren · I / ESC = schließen', x + w - 50, y + 24, 12, '#999', 'right', '600');
+  text('×', x + w - 20, y + 23, 20, '#aaa', 'center');
+  ui.push({ x: x + w - 34, y: y + 6, w: 30, h: 30, fn: () => { craftOpen = false; } });
+  // --- Inventar
+  const ix = x + 14, iy = y + 46;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; rr(ix, iy, invW, side ? h - 60 : invH - 8, 8); ctx.fill();
+  text('ROHSTOFFE', ix + 12, iy + 14, 11, '#c89a6a', 'left', '700');
+  const res = [['w', 'Holz', S.wood, '#e8c48a'], ['s', 'Stein', S.stone, '#d0d0d8'], ['g', 'Gold', S.gold, '#ffd36b'], ['i', 'Eisen', S.iron || 0, '#c8d0dc']];
+  res.forEach(([k, n, v, c], i) => {
+    const rx = side ? ix + 12 : ix + 12 + i * ((invW - 24) / 4), ry = side ? iy + 40 + i * 34 : iy + 42;
+    resIcon(k, rx + 13, ry); text(n, rx + 32, ry - 6, 11, '#aaa', 'left', '600'); text(String(Math.floor(v)), rx + 32, ry + 8, 15, c, 'left');
+  });
+  if (side) {
+    let ty = iy + 40 + 4 * 34 + 8;
+    text('WERKZEUGE', ix + 12, ty, 11, '#c89a6a', 'left', '700'); ty += 12;
+    TOOL_ORDER.forEach((id, i) => {
+      const L = p.tl[id] || 0, tx = ix + 12 + (i % 3) * 70, yy = ty + Math.floor(i / 3) * 62;
+      ctx.fillStyle = id === p.tool && !S.place ? 'rgba(255,154,58,0.25)' : 'rgba(255,255,255,0.05)'; rr(tx, yy, 62, 56, 6); ctx.fill();
+      ctx.save(); if (!L) ctx.globalAlpha = 0.3;
+      const im = R3 && R3.icon ? R3.icon('t', id, Math.max(1, L)) : null;
+      if (im) ctx.drawImage(im, tx + 13, yy + 2, 36, 36); else drawToolIcon(id, tx + 31, yy + 20, 34, toolMet(p, id));
+      ctx.restore();
+      text(L ? TOOLS[id].name.slice(0, 10) : '🔒 ' + TOOLS[id].name.slice(0, 7), tx + 31, yy + 46, 9, L > 1 ? TMET[L - 1] : L ? '#ddd' : '#888', 'center', '600');
+      ui.push({ x: tx, y: yy, w: 62, h: 56, fn: () => { craftOpen = false; if (L) selectTool(id); else forgeOpen = true; } });
+    });
+    ty += Math.ceil(TOOL_ORDER.length / 3) * 62 + 12;
+    let nb = 0; for (const k in S.counts) if (k !== 'wall' && k !== 'hq') nb += S.counts[k] || 0;
+    text('BASIS', ix + 12, ty, 11, '#c89a6a', 'left', '700');
+    text(S.hq ? 'Reaktor Stufe ' + S.hq.lvl : 'Noch kein Reaktor', ix + 12, ty + 18, 12, '#ddd', 'left', '600');
+    text(nb + ' Gebäude · ' + (S.counts.wall || 0) + ' Mauern', ix + 12, ty + 34, 12, '#aaa', 'left', '600');
+  }
+  // --- Gebäude
+  let cy = y + 46 + invH;
+  craftHover = null;
+  for (const [cat, ids] of cats) {
+    text(cat, x + gx0 + 4, cy + 12, 13, '#ffcf8a', 'left', '700');
+    cy += 26;
+    ids.forEach((id, i) => {
+      const d = BDEF[id], cx = x + gx0 + (i % cols) * (cw + 8), yy = cy + Math.floor(i / cols) * (ch + 8);
+      const c = costFor(id, 1), cnt = S.counts[id] || 0, full = id !== 'hq' && cnt >= d.max, ok = canAfford(c) && !full;
+      const hov = input.sx >= cx && input.sx <= cx + cw && input.sy >= yy && input.sy <= yy + ch, sel = S.place === id;
+      const gr = ctx.createLinearGradient(0, yy, 0, yy + ch);
+      gr.addColorStop(0, sel ? '#5a3418' : hov ? '#3e3630' : '#2a2622'); gr.addColorStop(1, '#151210');
+      ctx.fillStyle = gr; rr(cx, yy, cw, ch, 8); ctx.fill();
+      ctx.strokeStyle = sel ? '#ff9a3a' : hov ? '#c88a4a' : 'rgba(170,100,60,0.4)'; ctx.lineWidth = sel || hov ? 2 : 1; ctx.stroke();
+      ctx.save(); if (!ok) ctx.globalAlpha = 0.4;
+      const im = R3 && R3.icon ? R3.icon('b', id, 1) : null, isz = 62, bob = hov ? Math.sin(animT * 4) * 2 : 0;
+      if (im) ctx.drawImage(im, cx + cw / 2 - isz / 2, yy + 4 + bob, isz, isz);
+      ctx.restore();
+      const kk = buildKey(id);
+      if (kk) { ctx.fillStyle = 'rgba(0,0,0,0.6)'; rr(cx + 5, yy + 5, 16, 16, 3); ctx.fill(); text(kk, cx + 13, yy + 13, 10, '#e8dcd0', 'center', '700'); }
+      if (id !== 'hq') text(cnt + '/' + d.max, cx + cw - 6, yy + 13, 10, full ? '#ff7b6b' : '#aaa', 'right', '600');
+      text(d.name, cx + cw / 2, yy + 76, 13, ok ? '#fff' : '#bbb', 'center');
+      // Kosten: rot = davon hast du zu wenig
+      const parts = [['w', c.w, S.wood], ['s', c.s, S.stone], ['g', c.g, S.gold], ['i', c.i || 0, S.iron || 0]].filter(e => e[1]);
+      const pw = 44, px0 = cx + cw / 2 - parts.length * pw / 2;
+      parts.forEach(([k, v, have], j) => {
+        const qx = px0 + j * pw;
+        ctx.save(); ctx.translate(qx + 9, yy + 98); ctx.scale(0.62, 0.62); resIcon(k, 0, 0); ctx.restore();
+        text(String(v), qx + 19, yy + 98, 11, have >= v ? '#e8e0d0' : '#ff6b5b', 'left', '700');
+      });
+      if (!parts.length) text('kostenlos', cx + cw / 2, yy + 98, 11, '#8fe08f', 'center', '600');
+      if (hov) craftHover = { id, full };
+      ui.push({ x: cx, y: yy, w: cw, h: ch, fn: () => { craftOpen = false; selectBuild(id); } });
+    });
+    cy += Math.ceil(ids.length / cols) * (ch + 8);
+  }
+  // Beschreibung des Gebäudes unter der Maus
+  const by = y + h - 34;
+  ctx.fillStyle = 'rgba(0,0,0,0.35)'; rr(x + gx0, by, gw, 26, 6); ctx.fill();
+  if (craftHover) {
+    const d = BDEF[craftHover.id];
+    text(d.name + ': ' + d.desc + (craftHover.full ? '  (Maximum erreicht)' : ''), x + gx0 + 10, by + 13, 12, craftHover.full ? '#ff9a8a' : '#e8dcd0', 'left', '600');
+  } else text(isTouch ? 'Tippe ein Gebäude an, um es zu platzieren.' : 'Die letzten 4 Gebäude liegen unten in der Leiste – Tasten 1–0, F, J gehen weiterhin.', x + gx0 + 10, by + 13, 12, '#999', 'left', '600');
+}
 function drawForge() {
   const p = S.player, rowH = 64;
   const w = Math.min(660, VW - 24), h = 78 + TOOL_ORDER.length * rowH;
@@ -4558,7 +4664,9 @@ function drawForge() {
 function drawSlotTooltip(h) {
   const s = h.s;
   let title, lines = [], cost = null;
-  if (s.kind === 'forge') {
+  if (s.kind === 'craft') {
+    title = 'Inventar & Bauen (I)'; lines = ['Alle Gebäude, deine Rohstoffe', 'und Werkzeuge auf einen Blick.'];
+  } else if (s.kind === 'forge') {
     title = 'Schmiede (H)'; lines = ['Neue Waffen freischalten', 'und Werkzeuge aufwerten.'];
   } else if (s.kind === 'tool') {
     const T = TOOLS[s.id], L = S.player.tl[s.id] || 1; title = T.name + ' (' + T.key + ') · Stufe ' + L;
@@ -4823,6 +4931,7 @@ function selectBuild(id) {
   if (S.place === id && S.hq) { S.place = null; return; }
   if (!S.hq && id !== 'hq') { toast('Platziere zuerst den Reaktor!', '#ff7b6b'); SFX.play('error'); S.place = 'hq'; return; }
   S.place = id; S.sel = null; S.lastPlaceTile = -1; SFX.play('click');
+  if (id !== 'hq') recentB = [id, ...recentB.filter(k => k !== id)].slice(0, 4);
 }
 function tryPlaceAtAim(silent) {
   const a = aimPoint(), fp = footprintAt(S.place, a.x, a.y);
@@ -4864,7 +4973,7 @@ if (!HEADLESS) {
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
     if (mode !== 'play') return;
     if (e.code === 'Escape') {
-      if (mapOpen) mapOpen = false; else if (forgeOpen) forgeOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
+      if (mapOpen) mapOpen = false; else if (craftOpen) craftOpen = false; else if (forgeOpen) forgeOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
       return;
     }
     if (e.code === 'KeyP') { mode = 'paused'; return; }
@@ -4873,7 +4982,8 @@ if (!HEADLESS) {
     if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOpen(); return; }
     if (e.code === 'KeyG') { const a = aimPoint(); pingAt(a.x, a.y); return; }
     if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
-    if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; SFX.play('click'); return; }
+    if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
+    if (e.code === 'KeyI') { toggleCraft(); return; }
     if (e.code === 'KeyF') { selectBuild('trap'); return; }
     if (e.code === 'KeyJ') { selectBuild('frost'); return; }
     if (e.code === 'Space') { jump(); return; }
@@ -4914,7 +5024,7 @@ if (!HEADLESS) {
   canvas.addEventListener('mousedown', e => {
     SFX.init();
     if (mouseLocked()) { e = { button: e.button, clientX: VW / 2, clientY: VH / 2 }; }
-    else if (R3 && R3.fp && mode === 'play' && !isTouch && e.button === 0 && !hitUI(e.clientX, e.clientY) && !skillsOpen && !forgeOpen && !mapOpen && !listOpen) {
+    else if (R3 && R3.fp && mode === 'play' && !isTouch && e.button === 0 && !hitUI(e.clientX, e.clientY) && !skillsOpen && !forgeOpen && !craftOpen && !mapOpen && !listOpen) {
       // Maus fangen versuchen – aber trotzdem sofort zuschlagen (klappt auch, wenn der Browser das Fangen verweigert)
       try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) {}
       e = { button: 0, clientX: VW / 2, clientY: VH / 2 };

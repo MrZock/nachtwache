@@ -7,6 +7,7 @@ Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gol
 ## Spielen
 
 - **Spielen:** https://mrzock.github.io/nachtwache/ (der alte Link `/3d.html` geht weiterhin)
+- **Bauen:** Taste **I** (Handy: 🛠) öffnet „Inventar & Bauen“ mit allen Gebäuden, Rohstoffen und Werkzeugen. In der Leiste liegen nur die letzten 4 Gebäude.
 - **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 15 andere klicken „Online beitreten“ und geben den Code ein. Der Spielserver läuft auf Render.com (nachtwache.onrender.com) und wacht von selbst auf.
 
 **Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** · **O / F5 = Ego-Perspektive** (Linksklick fängt die Maus, oder rechte Maustaste halten zum Umsehen) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Springen** · **Shift Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
