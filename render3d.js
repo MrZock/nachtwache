@@ -673,28 +673,63 @@
     if (toolCache[id]) return toolCache[id];
     const k = new Kit(), W = '#7a5530', D = '#4a3018', GO = '#c9a227';
     switch (id) {
-      case 'sword':
-        k.lit(CY(0.028, 0.028, 0.16, 6), '#5a3a1a', 0.0, 0, 0, 0, 0, Math.PI / 2).lit(SP(0.04, 6, 5), GO, -0.1, 0, 0)
-          .lit(BX(0.05, 0.05, 0.26), GO, 0.09, 0, 0).add('metal', BX(0.6, 0.025, 0.085), '#ffffff', 0.42, 0, 0)
-          .add('metal', CO(0.043, 0.1, 4), '#ffffff', 0.77, 0, 0, Math.PI / 4, 0, -Math.PI / 2, 1, 1, 0.6)
-          .lit(BX(0.48, 0.028, 0.016), '#555', 0.4, 0, 0); break;
+      case 'sword': {
+        // Schrott-Machete: umwickelter Griff, Zahnrad-Parierstange, Klinge mit Sägerücken
+        for (let i = 0; i < 4; i++) k.lit(CY(0.032, 0.032, 0.035, 6), i % 2 ? '#2a2a2a' : '#8a3a2a', -0.06 + i * 0.04, 0, 0, 0, 0, Math.PI / 2);
+        k.lit(SP(0.04, 6, 5), '#5a4a3a', -0.11, 0, 0).add('metal', CY(0.075, 0.075, 0.03, 8), '#ffffff', 0.04, 0, 0, Math.PI / 2, 0, 0)
+          .lit(CY(0.02, 0.02, 0.035, 6), '#3a3a3a', 0.04, 0, 0, Math.PI / 2, 0, 0)
+          .add('metal', BX(0.6, 0.02, 0.1), '#ffffff', 0.37, 0, 0.005).add('metal', CO(0.058, 0.14, 4), '#ffffff', 0.72, 0, 0.005, Math.PI / 4, 0, -Math.PI / 2, 1, 1, 0.45)
+          .lit(BX(0.5, 0.022, 0.012), '#3a3a3e', 0.36, 0, 0.02);
+        for (let i = 0; i < 6; i++) k.add('metal', CO(0.018, 0.04, 3), '#d8d8d8', 0.14 + i * 0.075, 0, -0.058, -Math.PI / 2, 0, 0);
+        k.lit(BX(0.08, 0.024, 0.03), '#7a1a10', 0.5, 0, 0.03).lit(BX(0.04, 0.024, 0.02), '#6a1410', 0.62, 0, 0.035);
+        break;
+      }
       case 'pick':
-        k.lit(BX(0.64, 0.045, 0.045), W, 0.3, 0, 0).add('metal', BX(0.09, 0.08, 0.09), '#ffffff', 0.6, 0, 0)
-          .add('metal', CO(0.035, 0.26, 5), '#ffffff', 0.6, 0, 0.17, Math.PI / 2, 0, 0).add('metal', CO(0.035, 0.26, 5), '#ffffff', 0.6, 0, -0.17, -Math.PI / 2, 0, 0); break;
+        // Rohr-Spitzhacke mit Klebeband, Schraube und Stahlkopf
+        k.lit(CY(0.026, 0.026, 0.66, 6), '#6a6e76', 0.3, 0, 0, 0, 0, Math.PI / 2)
+          .lit(CY(0.03, 0.03, 0.12, 6), '#2a2a2a', 0.02, 0, 0, 0, 0, Math.PI / 2).lit(CY(0.03, 0.03, 0.05, 6), '#c8a040', 0.4, 0, 0, 0, 0, Math.PI / 2)
+          .add('metal', BX(0.1, 0.09, 0.12), '#ffffff', 0.6, 0, 0).lit(CY(0.02, 0.02, 0.13, 6), '#3a3a3a', 0.6, 0, 0, Math.PI / 2, 0, 0)
+          .add('metal', CO(0.04, 0.3, 5), '#ffffff', 0.59, 0, 0.21, Math.PI / 2 - 0.25, 0, 0).add('metal', CO(0.03, 0.22, 4), '#ffffff', 0.6, 0, -0.17, -Math.PI / 2 + 0.2, 0, 0, 1.6, 1, 0.6);
+        break;
       case 'axe':
-        k.lit(BX(0.8, 0.045, 0.045), '#6a4526', 0.35, 0, 0).lit(BX(0.1, 0.07, 0.07), D, 0.7, 0, 0)
-          .add('metal', CY(0.22, 0.22, 0.035, 14), '#ffffff', 0.68, 0, 0, 0, 0, 0, 0.55, 1, 1); break;
+        // Kriegsaxt aus einem Sägeblatt mit Dorn am Rücken
+        k.lit(CY(0.028, 0.032, 0.86, 6), '#5a3a1e', 0.36, 0, 0, 0, 0, Math.PI / 2);
+        for (let i = 0; i < 3; i++) k.lit(CY(0.034, 0.034, 0.04, 6), '#2a2a2a', 0.04 + i * 0.06, 0, 0, 0, 0, Math.PI / 2);
+        k.lit(BX(0.12, 0.08, 0.08), '#3a3a3a', 0.72, 0, 0)
+          .add('metal', CY(0.23, 0.23, 0.03, 16), '#ffffff', 0.7, 0, 0.16, 0, 0, 0, 0.75, 1, 1).lit(CY(0.05, 0.05, 0.035, 8), '#3a3a3a', 0.7, 0, 0.06);
+        for (let i = 0; i < 8; i++) { const an = -0.9 + i * 0.26; k.add('metal', CO(0.025, 0.06, 3), '#e8e8e8', 0.7 + Math.cos(an) * 0.18, 0, 0.16 + Math.sin(an) * 0.24 + 0.02, 0, 0, 0, 1, 1, 1); }
+        k.add('metal', CO(0.04, 0.18, 4), '#ffffff', 0.71, 0, -0.13, -Math.PI / 2, 0, 0).lit(BX(0.06, 0.03, 0.08), '#7a1a10', 0.62, 0.01, 0.26);
+        break;
       case 'spear':
-        k.lit(CY(0.022, 0.022, 1.25, 6), W, 0.38, 0, 0, 0, 0, Math.PI / 2).lit(CY(0.032, 0.032, 0.1, 6), '#b03a2a', 0.96, 0, 0, 0, 0, Math.PI / 2)
-          .add('metal', OC(0.07), '#ffffff', 1.1, 0, 0, 0, 0, 0, 2.3, 0.6, 1); break;
+        // Speer: Schaft mit Klebeband, Blattspitze, Querstrebe und roter Stofffahne
+        k.lit(CY(0.022, 0.024, 1.25, 6), '#6a4a2a', 0.38, 0, 0, 0, 0, Math.PI / 2);
+        for (let i = 0; i < 3; i++) k.lit(CY(0.027, 0.027, 0.04, 6), '#2a2a2a', 0.1 + i * 0.05, 0, 0, 0, 0, Math.PI / 2);
+        k.lit(CY(0.034, 0.034, 0.1, 6), '#3a3a3a', 0.98, 0, 0, 0, 0, Math.PI / 2).add('metal', BX(0.03, 0.03, 0.18), '#ffffff', 1.02, 0, 0)
+          .add('metal', OC(0.075), '#ffffff', 1.16, 0, 0, 0, 0, 0, 2.6, 0.35, 1)
+          .lit(BX(0.04, 0.16, 0.012), '#b03a2a', 0.94, -0.09, 0.03, 0, 0, 0.2).lit(BX(0.04, 0.12, 0.012), '#8a2a1e', 0.9, -0.15, 0.03, 0, 0, 0.5);
+        break;
       case 'bow':
-        k.lit(TO(0.36, 0.024, 5, 16, Math.PI), '#8a5a2a', 0.0, 0, 0, Math.PI / 2, Math.PI / 2, 0)
-          .lit(BX(0.008, 0.008, 0.72), '#eeeeee', 0, 0, 0, 0, 0, 0, 1, 1, 1, 0).lit(BX(0.06, 0.05, 0.06), '#5a3a1a', 0.36, 0, 0)
-          .lit(BX(0.5, 0.015, 0.015), '#d8c8a0', 0.2, 0.02, 0).add('metal', CO(0.025, 0.07, 4), '#ffffff', 0.47, 0.02, 0, 0, 0, -Math.PI / 2); break;
+        // Armbrust: Schaft, gebogene Wurfarme, Sehne, eingelegter Bolzen, Zielfernrohr
+        k.lit(BX(0.62, 0.06, 0.07), '#6a4526', 0.18, -0.01, 0).lit(BX(0.16, 0.12, 0.07), '#5a3a1e', -0.1, -0.04, 0)
+          .lit(BX(0.04, 0.08, 0.03), '#2a2a2a', 0.08, -0.07, 0).lit(BX(0.1, 0.03, 0.06), '#3a3a3a', 0.43, 0.025, 0)
+          .add('metal', BX(0.05, 0.035, 0.3), '#ffffff', 0.45, 0, 0.16, 0, 0.45, 0).add('metal', BX(0.05, 0.035, 0.3), '#ffffff', 0.45, 0, -0.16, 0, -0.45, 0)
+          .lit(BX(0.43, 0.008, 0.008), '#e8e8e8', 0.357, 0.03, 0.147, 0, -0.75, 0).lit(BX(0.43, 0.008, 0.008), '#e8e8e8', 0.357, 0.03, -0.147, 0, 0.75, 0)
+          .lit(BX(0.48, 0.014, 0.014), '#c8a070', 0.3, 0.04, 0).add('metal', CO(0.022, 0.07, 4), '#ffffff', 0.57, 0.04, 0, 0, 0, -Math.PI / 2)
+          .lit(BX(0.04, 0.006, 0.03), '#d84a3a', 0.08, 0.045, 0)
+          .lit(CY(0.022, 0.022, 0.2, 8), '#2a2a2e', 0.18, 0.08, 0, 0, 0, Math.PI / 2).lit(BX(0.03, 0.04, 0.02), '#2a2a2e', 0.18, 0.05, 0);
+        k.glow(CY(0.016, 0.016, 0.005, 8), '#ff5a3a', 0.281, 0.08, 0, 0, 0, Math.PI / 2);
+        break;
       case 'staff':
-        k.lit(CY(0.03, 0.036, 1.0, 6), '#5a3a1a', 0.3, 0, 0, 0, 0, Math.PI / 2);
-        for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; k.add('metal', CO(0.025, 0.16, 4), '#ffffff', 0.78, Math.cos(a) * 0.06, Math.sin(a) * 0.06, a, 0, -Math.PI / 2 + 0.5); }
-        k.glow(IC(0.075, 1), '#ffb347', 0.86, 0, 0); break;
+        // Plasmawerfer: Lauf mit Kühlrippen, leuchtende Energiezellen, Mündung mit Zinken
+        k.lit(CY(0.045, 0.05, 0.62, 8), '#3a3e46', 0.42, 0, 0, 0, 0, Math.PI / 2)
+          .lit(BX(0.26, 0.1, 0.09), '#4a4e56', 0.08, -0.02, 0).lit(BX(0.07, 0.16, 0.06), '#2a2a2e', 0.02, -0.12, 0, 0, 0, 0.25)
+          .lit(BX(0.05, 0.06, 0.04), '#2a2a2e', 0.12, -0.08, 0);
+        for (let i = 0; i < 4; i++) k.add('metal', CY(0.065, 0.065, 0.025, 10), '#ffffff', 0.32 + i * 0.07, 0, 0, 0, 0, Math.PI / 2);
+        k.lit(CY(0.05, 0.05, 0.2, 8), '#2a2a2e', 0.12, 0.09, 0, 0, 0, Math.PI / 2).glow(CY(0.035, 0.035, 0.17, 8), '#ffb347', 0.12, 0.09, 0, 0, 0, Math.PI / 2)
+          .lit(CY(0.065, 0.05, 0.08, 8), '#4a4e56', 0.76, 0, 0, 0, 0, Math.PI / 2);
+        for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; k.add('metal', CO(0.02, 0.12, 4), '#ffffff', 0.84, Math.cos(a) * 0.05, Math.sin(a) * 0.05, a, 0, -Math.PI / 2 + 0.3); }
+        k.glow(IC(0.05, 1), '#ffb347', 0.86, 0, 0).glow(CY(0.047, 0.047, 0.02, 8), '#ff8a2a', 0.58, 0, 0, 0, 0, Math.PI / 2);
+        break;
     }
     return (toolCache[id] = k.build());
   }
@@ -839,33 +874,67 @@
 
   // ---------------------------------------------------------------- Tier-Modelle
   function makeAnimal(an) {
+    // Modelle in Einheiten des Tier-Radius gebaut, dann skaliert. Blick nach +x.
     const D = G.ADEF[an.type], grp = new T.Group(), s = an.r / G.TS;
-    const fur = lambert(D.color), dark = lambert('#3a2a1a');
-    const mk = (geom, m, x, y, z, sx, sy, sz) => { const o = new T.Mesh(geom, m); o.position.set(x, y, z); o.scale.set(sx || 1, sy || 1, sz || 1); o.castShadow = true; grp.add(o); return o; };
-    const sph = geo('asph', () => new T.IcosahedronGeometry(1, 1)), legG = geo('aleg', () => new T.CylinderGeometry(0.05, 0.04, 1, 5).translate(0, -0.5, 0));
-    const legH = an.type === 'rabbit' ? 0.12 : 0.32;
-    mk(sph, fur, 0, legH + s * 0.6, 0, s * 1.15, s * 0.7, s * 0.75);
-    mk(sph, fur, s * 1.05, legH + s * 0.95, 0, s * 0.45, s * 0.42, s * 0.42);
-    mk(sph, lambert('#111111'), s * 1.42, legH + s * 1.05, s * 0.18, 0.03, 0.03, 0.03);
-    mk(sph, lambert('#111111'), s * 1.42, legH + s * 1.05, -s * 0.18, 0.03, 0.03, 0.03);
+    const body = new T.Group(); body.scale.setScalar(s * 1.15); grp.add(body);
+    const mat = matLit.clone(), fc = D.color;
+    const c = new T.Color(fc), lt = '#' + c.clone().offsetHSL(0, -0.05, 0.14).getHexString(), dk = '#' + c.clone().offsetHSL(0, 0, -0.12).getHexString();
+    const add = (geom, parent, x, y, z) => { const o = new T.Mesh(geom, mat); o.position.set(x || 0, y || 0, z || 0); o.castShadow = true; (parent || body).add(o); return o; };
     const legs = [];
-    for (const [lx, lz] of [[0.55, 0.4], [0.55, -0.4], [-0.55, 0.4], [-0.55, -0.4]]) legs.push(mk(legG, dark, lx * s, legH + 0.02, lz * s, 1, legH + 0.02, 1));
+    const leg = (x, z, L, w, hoof) => {
+      const pv = new T.Group(); pv.position.set(x, L, z); body.add(pv);
+      add(new Kit().lit(BX(w, L * 0.55, w), fc, 0, -L * 0.27, 0).lit(BX(w * 0.8, L * 0.45, w * 0.8), dk, 0, -L * 0.75, 0).lit(BX(w * 1.05, L * 0.1, w * 1.1), hoof, w * 0.08, -L * 0.96, 0).build().lit, pv);
+      legs.push(pv);
+    };
+    const k = new Kit();
+    let L;
     if (an.type === 'deer') {
-      const ant = lambert('#d8c090');
+      L = 1.3;
+      k.lit(BX(1.6, 0.68, 0.7), fc, 0, L + 0.36, 0, 0, 0, 0, 1, 1, 1, 0.03).lit(BX(1.3, 0.2, 0.56), '#e8d8b8', 0.05, L + 0.05, 0)
+        .lit(BX(0.12, 0.42, 0.52), '#f0e4cc', -0.81, L + 0.38, 0).lit(BX(0.14, 0.26, 0.2), '#f4ead8', -0.88, L + 0.6, 0, 0, 0, -0.5)
+        .lit(BX(0.36, 0.86, 0.34), fc, 0.78, L + 0.82, 0, 0, 0, -0.5).lit(BX(0.2, 0.5, 0.3), '#e8d8b8', 0.95, L + 0.68, 0, 0, 0, -0.5)
+        .lit(BX(0.56, 0.36, 0.36), fc, 1.12, L + 1.22, 0).lit(BX(0.28, 0.24, 0.28), dk, 1.45, L + 1.14, 0).lit(BX(0.06, 0.1, 0.14), '#141414', 1.6, L + 1.16, 0)
+        .lit(BX(0.04, 0.07, 0.07), '#111', 1.3, L + 1.3, 0.18).lit(BX(0.04, 0.07, 0.07), '#111', 1.3, L + 1.3, -0.18);
       for (const sd of [-1, 1]) {
-        const a1 = mk(geo('antler', () => new T.BoxGeometry(0.03, 0.32, 0.03)), ant, s * 1.0, legH + s * 1.45, sd * s * 0.22); a1.rotation.x = sd * 0.5;
-        const a2 = mk(geo('antler', null), ant, s * 0.95, legH + s * 1.6, sd * s * 0.38); a2.rotation.x = sd * 1.1; a2.scale.y = 0.6;
+        k.lit(BX(0.1, 0.32, 0.16), fc, 0.95, L + 1.45, sd * 0.24, sd * 0.7, 0, 0).lit(BX(0.04, 0.24, 0.1), '#e8c0b0', 0.97, L + 1.45, sd * 0.25, sd * 0.7, 0, 0);
+        // Geweih mit Enden
+        k.lit(BX(0.06, 0.62, 0.06), '#d8c090', 0.98, L + 1.68, sd * 0.24, sd * 0.45, 0, 0.1)
+          .lit(BX(0.05, 0.3, 0.05), '#e0caa0', 1.12, L + 1.72, sd * 0.3, sd * 0.3, 0, -0.8).lit(BX(0.05, 0.3, 0.05), '#e0caa0', 0.86, L + 1.88, sd * 0.38, sd * 0.6, 0, 0.6)
+          .lit(BX(0.04, 0.24, 0.04), '#e8d4aa', 1.0, L + 2.0, sd * 0.42, sd * 0.9, 0, -0.2);
       }
-      mk(sph, lambert('#f0e0c8'), -s * 1.1, legH + s * 0.75, 0, s * 0.2, s * 0.2, s * 0.2);
+      for (const [x, z] of [[-0.3, 0.2], [0.1, -0.22], [-0.5, -0.15], [0.35, 0.18]]) k.lit(BX(0.1, 0.03, 0.1), '#f0e0c0', x, L + 0.71, z);
+      for (const [x, z] of [[0.6, 0.22], [0.6, -0.22], [-0.58, 0.22], [-0.58, -0.22]]) leg(x, z, L, 0.15, '#2a2018');
     } else if (an.type === 'rabbit') {
-      for (const sd of [-1, 1]) { const e = mk(sph, fur, s * 0.9, legH + s * 1.6, sd * s * 0.18, s * 0.12, s * 0.55, s * 0.08); e.rotation.x = sd * 0.25; }
-      mk(sph, lambert('#ffffff'), -s * 1.15, legH + s * 0.7, 0, s * 0.3, s * 0.3, s * 0.3);
+      L = 0.32;
+      k.lit(SP(0.45, 8, 6), fc, -0.05, L + 0.36, 0, 0, 0, 0, 1.25, 0.95, 0.95).lit(SP(0.3, 8, 6), '#f0e8dc', 0.15, L + 0.22, 0, 0, 0, 0, 1.2, 0.7, 1)
+        .lit(SP(0.33, 8, 6), fc, 0.5, L + 0.72, 0).lit(SP(0.14, 6, 5), '#f4ece0', 0.76, L + 0.62, 0)
+        .lit(SP(0.05, 5, 4), '#e87a90', 0.86, L + 0.68, 0).lit(BX(0.05, 0.08, 0.06), '#111', 0.68, L + 0.82, 0.18).lit(BX(0.05, 0.08, 0.06), '#111', 0.68, L + 0.82, -0.18)
+        .lit(BX(0.02, 0.03, 0.03), '#fff', 0.705, L + 0.84, 0.19).lit(BX(0.02, 0.03, 0.03), '#fff', 0.705, L + 0.84, -0.17)
+        .lit(SP(0.17, 6, 5), '#ffffff', -0.62, L + 0.46, 0)
+        .lit(BX(0.42, 0.12, 0.16), dk, -0.25, 0.06, 0.24).lit(BX(0.42, 0.12, 0.16), dk, -0.25, 0.06, -0.24)
+        .lit(SP(0.24, 6, 5), fc, -0.3, L + 0.15, 0.26, 0, 0, 0, 1.1, 1, 0.6).lit(SP(0.24, 6, 5), fc, -0.3, L + 0.15, -0.26, 0, 0, 0, 1.1, 1, 0.6);
+      for (const sd of [-1, 1]) k.lit(BX(0.1, 0.62, 0.2), fc, 0.38, L + 1.2, sd * 0.13, sd * 0.25, 0, 0.25).lit(BX(0.02, 0.46, 0.12), '#f0a8b8', 0.43, L + 1.2, sd * 0.135, sd * 0.25, 0, 0.25);
+      for (const z of [0.16, -0.16]) leg(0.35, z, L, 0.11, '#f0e8dc');
     } else {
-      for (const sd of [-1, 1]) mk(geo('tusk', () => new T.ConeGeometry(0.03, 0.14, 5).rotateZ(-Math.PI / 2.4)), lambert('#f2ead8'), s * 1.45, legH + s * 0.8, sd * s * 0.2);
-      mk(sph, dark, s * 1.48, legH + s * 0.9, 0, s * 0.18, s * 0.15, s * 0.22);
-      mk(geo('bristle', () => new T.BoxGeometry(1, 0.05, 0.05)), dark, 0, legH + s * 1.25, 0, s * 1.4, 2, 2);
+      L = 0.55;
+      k.lit(BX(1.5, 0.8, 0.86), fc, -0.05, L + 0.42, 0, 0, 0, 0, 1, 1, 1, 0.04).lit(SP(0.5, 7, 5), fc, 0.25, L + 0.68, 0, 0, 0, 0, 1.4, 0.9, 1.1)
+        .lit(BX(1.2, 0.18, 0.7), dk, 0, L + 0.04, 0)
+        .lit(BX(0.62, 0.58, 0.6), fc, 0.86, L + 0.38, 0, 0, 0, -0.25).lit(CY(0.17, 0.2, 0.3, 8), '#8a6050', 1.26, L + 0.2, 0, 0, 0, Math.PI / 2 + 0.25)
+        .lit(CY(0.17, 0.17, 0.02, 8), '#5a3a30', 1.4, L + 0.16, 0, 0, 0, Math.PI / 2 + 0.25)
+        .lit(BX(0.03, 0.05, 0.05), '#1a0a0a', 1.41, L + 0.17, 0.06).lit(BX(0.03, 0.05, 0.05), '#1a0a0a', 1.41, L + 0.17, -0.06)
+        .lit(BX(0.05, 0.07, 0.08), '#ffcf4a', 1.05, L + 0.55, 0.22).lit(BX(0.05, 0.07, 0.08), '#ffcf4a', 1.05, L + 0.55, -0.22)
+        .lit(BX(0.05, 0.03, 0.08), '#1a0a0a', 1.08, L + 0.55, 0.22).lit(BX(0.05, 0.03, 0.08), '#1a0a0a', 1.08, L + 0.55, -0.22)
+        .lit(CY(0.03, 0.03, 0.3, 4), dk, -0.85, L + 0.62, 0, 0, 0, 0.8).lit(SP(0.05, 4, 3), '#2a1a10', -0.98, L + 0.74, 0);
+      for (const sd of [-1, 1]) {
+        k.lit(CO(0.045, 0.3, 5), '#f4ecd8', 1.28, L + 0.32, sd * 0.2, sd * 0.4, 0, -0.5).lit(CO(0.12, 0.24, 4), dk, 0.7, L + 0.78, sd * 0.25, sd * 0.5, 0, 0.3);
+      }
+      for (let i = 0; i < 9; i++) k.lit(CO(0.07, 0.22 + (i % 3) * 0.05, 4), '#2a1a10', -0.6 + i * 0.16, L + 0.88 + Math.sin(i * 0.6) * 0.08 + (i > 4 ? 0.06 : 0), 0, 0, i, -0.2);
+      for (const [x, z] of [[0.55, 0.26], [0.55, -0.26], [-0.55, 0.26], [-0.55, -0.26]]) leg(x, z, L, 0.2, '#1a1410');
     }
-    grp.userData = { fur, legs, legH };
+    add(k.build().lit);
+    const sh = new T.Mesh(geo('shadowDisc', () => new T.CircleGeometry(0.3, 16).rotateX(-Math.PI / 2)), new T.MeshBasicMaterial({ color: '#000', transparent: true, opacity: 0.22, depthWrite: false }));
+    sh.position.y = 0.02; sh.scale.set(s * 3.2, 1, s * 2.2); grp.add(sh);
+    grp.userData = { fur: mat, legs, legH: L * s * 1.15 };
     scene.add(grp);
     return grp;
   }
