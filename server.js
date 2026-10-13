@@ -55,7 +55,9 @@ function wsControl(sock, opcode, payload) {
   sock.write(Buffer.concat([Buffer.from([0x80 | opcode, p.length]), p]));
 }
 
-// ---------- Räume: je ein Host und ein Mitspieler, verbunden über einen 4-stelligen Code
+// ---------- Räume: ein Host und bis zu 7 Mitspieler, verbunden über einen 4-stelligen Code
+// Mitspieler → Host: "~<id>|<json>"   Host → einzelner Mitspieler: "@<id>|<json>", sonst an alle
+const MAX_GUESTS = 7;
 const rooms = new Map();
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function newCode() {
@@ -74,7 +76,7 @@ function onClientMessage(c, text) {
     if (m.want === 'host') {
       if (rooms.size >= MAX_ROOMS) return send(c, { t: '_err', msg: 'Der Server ist gerade voll. Bitte später nochmal versuchen.' });
       const code = newCode();
-      const room = { code, host: c, guest: null };
+      const room = { code, host: c, guests: new Map(), next: 1 };
       rooms.set(code, room);
       c.role = 'host'; c.room = room;
       send(c, { t: '_role', role: 'host', code, urls: lanUrls() });
@@ -85,18 +87,23 @@ function onClientMessage(c, text) {
       if (!code && rooms.size === 1) code = rooms.keys().next().value;
       const room = rooms.get(code);
       if (!room) return send(c, { t: '_err', msg: code ? `Kein Spiel mit dem Code ${code} gefunden.` : 'Bitte den Raum-Code des Hosts eingeben.' });
-      if (room.guest) return send(c, { t: '_err', msg: 'Dieses Spiel ist schon voll (max. 2 Spieler).' });
-      room.guest = c; c.role = 'guest'; c.room = room;
-      send(c, { t: '_role', role: 'client', code });
-      send(room.host, { t: '_peer' });
-      log(`Mitspieler in Raum ${code}`);
+      if (room.guests.size >= MAX_GUESTS) return send(c, { t: '_err', msg: 'Dieses Spiel ist schon voll (max. ' + (MAX_GUESTS + 1) + ' Spieler).' });
+      const gid = room.next++;
+      room.guests.set(gid, c); c.role = 'guest'; c.room = room; c.gid = gid;
+      send(c, { t: '_role', role: 'client', code, gid });
+      send(room.host, { t: '_peer', id: gid });
+      log(`Mitspieler ${gid} in Raum ${code} (${room.guests.size + 1} Spieler)`);
     }
     return;
   }
   const room = c.room;
   if (!room) return;
-  const other = c === room.host ? room.guest : room.host;
-  if (other) wsSend(other.sock, text);
+  if (c === room.host) {
+    if (text[0] === '@') {
+      const i = text.indexOf('|'), to = room.guests.get(parseInt(text.slice(1, i), 10));
+      if (to) wsSend(to.sock, text.slice(i + 1));
+    } else for (const gc of room.guests.values()) wsSend(gc.sock, text);
+  } else if (room.host) wsSend(room.host.sock, '~' + c.gid + '|' + text);
 }
 function onClientClose(c) {
   if (c.closed) return;
@@ -106,11 +113,11 @@ function onClientClose(c) {
   if (!room) return;
   if (c === room.host) {
     rooms.delete(room.code);
-    if (room.guest) { send(room.guest, { t: '_gone' }); room.guest.sock.end(); }
+    for (const gc of room.guests.values()) { send(gc, { t: '_gone' }); gc.sock.end(); }
     log(`Raum ${room.code} geschlossen (${rooms.size} offen)`);
-  } else if (c === room.guest) {
-    room.guest = null;
-    send(room.host, { t: '_gone' });
+  } else if (room.guests.get(c.gid) === c) {
+    room.guests.delete(c.gid);
+    send(room.host, { t: '_gone', id: c.gid });
   }
 }
 

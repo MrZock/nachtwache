@@ -1,25 +1,40 @@
-# Nachtwache – Zombie-Survival mit Basisbau
+# BLACKOUT – 3D Survival Game (Version 3.0)
 
-Browser-Spiel (eine einzige `index.html`, keine Abhängigkeiten): Tagsüber Holz, Stein und Gold sammeln und eine Basis bauen, nachts Zombiewellen abwehren. Allein oder zu zweit online.
+*Die Welt ist dunkel. Dein Reaktor ist das letzte Licht.*
+
+Browser-Spiel in einer kaputten, rostigen Zukunft: Tagsüber Holz, Stein und Gold sammeln und eine Basis um deinen **Reaktor** bauen, nachts Zombiewellen abwehren. Allein oder mit bis zu **8 Spielern** online. (Früher hieß das Spiel „Nachtwache“.)
 
 ## Spielen
 
-- **Version 2.0 in 3D:** `3d.html` (online: https://mrzock.github.io/nachtwache/3d.html). 2D- und 3D-Spieler können zusammen online spielen.
+- **3D (empfohlen):** https://mrzock.github.io/nachtwache/3d.html
+- **2D (klassisch, läuft auf schwachen Handys besser):** https://mrzock.github.io/nachtwache/
+- **Online:** einer klickt „Online hosten“ und bekommt einen **Raum-Code**, bis zu 7 andere klicken „Online beitreten“ und geben den Code ein. 2D- und 3D-Spieler können zusammen spielen. Vorher den Spielserver (GitHub Codespace) starten.
 
-- **Allein:** `index.html` im Browser öffnen → „Einzelspieler“.
-- **Zu zweit online:** Online-Version öffnen → einer klickt „Online hosten“ und bekommt einen **Raum-Code**, der andere klickt „Online beitreten“ und gibt den Code ein (oder öffnet den Einladungslink).
+**Steuerung (PC):** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · **rechte Maustaste ziehen bzw. `,` `.` = Kamera 360° drehen** (3D) · Mausrad Zoom · Q/E/R/C/V/B Waffen · H Schmiede · K Skills · **Leertaste Spezialfähigkeit** · 1–0, F, J bauen · U Upgrade · X Verkaufen · T Chat · G Markierung · M Karte · **Tab Spielerliste** · ESC Menü · N Ton
 
-**Steuerung:** WASD laufen · Maus zielen · Linksklick angreifen/abbauen · Q/E/R Spitzhacke/Schwert/Bogen · C/V/B Speer/Streitaxt/Feuerstab · H Schmiede · 1–0 Gebäude · Gebäude anklicken → Upgrade (U) / Verkaufen (X) · T/Enter Chat · G Markierung · K Skills · M Karte · F Stachelfalle · ESC Pause/Menü · N Ton
+**Handy:** im Querformat spielen. **Zwei Joysticks:** links laufen, rechts zielen & angreifen (kurz antippen = automatisch auf den nächsten Zombie). Knöpfe am Rand: Menü, Karte, Skills, Schmiede, ⚡ Fähigkeit, 🔄 Kamera drehen, ⛶ Vollbild, Chat, Markierung. Vollbild auch mit `/full` im Chat.
 
-**Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Jedes Level gibt einen Skillpunkt für Stärke, Schütze, Sammler, Ausdauer, Flinkheit, Plünderer, Präzision (kritische Treffer), Rüstung oder Lebensraub (je 5 Stufen, Menü mit K).
+## Neu in 3.0
 
-**Schmiede (H):** Speer (große Reichweite), Streitaxt (Rundumschlag, fällt Bäume schneller) und Feuerstab (explodierende Feuerbälle) freischalten. Alle Werkzeuge lassen sich bis Stufe 5 aufwerten (Stein → Eisen → Stahl → Kristall → Gold): mehr Schaden, die Spitzhacke baut mehr pro Schlag ab, der Bogen schießt ab Stufe 3 zwei und ab Stufe 5 drei Pfeile. Höchststufe = Goldspeicher-Stufe + 1.
+- **Neuer Name & Look:** BLACKOUT mit Rost-Logo, neues Hauptmenü, alles im Stil einer kaputten Zukunft: Reaktor statt Goldspeicher, Schrott-Barrikaden, Geschütz-, Tesla-, Mörser- und Kryotürme, Bohrturm, Recycler, Sanistation, Autowracks, Fässer, Ruinen und kaputte Laternen.
+- **Neue 3D-Modelle** für alles: Gebäude (jede Stufe sieht anders aus), Zombies mit Laufanimation, Spieler mit Ausrüstung, Waffen, Leuchteffekte bei Nacht.
+- **Riesige Karte (320×320)** mit **Biomen:** Wiese, Wüste (Kakteen, viel Gold), Schneeland (Schnee statt Regen), Sumpf (bremst) – und **Gebirge** rund um die Welt und mitten drin.
+- **Andere Dimension:** Ein **Portal** taucht in der Nähe des Reaktors auf und führt ins **Schattenreich** – dunkel, lila, voller Schattenkristalle (viel Gold & XP) und gefährlicher Schattenwesen.
+- **Bis zu 8 Spieler**, **Clans** und Team-Chat:
+  - `/clan gründen <Name>` · `/clan einladen <Spieler>` · `/clan beitreten <Name>` · `/clan offen` · `/clan kick <Spieler>` · `/clan verlassen` · `/clan info`
+  - `/team <Text>` – nur dein Clan sieht die Nachricht · `/w <Name> <Text>` – flüstern · `/spieler`
+  - Clan-Bonus: +10 % Schaden in der Nähe von Clan-Mitgliedern.
+- **Spezialfähigkeiten** ab Level 5 (Leertaste / ⚡): Wirbelsturm, Sturmangriff, Heilwelle, Kriegsschrei. Skills für 100 Gold zurücksetzen.
+- **Baubereich wächst** mit jeder Reaktor-Stufe (16 → 32 Felder).
+- Neue Gegner: **Schamane** (heilt Zombies), **Panzerzombie** (45 % Rüstung), seltener **Goldzombie**, Schattenwesen.
+- **Wetter:** Regen, Gewitter mit Blitzen, die Zombies treffen.
+- **7 versteckte Easter Eggs** 🥚 – viel Spaß beim Suchen!
 
-**Handy:** im Querformat spielen. Links ziehen = laufen (Joystick), rechts tippen/halten = angreifen & abbauen, im Baumodus tippen/wischen = bauen. Knöpfe am rechten Rand für Menü, Karte, Skills, Schmiede, Chat und Markierung. Im Menü gibt es einen Vollbild-Knopf.
+**Level & Skills:** XP für Kills, Abbauen, Bauen, Truhen und überlebte Nächte. Skillpunkte für Stärke, Schütze, Sammler, Ausdauer, Flinkheit, Plünderer, Präzision, Rüstung und Lebensraub (je 5 Stufen, Menü mit K).
 
-**Chat-Befehle:** `/afk` – AFK-Modus (kein Rauswurf, auch wenn der Tab im Hintergrund ist; Zombies ignorieren dich) · `/hilfe` – alle Befehle.
+**Schmiede (H):** Speer, Streitaxt und Plasmawerfer freischalten, alle Waffen bis Stufe 5 aufwerten. Höchststufe = Reaktor-Stufe + 1.
 
-**Neu:** große Welt (200×200) mit Karte (M), Tiere (Hirsch, Hase, Wildschwein), Stachelfallen, Blutmond jede 7. Nacht, 16 Erfolge, Heilturm, Bomber-Zombies, Schatztruhen, Ingame-Chat, Markierungen für den Mitspieler.
+**Chat-Befehle:** `/hilfe` zeigt alles · `/afk` · `/full` (Vollbild) · Clan-Befehle siehe oben.
 
 ## Aufbau
 

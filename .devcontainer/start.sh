@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Startet den Nachtwache-Spielserver im Vordergrund dieses Terminals und macht Port 8080 öffentlich,
+# Startet den BLACKOUT-Spielserver im Vordergrund dieses Terminals und macht Port 8080 öffentlich,
 # damit Freunde ohne GitHub-Login mitspielen können. Das Terminal einfach offen lassen.
 cd "$(dirname "$0")/.." || exit 1
 pkill -f "node server.js" 2>/dev/null
+# immer die neueste Server-Version von GitHub holen
+git pull --ff-only >/dev/null 2>&1 || true
 sleep 1
 if [ -n "$CODESPACE_NAME" ]; then
   # Die Port-Weiterleitung existiert erst kurz nach dem Start – ein paar Mal versuchen
