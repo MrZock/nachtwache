@@ -82,6 +82,8 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 
 ## SPARK – unser Spiele-Launcher
 
+**[⚡ SPARK herunterladen](https://github.com/MrZock/nachtwache/releases/download/spark-v1.0.0/SPARK-Setup-1.0.0.exe)** (Windows-Installer)
+
 Im Ordner [`spark/`](spark/README.md) liegt **SPARK**, eine Windows-App zum Installieren, Aktualisieren und Starten unserer Spiele (BLACKOUT ist das erste). Neue Spiele und Updates kommen über den Katalog `spark/catalog/games.json`. **Nach jeder Änderung an BLACKOUT:** `cd spark && npm run catalog` und mit committen.
 
 ## Windows-Version

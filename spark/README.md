@@ -1,5 +1,7 @@
 # SPARK – Spiele-Launcher
 
+**Download:** [SPARK-Setup-1.0.0.exe](https://github.com/MrZock/nachtwache/releases/download/spark-v1.0.0/SPARK-Setup-1.0.0.exe) · [alle Downloads](https://github.com/MrZock/nachtwache/releases/tag/spark-v1.0.0)
+
 SPARK ist eine Windows-App, mit der man unsere Spiele **installiert, aktualisiert und startet** – wie ein kleiner eigener Steam.
 
 - **Bibliothek** links, große Spielseite mit Titelbild, Beschreibung, Version, Größe, Spielzeit und „zuletzt gespielt“
