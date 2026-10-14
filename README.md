@@ -67,6 +67,12 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 - **Game Over**: Der letzte Morgen bleibt gespeichert – „Ab Tag X weiterspielen“ versucht die Nacht noch einmal.
 - Browser: im Speicher des Browsers (localStorage). Windows-App: Dateien `Dokumente/BLACKOUT/Spielstand 1–3.txt` (gleich für Online- und Offline-Start; Löschen benennt die Datei in `.alt` um).
 
+## Musik & Tutorial (4.0, Etappe 4)
+
+- **Musik** wird live im Browser erzeugt (WebAudio, keine Dateien): ruhig im Menü und am Tag, bedrohlich in der Nacht, im Bunker und im Schattenreich, treibend, sobald ein Boss da ist. Die Stimmungen blenden weich ineinander über.
+- Eigene **Musik-Lautstärke** in den Einstellungen (Aus/Leise/Mittel/Laut), getrennt von den Geräuschen. Bei „Aus“ oder Ton aus (N) wird nichts berechnet.
+- **Tutorial** beim ersten neuen Spiel: Reaktor setzen, laufen, umsehen, sammeln, bauen, Ausrüstung, Nacht. Am PC und am Handy mit eigenen Texten (Maus/Tasten bzw. Sticks/Knöpfe), jederzeit überspringbar. In den Einstellungen wieder einschaltbar.
+
 ## Windows-Version
 
 Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Spieldateien wie die Web-Version:

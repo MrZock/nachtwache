@@ -114,7 +114,7 @@ const dmgScale = N => 1 + 0.07 * (N - 1);
 // =====================================================================
 let camX = 0, camY = 0, VW = 1280, VH = 720, DPR = 1;
 const SFX = (() => {
-  let ac = null, out = null, nb = null, muted = false, vf = 1, level = 0.55;
+  let ac = null, out = null, nb = null, muted = false, vf = 1, level = 0.55, comp = null;
   const last = {};
   function init() {
     if (HEADLESS) return;
@@ -122,7 +122,7 @@ const SFX = (() => {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ac = new AC();
-    const comp = ac.createDynamicsCompressor();
+    comp = ac.createDynamicsCompressor();
     comp.threshold.value = -16; comp.ratio.value = 5;
     out = ac.createGain(); out.gain.value = muted ? 0 : level;
     out.connect(comp); comp.connect(ac.destination);
@@ -211,9 +211,110 @@ const SFX = (() => {
     init, play,
     toggle() { muted = !muted; if (out) out.gain.value = muted ? 0 : level; return muted; },
     setLevel(v) { level = v; if (out) out.gain.value = muted ? 0 : level; },
-    get muted() { return muted; }
+    get muted() { return muted; },
+    get ctx() { return ac; }, get dest() { return comp; }
   };
 })();
+// ---------- Musik (4.0): wird live erzeugt – Menü & Tag ruhig, Nacht bedrohlich, Boss treibend.
+// Keine Dateien, nur wenige Oszillatoren pro Takt; bei „Aus“ oder stumm wird gar nichts geplant.
+const MUSIC = (() => {
+  let ac = null, master = null, echo = null, nbuf = null, level = 0.9, cur = null, nextT = 0, step = 0, seed = 1;
+  const gains = {};
+  const mtof = n => 440 * Math.pow(2, (n - 69) / 12);
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  // Akkorde je Takt: [Bass, Akkordtöne …] (MIDI-Noten)
+  const MOODS = {
+    menu:  { bpm: 60,  prog: [[45, 57, 60, 64], [40, 55, 59, 64], [41, 57, 60, 65], [38, 57, 62, 65]] },
+    day:   { bpm: 76,  prog: [[45, 57, 60, 64], [41, 57, 60, 65], [36, 55, 60, 64], [43, 55, 59, 62]] },
+    night: { bpm: 88,  prog: [[45, 57, 60, 64], [45, 57, 60, 63], [41, 57, 60, 65], [40, 56, 59, 64]] },
+    boss:  { bpm: 138, prog: [[38, 57, 62, 65], [46, 58, 62, 65], [36, 55, 60, 64], [45, 57, 61, 64]] },
+  };
+  const PENTA = [69, 72, 74, 76, 79, 81, 84];
+  function setup() {
+    ac = SFX.ctx;
+    master = ac.createGain(); master.gain.value = 0; master.connect(SFX.dest || ac.destination);
+    // ein einziges Echo für alle Stimmungen (Delay mit Rückkopplung, gedämpft)
+    echo = ac.createDelay(1); echo.delayTime.value = 0.42;
+    const fb = ac.createGain(), lp = ac.createBiquadFilter();
+    fb.gain.value = 0.32; lp.type = 'lowpass'; lp.frequency.value = 1800;
+    echo.connect(lp); lp.connect(fb); fb.connect(echo); lp.connect(master);
+    for (const m in MOODS) { const g = ac.createGain(); g.gain.value = 0; g.connect(master); gains[m] = g; }
+    nbuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  function env(g, t, a, peak, dur, rel) {
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(peak, t + a);
+    g.gain.setValueAtTime(peak, t + Math.max(a, dur - rel)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  }
+  function osc(dst, type, f, t, dur, a, peak, rel, cutoff, wet, detune) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = type; o.frequency.value = f; if (detune) o.detune.value = detune;
+    let n = o;
+    if (cutoff) { const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff; o.connect(lp); n = lp; }
+    n.connect(g); g.connect(dst); if (wet) g.connect(echo);
+    env(g, t, a, peak, dur, rel); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function noise(dst, t, dur, peak, freq, band) {
+    const src = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+    src.buffer = nbuf; f.type = band ? 'bandpass' : 'highpass'; f.frequency.value = freq;
+    src.connect(f); f.connect(g); g.connect(dst); env(g, t, 0.002, peak, dur, dur * 0.9);
+    src.start(t, rnd() * 0.5); src.stop(t + dur + 0.02);
+  }
+  function kick(dst, t, peak) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.setValueAtTime(115, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+    o.connect(g); g.connect(dst); env(g, t, 0.003, peak, 0.3, 0.27); o.start(t); o.stop(t + 0.34);
+  }
+  // ein 16tel-Schritt einer Stimmung
+  function play(m, s, bar, t, sd) {
+    const g = gains[m], C = MOODS[m].prog[bar % 4], B = sd * 16;
+    if (m === 'menu' || m === 'day') {
+      if (s === 0) {
+        for (let i = 1; i < C.length; i++) osc(g, m === 'menu' ? 'sine' : 'triangle', mtof(C[i]), t, B * 1.05, 0.9, m === 'menu' ? 0.045 : 0.035, 1, 1300, false, (i - 2) * 7);
+        osc(g, 'sine', mtof(C[0]), t, B * 0.95, 0.08, 0.11, 0.7);
+      }
+      if (m === 'day') {
+        if (s === 8) osc(g, 'sine', mtof(C[0]), t, B * 0.45, 0.05, 0.07, 0.4);
+        if (s % 2 === 0 && rnd() < 0.32) { const n = rnd() < 0.5 ? C[1 + ((rnd() * 3) | 0)] + 12 : PENTA[(rnd() * PENTA.length) | 0]; osc(g, 'triangle', mtof(n), t, 0.6, 0.005, 0.05, 0.55, 2600, true); }
+      } else if (s % 4 === 2 && rnd() < 0.14) { const n = PENTA[(rnd() * PENTA.length) | 0] + 12; osc(g, 'sine', mtof(n), t, 2.2, 0.01, 0.035, 2.1, 0, true); osc(g, 'sine', mtof(n) * 2.01, t, 1.2, 0.01, 0.012, 1.1); }
+    } else if (m === 'night') {
+      if (s === 0) { osc(g, 'sawtooth', mtof(C[0] - 12), t, B * 1.02, 0.4, 0.06, 0.6, 260); osc(g, 'sine', mtof(C[1]), t, B, 1.2, 0.03, 1, 0, false, -5); osc(g, 'sine', mtof(C[3]), t, B, 1.2, 0.025, 1, 0, false, 5); }
+      if (s % 2 === 0) osc(g, 'sawtooth', mtof(C[0]), t, 0.18, 0.005, s % 8 === 0 ? 0.08 : 0.05, 0.15, 520);
+      if (s === 0) kick(g, t, 0.32); if (s === 3) kick(g, t, 0.2);
+      if (s % 4 === 2) noise(g, t, 0.04, 0.018, 7000);
+      if (s === 10 && rnd() < 0.45) { osc(g, 'sine', mtof(C[1] + 24), t, 1.4, 0.01, 0.03, 1.3, 0, true); osc(g, 'sine', mtof(C[1] + 25), t + 0.02, 1.4, 0.01, 0.018, 1.3, 0, true); }
+    } else {
+      if (s % 4 === 0) kick(g, t, 0.42);
+      if (s === 4 || s === 12) noise(g, t, 0.16, 0.16, 1800, true);
+      if (s % 2 === 1) noise(g, t, 0.03, 0.028, 8000);
+      osc(g, 'sawtooth', mtof(C[0] + (s % 4 === 2 ? 12 : 0)), t, sd * 0.9, 0.004, 0.075, sd * 0.6, 900);
+      if (s === 0) for (let i = 1; i < C.length; i++) osc(g, 'sawtooth', mtof(C[i]), t, B, 0.05, 0.018, 0.3, 1000, false, (i - 2) * 9);
+      if ([0, 3, 6, 10, 12].includes(s)) osc(g, 'square', mtof(C[1 + (s % 3)] + 12), t, sd * 1.6, 0.005, 0.03, sd, 2200, s === 12);
+    }
+  }
+  function update(want) {
+    if (!ac) { if (!SFX.ctx) return; setup(); }
+    if (ac.state !== 'running') return;
+    const now = ac.currentTime, vol = SFX.muted ? 0 : level * 0.55;
+    if (master.gain.value !== vol && Math.abs(master.gain.value - vol) > 0.001) master.gain.setTargetAtTime(vol, now, 0.4);
+    if (want !== cur) {
+      for (const m in gains) gains[m].gain.setTargetAtTime(m === want ? 1 : 0, now, cur ? 1.1 : 0.4);
+      cur = want; step = 0; nextT = Math.max(nextT, now + 0.08);
+    }
+    if (vol <= 0) { nextT = now + 0.1; return; }   // stumm: nichts planen
+    const sd = 60 / MOODS[cur].bpm / 4;
+    if (nextT < now - 0.3) nextT = now + 0.05;      // nach einer Pause (Tab im Hintergrund) nicht nachholen
+    while (nextT < now + 0.3) { play(cur, step % 16, step >> 4, nextT, sd); nextT += sd; step++; }
+  }
+  return { update, setLevel(v) { level = v; }, get mood() { return cur; } };
+})();
+function musicMood() {
+  if (mode === 'menu' || mode === 'over' || !S || !S.player) return 'menu';
+  if (S.zombies.some(z => z.type === 'boss' && !z.dead)) return 'boss';
+  if (S.phase === 'night') return 'night';
+  const b = S.biome ? S.biome[tileAt(S.player.x, S.player.y)] : 0;
+  return b === 5 || b === 7 ? 'night' : 'day';
+}
 
 // =====================================================================
 // Spielzustand
@@ -320,7 +421,8 @@ let skinOpen = false;
 // ---------- Einstellungen (werden im Browser gespeichert)
 const SET_KEY = 'nachtwache.settings';
 const SET_OPTS = [
-  { id: 'vol', name: 'Lautstärke', list: ['Aus', 'Leise', 'Mittel', 'Laut', 'Max'], val: [0, 0.2, 0.4, 0.55, 0.85] },
+  { id: 'vol', name: 'Geräusche', list: ['Aus', 'Leise', 'Mittel', 'Laut', 'Max'], val: [0, 0.2, 0.4, 0.55, 0.85] },
+  { id: 'mus', name: 'Musik', list: ['Aus', 'Leise', 'Mittel', 'Laut'], val: [0, 0.5, 0.9, 1.4] },
   { id: 'q', name: 'Grafik', list: ['Niedrig', 'Mittel', 'Hoch'], hint: 'Niedrig = schneller auf schwachen Handys (ohne Schatten)' },
   { id: 'shake', name: 'Bildschirm-Wackeln', list: ['Aus', 'An'] },
   { id: 'sens', name: 'Umsehen (Ego-Perspektive)', list: ['Sehr langsam', 'Langsam', 'Normal', 'Schnell', 'Sehr schnell'], val: [0.45, 0.7, 1, 1.4, 2] },
@@ -328,18 +430,19 @@ const SET_OPTS = [
   { id: 'names', name: 'Namen über Spielern', list: ['Aus', 'An'] },
   { id: 'ui', name: 'Größe der Knöpfe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.85, 1, 1.18] },
   { id: 'joy', name: 'Joystick-Größe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.8, 1, 1.25] },
+  { id: 'tut', name: 'Tutorial im nächsten neuen Spiel', list: ['Aus', 'An'] },
 ];
-const SET = Object.assign({ vol: 3, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
+const SET = Object.assign({ vol: 3, mus: 2, tut: 1, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
 let settingsOpen = false, fpsAvg = 60;
 const setVal = id => { const d = SET_OPTS.find(o => o.id === id); return d.val ? d.val[SET[id]] : SET[id]; };
 function settingsApply() {
-  SFX.setLevel(setVal('vol'));
+  SFX.setLevel(setVal('vol')); MUSIC.setLevel(setVal('mus'));
   if (typeof R3 !== 'undefined' && R3) { if (R3.setQuality) R3.setQuality(SET.q); R3.lookSens = setVal('sens'); R3.shakeOn = !!SET.shake; }
   if (typeof calcUiScale === 'function') calcUiScale();
 }
 function settingSet(id, v) { SET[id] = v; store.set(SET_KEY, SET); settingsApply(); }
 function drawSettings() {
-  const w = Math.min(760, VW - 20), rowH = 50, h = Math.min(VH - 20, 80 + SET_OPTS.length * rowH + 56), x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  const w = Math.min(760, VW - 20), rowH = clamp(Math.floor((VH - 156) / SET_OPTS.length), 40, 50), h = Math.min(VH - 20, 80 + SET_OPTS.length * rowH + 56), x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
   panel(x, y, w, h, 0.97);
   ui.push({ x, y, w, h, fn: () => {} });
   titleText('⚙ EINSTELLUNGEN', x + 24, y + 30, 22, '#ff8a3a', 'left');
@@ -361,7 +464,7 @@ function drawSettings() {
     });
   });
   button('✔ FERTIG', x + w - 190, y + h - 50, 170, 38, () => { settingsOpen = false; }, true, true);
-  button('↺ STANDARD', x + 20, y + h - 50, 170, 38, () => { for (const k of ['vol', 'q', 'shake', 'sens', 'fps', 'names', 'ui', 'joy']) SET[k] = { vol: 3, q: isTouch ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }[k]; store.set(SET_KEY, SET); settingsApply(); }, false, true);
+  button('↺ STANDARD', x + 20, y + h - 50, 170, 38, () => { for (const k of ['vol', 'mus', 'q', 'shake', 'sens', 'fps', 'names', 'ui', 'joy']) SET[k] = { vol: 3, mus: 2, q: isTouch ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }[k]; store.set(SET_KEY, SET); settingsApply(); }, false, true);
 }
 function skinSet(id, v) { mySkin[id] = v; store.set(SKIN_KEY, skinStr(mySkin)); if (S && S.player) S.player.skin = skinStr(mySkin); }
 
@@ -2580,6 +2683,8 @@ function startGame() {
   if (L) applySave(L); else newGame({});
   mode = 'play'; modeT = 0;
   SFX.init();
+  tut = null;
+  if (!L && SET.tut) tutStart();
   if (L) banner('Spielstand ' + (saveSlot + 1) + ' geladen', 'Tag ' + S.night + (S.phase === 'night' ? ' – es ist Nacht, verteidige den Reaktor!' : ' – weiter geht\'s'), '#8fe08f');
   else banner('Platziere deinen Reaktor', NET.role === 'host' ? 'Jeder baut seine eigene Basis – Clans (/clan) teilen sich eine' : (isTouch ? 'Tippe auf eine freie Fläche' : 'Linksklick auf eine freie Fläche'), '#ffd36b');
   if (NET.role === 'host') {
@@ -3500,6 +3605,7 @@ async function clientInitMap(m) {
   mode = 'play'; modeT = 0; menuMsg = null;
   SFX.init();
   banner('Verbunden!', 'Ihr baut gemeinsam – Ressourcen werden geteilt', '#7fd8ff');
+  tut = null; if (SET.tut) tutStart();
   netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin) });
   addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit Y.', '#8fe08f');
 }
@@ -4546,6 +4652,7 @@ function drawUI() {
   if (uiS !== 1) { ctx.save(); ctx.scale(uiS, uiS); VW = rw / uiS; VH = rh / uiS; input.sx = sx / uiS; input.sy = sy / uiS; }
   try {
     drawHUD();
+    drawTutorial();
     drawOverlays();
     if (SET.fps) text(Math.round(fpsAvg) + ' FPS', VW - 8, VH - 8, 11, fpsAvg > 45 ? '#8fe08f' : fpsAvg > 25 ? '#ffcf7a' : '#ff7b6b', 'right', '700');
     if (isTouch && rh > rw * 1.05) {
@@ -4754,6 +4861,7 @@ function makeLogo(size) {
   return { size, W, H, mask, base, edge, shadow, fire: mk() };
 }
 function drawLogo(cx, cy, size) {
+  if (!(size > 4)) return;   // Fenster noch 0 Pixel groß (beim Laden)
   if (!logoCache || logoCache.size !== size) logoCache = makeLogo(size);
   const L = logoCache, x = cx - L.W / 2, y = cy - L.H / 2;
   // Glut im Inneren (animiert, nur innerhalb der Buchstaben)
@@ -4817,6 +4925,47 @@ function goldRate() {
   let r = 0;
   for (const b of S.buildings) if (b.type === 'hq' || b.type === 'mine') r += BDEF[b.type].gold[b.lvl - 1];
   return r;
+}
+// ---------- Tutorial (4.0): kurze Schritte für Neue – PC und Handy getrennt, jederzeit überspringbar
+let tut = null;
+function tutSteps() {
+  const T = isTouch;
+  return [
+    { t: 'Platziere deinen Reaktor', d: (T ? 'Tippe auf eine freie Fläche.' : 'Linksklick auf eine freie Fläche.') + ' Der Reaktor ist das Herz deiner Basis – wird er zerstört, ist das Spiel vorbei.', ok: () => !!S.hq },
+    { t: 'Laufen', d: T ? 'Zieh den linken Stick, um zu laufen.' : 'Laufe mit W A S D ein Stück herum.', ok: k => Math.hypot(S.player.x - k.x0, S.player.y - k.y0) > 3 * TS },
+    ...(T ? [] : [{ t: 'Umsehen', d: 'Klick ins Bild, damit die Maus gefangen wird, und bewege sie, um dich umzusehen. ESC gibt die Maus wieder frei.', ok: k => !R3 || Math.abs(R3.yaw - k.yaw0) > 1.2 }]),
+    { t: 'Rohstoffe sammeln', d: T ? 'Lauf zu einem Baum oder Felsen und zieh den rechten Stick in seine Richtung – so schlägst du zu und sammelst Holz und Stein.' : 'Lauf zu einem Baum oder Felsen und halte die linke Maustaste gedrückt – so sammelst du Holz und Stein.', ok: k => S.wood + S.stone >= k.res0 + 12 },
+    { t: 'Verteidigung bauen', d: T ? 'Tippe auf 🛠 Bauen, wähle eine Barrikade oder einen Turm und tippe auf einen Platz neben dem Reaktor.' : 'Drück I (oder eine Zahl 1–0), wähle eine Barrikade oder einen Turm und klicke neben den Reaktor.', ok: k => S.buildings.length > k.b0 },
+    { t: 'Ausrüstung', d: T ? 'Unter ☰ Mehr → Inventar → Ausrüstung stellst du Rüstung, Medkits, Granaten und Molotows her. Material lassen Zombies und Tiere fallen.' : 'Im Inventar (I) unter „Ausrüstung“ stellst du Rüstung, Medkits (L), Granaten (G) und Molotows (Z) her. Material lassen Zombies und Tiere fallen.', info: true },
+    { t: 'Die Nacht', d: 'Läuft die Zeit oben ab, wird es Nacht und Zombies greifen deinen Reaktor an – halte durch! Jeden Morgen wird automatisch gespeichert.' + (T ? '' : ' Springen: Leertaste · Karte: M'), info: true },
+  ];
+}
+function tutMark() { const p = S.player; Object.assign(tut, { t: 0, x0: p.x, y0: p.y, yaw0: R3 ? R3.yaw : 0, res0: S.wood + S.stone, b0: S.buildings.length }); }
+function tutStart() { if (!S || !S.player) return; tut = { i: S.hq ? 1 : 0 }; tutMark(); }
+function tutEnd(skip) {
+  tut = null; SET.tut = 0; store.set(SET_KEY, SET);
+  toast(skip ? 'Tutorial übersprungen – du kannst es in den Einstellungen wieder einschalten.' : '🎓 Tutorial geschafft – viel Glück in der Nacht!', '#8fe08f');
+}
+function tutNext() { tut.i++; SFX.play('chime', undefined, undefined, true); if (tut.i >= tutSteps().length) tutEnd(false); else tutMark(); }
+function tutTick(dt) {
+  if (!tut || mode !== 'play' || !S || !S.player) return;
+  tut.t += dt;
+  const st = tutSteps()[tut.i];
+  if (st.info ? tut.t > 16 : tut.t > 0.5 && st.ok(tut)) tutNext();
+}
+function drawTutorial() {
+  if (!tut || mode !== 'play') return;
+  const steps = tutSteps(), st = steps[tut.i], w = Math.min(540, VW - 24), x = VW / 2 - w / 2, y = 76;
+  const lines = wrapLines(st.d, w - 28, '600 13px ' + FONT), h = 82 + lines.length * 18;
+  panel(x, y, w, h, 0.92);
+  ui.push({ x, y, w, h, fn: () => {} });
+  ctx.fillStyle = '#ffb070'; ctx.fillRect(x, y + h - 3, w * (tut.i + (st.info ? Math.min(1, tut.t / 16) : 0)) / steps.length, 3);
+  text('🎓 ' + st.t, x + 14, y + 20, 16, '#ffe27a', 'left', '700');
+  text('Schritt ' + (tut.i + 1) + ' / ' + steps.length, x + w - 14, y + 20, 12, '#aaa', 'right', '600');
+  lines.forEach((l, i) => text(l, x + 14, y + 44 + i * 18, 13, '#eee', 'left', '600'));
+  const by = y + h - 34;
+  button('Überspringen', x + 10, by, 130, 26, () => tutEnd(true), false, true);
+  if (st.info) button(tut.i === steps.length - 1 ? '✔ Los geht\'s' : 'Weiter ➜', x + w - 150, by, 140, 26, tutNext, true, true);
 }
 function drawHUD() {
   if (mode === 'menu') return;
@@ -5938,11 +6087,12 @@ if (!HEADLESS) {
     requestAnimationFrame(frame);
     if (VW !== window.innerWidth || VH !== window.innerHeight) { if (window.innerWidth > 0 && window.innerHeight > 0) resize(); }
     try {
-      checkAchievements(dt);
+      checkAchievements(dt); tutTick(dt);
       if (NET.role === 'client') { if (S && S.isClient && mode !== 'menu') clientUpdate(dt); }
       else if (mode === 'play' || (mode === 'paused' && NET.role === 'host' && NET.peer)) update(dt);
       else if (mode === 'menu') { camX += Math.sin(animT * 0.1) * 0.4; camY += 0.25; if (camY > WORLD - VH) camY = 0; }
       render(dt);
+      MUSIC.update(musicMood());
     } catch (err) { console.error(err); }
   };
   requestAnimationFrame(frame);
@@ -5950,7 +6100,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
