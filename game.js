@@ -12,7 +12,7 @@ const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 512;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 90, NIGHT_LEN = 100;   // Nacht länger (Alpha 1.5.0)
-const GAME_VER = 'Alpha 1.5.1';
+const GAME_VER = 'Alpha 1.5.2';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -3440,12 +3440,34 @@ function chatOpen() {
 }
 function chatClose() { chatScroll = 0; if (chatEl) { chatEl.style.display = 'none'; chatEl.blur(); } }
 function chatIsOpen() { return !!chatEl && chatEl.style.display === 'block'; }
+// eigenes Eingabefenster statt prompt() – prompt() gibt es in der Desktop-Version (Electron) nicht
 function setName() {
-  const n = cleanText(prompt('Wie soll dein Spielername lauten?', playerName), 16);
-  if (!n) return;
-  playerName = n; store.set(NAME_KEY, n);
-  if (S && S.player) S.player.name = n;
-  if (NET.role === 'client') netSendR({ t: 'name', name: n });
+  SFX.init();
+  if (!lobbyEl) { lobbyEl = document.createElement('div'); lobbyEl.id = 'lobby'; document.body.appendChild(lobbyEl); }
+  lobbyEl.style.display = 'flex';
+  lobbyEl.innerHTML = `
+    <div class="lb-box"><h2>Spielername</h2>
+      <p>Wie soll dein Spielername lauten? (höchstens 16 Zeichen)</p>
+      <input id="lb-name" maxlength="16" autocomplete="off" spellcheck="false">
+      <button id="lb-go" class="primary">Speichern</button>
+      <p id="lb-status"></p><button id="lb-cancel">Abbrechen</button></div>`;
+  const inp = lobbyEl.querySelector('#lb-name');
+  inp.value = playerName;
+  const ok = () => {
+    const n = cleanText(inp.value, 16);
+    if (!n) { lobbyStatus('Bitte gib einen Namen ein.', true); return; }
+    if (chatFilter(n) !== n) { lobbyStatus('Dieser Name ist nicht erlaubt.', true); return; }
+    playerName = n; store.set(NAME_KEY, n);
+    if (S && S.player) S.player.name = n;
+    if (NET.role === 'client') netSendR({ t: 'name', name: n, pid: playerId });
+    lobbyHide(); SFX.play('click');
+  };
+  lobbyEl.querySelector('#lb-go').onclick = ok;
+  lobbyEl.querySelector('#lb-cancel').onclick = lobbyHide;
+  inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') ok(); else if (e.key === 'Escape') lobbyHide(); };
+  // Fokus erst nach dem Loslassen der Maus setzen, sonst nimmt der Klick ihn wieder weg
+  const foc = () => { if (lobbyOpenNow()) { inp.focus(); inp.select(); } };
+  setTimeout(foc, 30); window.addEventListener('pointerup', () => setTimeout(foc, 0), { once: true });
 }
 // ---------- Chat-Befehle (laufen beim Host bzw. im Einzelspieler)
 function sysMsg(p, text, color) {
@@ -6302,7 +6324,7 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['RANGLISTE MIT SPIELER-ID', 'NEUER NAME = KEIN DOPPELTER EINTRAG', 'NEUE WAFFEN & ANIMATIONEN', 'BEIDE HÄNDE · AUSHOLEN & ZUSCHLAGEN', 'STÄDTE · BUNKER · SCHATTENREICH', 'HOCHHAUS · TRESOR · SCHATTENFÜRST', 'LÄNGERE NÄCHTE', 'STREUNER-ZOMBIES AM TAG', 'EISEN: VERSTÄRKEN & REPARIEREN', 'KARTE MIT PLANQUADRATEN A1–H8', 'NEUES DESIGN · CHATFILTER', 'F1 = STEUERUNG · CHAT SCROLLEN'];
+      const news = ['RANGLISTE MIT SPIELER-ID', 'NAME ÄNDERN GEHT JETZT AUCH IN DER DESKTOP-VERSION', 'NEUE WAFFEN & ANIMATIONEN', 'BEIDE HÄNDE · AUSHOLEN & ZUSCHLAGEN', 'STÄDTE · BUNKER · SCHATTENREICH', 'HOCHHAUS · TRESOR · SCHATTENFÜRST', 'LÄNGERE NÄCHTE', 'STREUNER-ZOMBIES AM TAG', 'EISEN: VERSTÄRKEN & REPARIEREN', 'KARTE MIT PLANQUADRATEN A1–H8', 'NEUES DESIGN · CHATFILTER', 'F1 = STEUERUNG · CHAT SCROLLEN'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
       titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';

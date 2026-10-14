@@ -13,6 +13,7 @@
 #lobby button.primary:hover { background: linear-gradient(#ff8a3a, #b0381a); }
 #lobby #lb-status { min-height: 18px; font-weight: 600; }
 #lobby input { width: 160px; box-sizing: border-box; padding: 10px 12px; margin-right: 8px; background: #0b0f14; color: #ffd36b; border: 1px solid #334050; border-radius: 6px; font: bold 24px/1 Consolas, monospace; letter-spacing: 6px; text-transform: uppercase; }
+#lobby input#lb-name { width: 240px; font: bold 18px/1 sans-serif; letter-spacing: 0; text-transform: none; }
 #lobby .lb-hint { font-size: 12px; color: #8a96a6; }
 
 /* Handy: kein Zoomen/Scrollen/Markieren im Spiel */
