@@ -73,6 +73,13 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 - Eigene **Musik-Lautstärke** in den Einstellungen (Aus/Leise/Mittel/Laut), getrennt von den Geräuschen. Bei „Aus“ oder Ton aus (N) wird nichts berechnet.
 - **Tutorial** beim ersten neuen Spiel: Reaktor setzen, laufen, umsehen, sammeln, bauen, Ausrüstung, Nacht. Am PC und am Handy mit eigenen Texten (Maus/Tasten bzw. Sticks/Knöpfe), jederzeit überspringbar. In den Einstellungen wieder einschaltbar.
 
+## Mehrspieler-Ausbau (4.0, Etappe 5)
+
+- **Handeln** (online): ESC → „🤝 Handeln“ (Handy: ☰ Mehr → Handeln). Mitspieler wählen, einstellen, was du gibst und was du bekommst (Holz, Stein, Gold, Eisen, Stoff, Elektronik, Chemie, Medkits, Granaten, Molotows) und Angebot senden. Der andere bekommt ein Fenster mit „Annehmen/Ablehnen“; der Host prüft und tauscht. Angebote verfallen nach einer Minute.
+- **PvP** (nur wenn der Host es in den Einstellungen einschaltet): Spieler können sich außerhalb ihrer eigenen Basis angreifen – Nahkampf, Pfeile, Feuerbälle, Granaten. 35 % Schaden, nicht im selben Clan, 8 Sekunden Schutz nach dem Respawn. Anzeige oben rechts „⚔ PvP AN“.
+- **Rangliste** (Hauptmenü → 📊 Rangliste): „Online“ zeigt die besten Runden aller Spieler (Nächte, dann Kills) vom Spielserver, „Meine Runden“ die 10 besten auf diesem Gerät. Eingetragen wird jeden Morgen und bei Game Over. Die Spielerliste (Tab) zeigt jetzt auch die Kills jedes Spielers.
+- Hinweis: Der kostenlose Render-Server vergisst die Online-Rangliste bei einem Neustart (Datei `scores.json` auf dem Server).
+
 ## Windows-Version
 
 Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Spieldateien wie die Web-Version:

@@ -32,7 +32,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 // Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
-const NET_VER = 32;
+const NET_VER = 33;
 const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -431,8 +431,9 @@ const SET_OPTS = [
   { id: 'ui', name: 'Größe der Knöpfe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.85, 1, 1.18] },
   { id: 'joy', name: 'Joystick-Größe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.8, 1, 1.25] },
   { id: 'tut', name: 'Tutorial im nächsten neuen Spiel', list: ['Aus', 'An'] },
+  { id: 'pvp', name: 'PvP (wenn du online hostest)', list: ['Aus', 'An'], hint: 'Spieler können sich außerhalb ihrer Basis angreifen' },
 ];
-const SET = Object.assign({ vol: 3, mus: 2, tut: 1, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
+const SET = Object.assign({ vol: 3, mus: 2, tut: 1, pvp: 0, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
 let settingsOpen = false, fpsAvg = 60;
 const setVal = id => { const d = SET_OPTS.find(o => o.id === id); return d.val ? d.val[SET[id]] : SET[id]; };
 function settingsApply() {
@@ -1633,6 +1634,7 @@ function explode(x, y, rad, dmg, big, owner) {
       hurtZombie(z, dmg * f, { x: Math.cos(a) * (big ? 260 : 160), y: Math.sin(a) * (big ? 260 : 160) });
     }
   });
+  if (owner && S.pvp) for (const q of S.players) { const d = Math.hypot(q.x - x, q.y - y); if (d < rad + q.r) pvpHit(owner, q, dmg * (1 - 0.5 * clamp(d / rad, 0, 1))); }
   if (!HEADLESS) {
     burst(x, y, '#ffb347', big ? 36 : 18, big ? 300 : 200, 0.55, big ? 4.5 : 3.5);
     burst(x, y, '#ff6a2b', big ? 20 : 10, big ? 200 : 140, 0.45, 3);
@@ -1711,6 +1713,7 @@ function startDay() {
   S.phase = 'day'; S.phaseT = DAY_LEN; S.spawnQueue = [];
   const wr = Math.random();
   S.weather = S.night < 3 ? 0 : wr < 0.5 ? 0 : wr < 0.8 ? 1 : 2;
+  recordRun();
   if (saveSlot >= 0) saveNow(true).then(ok => { if (ok) toast('💾 Automatisch gespeichert', '#8fe08f'); });
   banner('TAG ' + S.night, S.weather === 2 ? '⛈ Ein Gewitter zieht auf – Blitze treffen nachts die Zombies!' : S.weather === 1 ? '🌧 Regen – Zombies kommen im Schlamm langsamer voran.' : 'Nacht ' + S.survived + ' überlebt! Zombies verbrennen im Sonnenlicht.', '#ffe27a');
   SFX.play('chime');
@@ -1913,19 +1916,20 @@ function killXp(z) {
   const xp = (ZDEF[z.type].xp || 5) * (S.bloodMoon ? 2 : 1);
   if (z.lastHit && S.players.includes(z.lastHit)) giveXp(z.lastHit, xp); else teamXp(Math.ceil(xp / 3));
 }
+function countKill(z) { const k = z.lastHit; if (k && S.players.includes(k)) k.kills = (k.kills | 0) + 1; }
 function killZombie(z) {
   if (z.dead) return;
   killXp(z);
   if (z.type === 'bomber') {
     // vorher erledigt: die Explosion trifft nur die Zombies drumherum
-    z.dead = true; S.kills++;
+    z.dead = true; S.kills++; countKill(z);
     const gb = Math.round(ZDEF.bomber.gold * lootMul()); S.gold += gb; S.goldEarned += gb;
     S.bomberKills = (S.bomberKills || 0) + 1;
     floatText(z.x, z.y - 20, 'BUMM!', '#ffb347', 16);
     explode(z.x, z.y, 2 * TS, 70 * hpScale(S.night), true);
     return;
   }
-  z.dead = true; S.kills++;
+  z.dead = true; S.kills++; countKill(z);
   {
     const k = z.lastHit && S.players.includes(z.lastHit) ? z.lastHit : null;
     if (k) {
@@ -2458,7 +2462,7 @@ function updPlayer(p, dt) {
         p.x = (f % MAP + 0.5) * TS; p.y = ((f / MAP | 0) + 0.5) * TS;
       }
       p.tp++;
-      p.hp = p.maxHp; p.dead = 0; p.lastHurt = S.t;
+      p.hp = p.maxHp; p.dead = 0; p.lastHurt = S.t; p.spawnT = S.t;
       burst(p.x, p.y, '#7fd8ff', 24, 160, 0.6, 3);
       toastFor(p, 'Du bist wieder da!', '#7fd8ff');
     }
@@ -2528,6 +2532,10 @@ function playerAttack(p) {
     if (d > reach + an.r || Math.abs(angDiff(Math.atan2(an.y - p.y, an.x - p.x), p.face)) > arc) continue;
     hurtAnimal(an, T.dmg * mul * melee, p); hitAny = true;
   }
+  if (S.pvp) for (const q of S.players) {
+    if (q === p || Math.hypot(q.x - p.x, q.y - p.y) > reach + q.r || Math.abs(angDiff(Math.atan2(q.y - p.y, q.x - p.x), p.face)) > arc) continue;
+    if (pvpHit(p, q, critDmg(p, T.dmg * mul * melee))) hitAny = true;
+  }
   if (hitAny) SFX.play('hit', p.x, p.y);
   if (p.tool === 'axe') ring(p.x, p.y, reach, 0.18, TMET[L - 1]);
   // Spitzhacke (alles) bzw. Streitaxt (nur Bäume): Ressourcen abbauen
@@ -2592,6 +2600,10 @@ function updProjs(dt) {
       const an = S.animals.find(a => !a.dead && (a.x - pr.x) ** 2 + (a.y - pr.y) ** 2 < (a.r + pr.r) ** 2);
       if (an) { hurtAnimal(an, pr.dmg, pById(pr.owner)); pr.dead = true; continue; }
     }
+    if (S.pvp && pr.owner !== undefined && (pr.k === 'parrow' || pr.k === 'fire')) {
+      const ow = pById(pr.owner), q = ow && S.players.find(o => o !== ow && (o.x - pr.x) ** 2 + (o.y - pr.y) ** 2 < (o.r + pr.r) ** 2 && pvpCan(ow, o));
+      if (q) { if (pr.k === 'fire') explode(pr.x, pr.y, pr.splash, pr.dmg, false, ow); else pvpHit(ow, q, pr.dmg); pr.dead = true; continue; }
+    }
     let hitZ = null;
     forZ(pr.x, pr.y, pr.r + 40, z => {
       if ((z.x - pr.x) ** 2 + (z.y - pr.y) ** 2 < (z.r + pr.r) ** 2) { hitZ = z; return false; }
@@ -2639,6 +2651,11 @@ function updFx(dt) {
 // =====================================================================
 function update(dt) {
   S.t += dt;
+  if (NET.role === 'host' && !!SET.pvp !== !!S.pvp) {
+    S.pvp = !!SET.pvp;
+    const m = S.pvp ? '⚔ PvP ist AN – außerhalb der eigenen Basis könnt ihr euch angreifen (nicht im selben Clan).' : '🕊 PvP ist jetzt AUS.';
+    addChat('', m, '#ffb07a'); hostEv(['c', '', m, 101]); toastAll(m, '#ffb07a');
+  } else if (!NET.role) S.pvp = false;
   if (S.started && !S.ending) {
     S.phaseT -= dt;
     if (S.phaseT <= 0) { if (S.phase === 'day') startNight(); else startDay(); }
@@ -2703,6 +2720,7 @@ function finishResult(r) {
   lastResult = r;
 }
 function gameOver() {
+  recordRun();
   mode = 'over'; modeT = 0; S.sel = null; S.place = null; input.down = false;
   const r = { nights: S.survived, kills: S.kills, time: S.t, gold: Math.floor(S.goldEarned), buildings: S.buildings.length };
   if (NET.role === 'host') { netHostTick(1); netSendR({ t: 'O', r: Object.assign({}, r) }); }
@@ -2734,11 +2752,11 @@ function readSlotInfo(k) {
 function refreshSlots() { for (let k = 0; k < SAVE_SLOTS; k++) readSlotInfo(k); }
 // Charakter eines Spielers (gehört dem Spieler, nicht der Welt)
 function charOf(p) {
-  return { name: p.name || '', clan: p.clan || '', x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp), lvl: p.lvl, xp: Math.round(p.xp), sp: p.sp,
+  return { name: p.name || '', clan: p.clan || '', kills: p.kills | 0, x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp), lvl: p.lvl, xp: Math.round(p.xp), sp: p.sp,
     sk: Object.assign({}, p.sk), tl: Object.assign({}, p.tl), eq: Object.assign({}, p.eq), mat: Object.assign({}, p.mat), cons: Object.assign({}, p.cons), tool: p.tool, team: tidOf(p) };
 }
 function applyChar(p, c, pos) {
-  p.lvl = Math.max(1, c.lvl | 0); p.xp = +c.xp || 0; p.sp = c.sp | 0;
+  p.lvl = Math.max(1, c.lvl | 0); p.xp = +c.xp || 0; p.sp = c.sp | 0; p.kills = c.kills | 0;
   p.sk = Object.assign(newSkills(), c.sk); p.tl = Object.assign(newTools(), c.tl);
   p.eq = Object.assign({ h: 0, v: 0, g: 0, b: 0 }, c.eq); p.mat = Object.assign({ c: 0, e: 0, h: 0 }, c.mat); p.cons = Object.assign({ med: 0, gren: 0, molo: 0 }, c.cons);
   if (c.tool && p.tl[c.tool] > 0) p.tool = c.tool;
@@ -2754,7 +2772,7 @@ function worldState() {
     v: SAVE_VER, map: MAP, seed: S.seed, tgt: S.resTarget.slice(),
     g: { t: S.t, phase: S.phase, phaseT: S.phaseT, night: S.night, survived: S.survived, nightT: S.nightT, started: S.started, kills: S.kills,
       weather: S.weather || 0, stormSurvived: S.stormSurvived || 0, bossKills: S.bossKills || 0, chestsOpened: S.chestsOpened || 0, bloodMoon: !!S.bloodMoon,
-      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {} },
+      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {}, runId: S.runId || '' },
     po: S.portal ? [S.portal.x, S.portal.y, S.portal2.x, S.portal2.y] : null,
     teams: [...S.teams.values()].map(t => ({ id: t.id, name: t.name, wood: Math.floor(t.wood), stone: Math.floor(t.stone), gold: Math.floor(t.gold), iron: Math.floor(t.iron || 0), goldEarned: Math.floor(t.goldEarned || 0) })),
     bld: S.buildings.filter(b => !b.dead).map(b => [b.id, b.type, b.tx, b.ty, b.lvl, Math.round(b.hp), b.spent.w | 0, b.spent.s | 0, b.spent.g | 0, b.team]),
@@ -2811,7 +2829,7 @@ function applySave(w) {
   S.dunRooms = []; for (let k = 0; k < DUN.n; k++) S.dunRooms[k] = dunRoomsOf(k);
   const g = w.g || {};
   for (const k of ['t', 'phase', 'phaseT', 'night', 'survived', 'nightT', 'started', 'kills', 'weather', 'stormSurvived', 'bossKills', 'chestsOpened', 'bloodMoon',
-    'bloodSurvived', 'bomberKills', 'animalKills', 'nextId', 'nextZid', 'nextChest', 'eggUsed']) if (g[k] !== undefined) S[k] = g[k];
+    'bloodSurvived', 'bomberKills', 'animalKills', 'nextId', 'nextZid', 'nextChest', 'eggUsed', 'runId']) if (g[k] !== undefined) S[k] = g[k];
   if (w.po) { S.portal = { x: w.po[0], y: w.po[1] }; S.portal2 = { x: w.po[2], y: w.po[3] }; }
   // Basen abwesender Mitspieler heißen „s:<name>“, bis sie zurückkommen
   const away = new Map();
@@ -3399,7 +3417,7 @@ function runCommand(p, text) {
     hostGiveEgg(p, 'party');
   } else sysMsg(p, 'Unbekannter Befehl „/' + cmd + '“ – schreib /hilfe');
 }
-function leaveGame() { saveNow(true); saveSlot = -1; netClose(); mode = 'menu'; newGame(); }
+function leaveGame() { if (mode !== 'over') recordRun(); saveNow(true); saveSlot = -1; netClose(); mode = 'menu'; newGame(); }
 function startSingle() { openSlots('single'); }
 function netClose(reason) {
   const was = NET.role;
@@ -3496,8 +3514,8 @@ function netHostTick(dt) {
     t: 'S',
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
-        S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0)],
-    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '', [p.eq.h, p.eq.v, p.eq.g, p.eq.b, p.mat.c, p.mat.e, p.mat.h, p.cons.med, p.cons.gren, p.cons.molo]]),
+        S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0), S.pvp ? 1 : 0],
+    p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '', [p.eq.h, p.eq.v, p.eq.g, p.eq.b, p.mat.c, p.mat.e, p.mat.h, p.cons.med, p.cons.gren, p.cons.molo], [p.kills | 0, p.pvpKills | 0]]),
     ch: S.chests.filter(c => !c.open).map(c => [c.id, c.x | 0, c.y | 0, c.dun !== undefined ? 1 : 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
     tm: [...S.teams.values()].map(t => [t.id, r2(t.wood), r2(t.stone), r2(t.gold), r2(t.iron || 0), Math.floor(t.goldEarned || 0), t.name || '']),
@@ -3542,6 +3560,11 @@ function hostHandleClient(m, p) {
   } else if (m.t === 'craftEq') {
     const err = craftEquip(p, m.k === 'a' ? 'a' : 'c', String(m.id));
     if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
+  } else if (m.t === 'trOffer') {
+    const err = tradeOffer(p, +m.to, m.give, m.get);
+    if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 });
+  } else if (m.t === 'trAns') {
+    tradeAnswer(p, +m.id, !!m.ok);
   } else if (m.t === 'act') {
     interact(p);
   } else if (m.t === 'use') {
@@ -3579,6 +3602,7 @@ function netOnMessage(m, gid) {
   if (NET.role !== 'client') return;
   switch (m.t) {
     case 'M': clientInitMap(m).catch(e => console.error(e)); break;
+    case 'TR': tradeIn(m); break;
     case 'B': if (S && S.isClient) clientBuildings(m.b); break;
     case 'S': if (S && S.isClient) clientSnapshot(m); break;
     case 'E': if (S && S.isClient) for (const e of m.e) clientEvent(e); break;
@@ -3632,7 +3656,8 @@ function clientSnapshot(m) {
   const g = m.g;
   S.phase = g[1] ? 'night' : 'day'; S.phaseT = g[2]; S.night = g[3]; S.survived = g[4]; S.nightT = g[5]; S.kills = g[6];
   S.started = !!g[10]; S.ending = g[11]; S.qLen = g[12];
-  S.bossKills = g[15] || 0; S.chestsOpened = g[16] || 0; S.bloodMoon = !!g[17]; S.bloodSurvived = g[18] || 0; S.bomberKills = g[19] || 0; S.animalKills = g[20] || 0; S.weather = g[21] || 0; S.stormSurvived = g[22] || 0;
+  S.bossKills = g[15] || 0; S.chestsOpened = g[16] || 0; S.bloodMoon = !!g[17]; S.bloodSurvived = g[18] || 0; S.bomberKills = g[19] || 0; S.animalKills = g[20] || 0; S.weather = g[21] || 0; S.stormSurvived = g[22] || 0; S.pvp = !!g[24];
+  if (S.survived > (S.lastRec | 0)) { S.lastRec = S.survived; recordRun(); }
   if (m.tm) for (const a of m.tm) { const t = ensureTeam(a[0], a[6]); t.wood = a[1]; t.stone = a[2]; t.gold = a[3]; t.iron = a[4]; t.goldEarned = a[5]; t.name = a[6]; }
   const ids = new Set();
   for (const a of m.p) {
@@ -3643,6 +3668,7 @@ function clientSnapshot(m) {
     p.hp = a[5]; p.maxHp = a[6]; p.dead = a[7]; if (a[9]) p.flash = 0.15;
     if (p !== S.player && a[11]) p.name = a[11];
     if (p !== S.player && a[24]) p.skin = a[24];
+    if (a[26]) { p.kills = a[26][0]; p.pvpKills = a[26][1]; }
     if (a[25]) { const e = a[25]; p.eq = { h: e[0], v: e[1], g: e[2], b: e[3] }; p.mat = { c: e[4], e: e[5], h: e[6] }; p.cons = { med: e[7], gren: e[8], molo: e[9] }; }
     p.afk = !!a[16];
     if (a[12]) {
@@ -4684,7 +4710,7 @@ function drawTouchUI() {
     if (!active) text(label, bx, by + R + 14, 12, '#fff', 'center', '600');
     ctx.globalAlpha = 1;
   };
-  const modal = skillsOpen || forgeOpen || craftOpen || mapOpen || listOpen || touch.more;
+  const modal = skillsOpen || forgeOpen || craftOpen || mapOpen || listOpen || tradeOpen || touch.more;
   if (modal) {}
   else if (touch.joyId !== null) stick(touch.jx / uiS, touch.jy / uiS, touch.kx / uiS, touch.ky / uiS, true, '', '➤', '#ffe27a');
   else stick(H.lx / uiS, H.ly / uiS, H.lx / uiS, H.ly / uiS, false, 'Laufen', '➤', '#ffe27a');
@@ -4727,7 +4753,7 @@ function drawTouchMore() {
     ...(R3 ? [['👁', R3.eye ? 'Third-Person' : 'Ego-Ansicht', close(() => toggleView())]] : []),
     ['💬', 'Chat', close(() => chatOpen())],
     ['📍', 'Markieren', close(() => { touch.pingMode = !touch.pingMode; if (touch.pingMode) toast('Tippe auf die Stelle, die du markieren willst', '#7fd8ff'); })],
-    ...(S.players.length > 1 ? [['👥', 'Spieler', close(() => { listOpen = !listOpen; })]] : []),
+    ...(S.players.length > 1 ? [['👥', 'Spieler', close(() => { listOpen = !listOpen; })], ['🤝', 'Handeln', close(() => openTrade())]] : []),
     ['⛶', document.fullscreenElement ? 'Vollbild aus' : 'Vollbild', close(() => toggleFullscreen())],
     ['⚙', 'Einstellungen', close(() => { settingsOpen = true; mode = 'paused'; })],
     ['⏸', 'Pause / Menü', close(() => { mode = 'paused'; })],
@@ -4925,6 +4951,204 @@ function goldRate() {
   let r = 0;
   for (const b of S.buildings) if (b.type === 'hq' || b.type === 'mine') r += BDEF[b.type].gold[b.lvl - 1];
   return r;
+}
+// =====================================================================
+// Mehrspieler-Ausbau (4.0): PvP (nur wenn der Host es einschaltet), Handeln, Rangliste
+// =====================================================================
+// ---------- PvP: nur außerhalb der eigenen Basis, nicht im selben Clan, 8 s Schutz nach dem Respawn, 35 % Schaden
+function pvpSafe(q) {
+  if (S.t - (q.spawnT || -99) < 8) return true;
+  const t = teamOf(q);
+  if (!t.hq || t.hq.dead) return false;
+  const c = bCenter(t.hq), R = (withTeam(t, buildRange) + 0.5) * TS;
+  return Math.abs(q.x - c.x) < R && Math.abs(q.y - c.y) < R;
+}
+function pvpCan(a, b) { return !!S.pvp && !!a && !!b && a !== b && b.dead <= 0 && a.dead <= 0 && !b.afk && !(a.clan && a.clan === b.clan) && !pvpSafe(a) && !pvpSafe(b); }
+function pvpHit(a, b, dmg) {
+  if (!pvpCan(a, b)) return false;
+  hurtPlayer(b, dmg * 0.35);
+  if (b.dead > 0) {
+    a.pvpKills = (a.pvpKills | 0) + 1; giveXp(a, 20);
+    const m = '⚔ ' + pName(a) + ' hat ' + pName(b) + ' besiegt!';
+    addChat('', m, '#ff9a7a'); hostEv(['c', '', m, 101]);
+  }
+  return true;
+}
+// ---------- Handeln: Angebot (gibst / bekommst) an einen Mitspieler, der Host prüft und tauscht
+const TRADE_ITEMS = [['w', 'Holz', '#e0b070', 10], ['s', 'Stein', '#d0d0e0', 10], ['g', 'Gold', '#ffd36b', 10], ['i', 'Eisen', '#c8d0dc', 2],
+  ['c', '🧵 Stoff', '#e8d8b8', 1], ['e', '🔌 Elektronik', '#7fd8ff', 1], ['h', '🧪 Chemie', '#9dffb8', 1], ['med', '🩹 Medkit', '#ff9a9a', 1], ['gren', '💣 Granate', '#dddddd', 1], ['molo', '🔥 Molotow', '#ffb070', 1]];
+const TEAM_RES = { w: 'wood', s: 'stone', g: 'gold', i: 'iron' }, CONS_IDS = ['med', 'gren', 'molo'];
+function itemHave(p, k) { if (TEAM_RES[k]) return Math.floor(teamOf(p)[TEAM_RES[k]] || 0); if (CONS_IDS.includes(k)) return (p.cons && p.cons[k]) | 0; return (p.mat && p.mat[k]) | 0; }
+function itemAdd(p, k, n) { if (TEAM_RES[k]) { const t = teamOf(p); t[TEAM_RES[k]] = (t[TEAM_RES[k]] || 0) + n; } else if (CONS_IDS.includes(k)) p.cons[k] = (p.cons[k] | 0) + n; else p.mat[k] = (p.mat[k] | 0) + n; }
+function tradeClean(o) { const r = {}; for (const [k] of TRADE_ITEMS) { const n = Math.floor(+(o && o[k]) || 0); if (n > 0) r[k] = Math.min(99999, n); } return r; }
+const tradeCan = (p, o) => Object.keys(o).every(k => itemHave(p, k) >= o[k]);
+const tradeFits = (p, gets, gives) => CONS_IDS.every(k => itemHave(p, k) - (gives[k] | 0) + (gets[k] | 0) <= CONS_MAX);
+const tradeText = o => Object.keys(o).length ? TRADE_ITEMS.filter(t => o[t[0]]).map(t => o[t[0]] + ' ' + t[1].replace(/^\S+ /, '')).join(', ') : 'nichts';
+function tradeOffer(a, toId, give, get) {
+  const b = pById(toId);
+  give = tradeClean(give); get = tradeClean(get);
+  if (!b || b === a) return 'Spieler nicht gefunden';
+  if (!Object.keys(give).length && !Object.keys(get).length) return 'Das Angebot ist leer';
+  if (!tradeCan(a, give)) return 'Du hast nicht genug für dieses Angebot';
+  if (!S.trades) S.trades = new Map();
+  for (const [id, t] of S.trades) if (t.from === a.id) S.trades.delete(id);   // je Spieler ein offenes Angebot
+  const tr = { id: (S.nextTrade = (S.nextTrade | 0) + 1), from: a.id, to: b.id, give, get, t: S.t };
+  S.trades.set(tr.id, tr);
+  const msg = { id: tr.id, from: pName(a), give, get };
+  if (b === S.player) tradeIn(msg); else netSendTo(b, Object.assign({ t: 'TR' }, msg));
+  toastFor(a, '🤝 Angebot an ' + pName(b) + ' geschickt – warte auf Antwort', '#7fd8ff');
+  return null;
+}
+function tradeAnswer(b, id, ok) {
+  const tr = S.trades && S.trades.get(id);
+  if (!tr || tr.to !== b.id) return;
+  S.trades.delete(id);
+  const a = pById(tr.from);
+  if (!a) { toastFor(b, 'Der Spieler ist nicht mehr da', '#ff9a7a'); return; }
+  if (!ok) { toastFor(a, pName(b) + ' hat dein Angebot abgelehnt', '#ff9a7a'); return; }
+  const err = S.t - tr.t > 90 ? 'Das Angebot ist abgelaufen' : !tradeCan(a, tr.give) ? pName(a) + ' hat nicht mehr genug' : !tradeCan(b, tr.get) ? pName(b) + ' hat nicht genug'
+    : !tradeFits(b, tr.give, tr.get) || !tradeFits(a, tr.get, tr.give) ? 'Zu viele Verbrauchsgegenstände (max. ' + CONS_MAX + ' pro Sorte)' : null;
+  if (err) { toastFor(b, '❌ ' + err, '#ff7b6b'); toastFor(a, '❌ Handel mit ' + pName(b) + ': ' + err, '#ff7b6b'); return; }
+  for (const k in tr.give) { itemAdd(a, k, -tr.give[k]); itemAdd(b, k, tr.give[k]); }
+  for (const k in tr.get) { itemAdd(b, k, -tr.get[k]); itemAdd(a, k, tr.get[k]); }
+  sfxFor(a, 'upgrade'); sfxFor(b, 'upgrade');
+  toastFor(a, '🤝 Handel mit ' + pName(b) + ' abgeschlossen!', '#8fe08f'); toastFor(b, '🤝 Handel mit ' + pName(a) + ' abgeschlossen!', '#8fe08f');
+  NET.bDirty = true;
+}
+// Oberfläche (läuft bei jedem Spieler lokal)
+let tradeOpen = false, tradeTo = -1, tradeGive = {}, tradeGet = {};
+const tradeInbox = [];
+function tradeIn(m) { tradeInbox.push(Object.assign({ at: performance.now() }, m)); SFX.play('chime', undefined, undefined, true); }
+function openTrade(toId) {
+  if (S.players.length < 2) { toast('Handeln geht nur mit Mitspielern (online)', '#ff9a7a'); return; }
+  tradeOpen = true; if (toId !== undefined) tradeTo = toId; tradeGive = {}; tradeGet = {};
+  craftOpen = skillsOpen = forgeOpen = mapOpen = false; if (mode === 'paused') mode = 'play';
+  if (mouseLocked()) document.exitPointerLock();
+  SFX.play('click');
+}
+function actTradeSend() {
+  if (NET.role === 'client') netSendR({ t: 'trOffer', to: tradeTo, give: tradeClean(tradeGive), get: tradeClean(tradeGet) });
+  else { const err = tradeOffer(S.player, tradeTo, tradeGive, tradeGet); if (err) { toast(err, '#ff7b6b'); return; } }
+  tradeOpen = false;
+}
+function actTradeAnswer(m, ok) {
+  tradeInbox.splice(tradeInbox.indexOf(m), 1);
+  if (NET.role === 'client') netSendR({ t: 'trAns', id: m.id, ok: !!ok }); else tradeAnswer(S.player, m.id, ok);
+  SFX.play('click');
+}
+function stepper(x, y, obj, k, step, max) {
+  const v = obj[k] | 0;
+  const box = (bx, l, fn, on) => { ctx.fillStyle = on ? 'rgba(255,170,90,0.25)' : 'rgba(255,255,255,0.05)'; rr(bx, y - 11, 26, 22, 4); ctx.fill(); text(l, bx + 13, y, 15, on ? '#fff' : '#666', 'center', '700'); if (on) ui.push({ x: bx - 2, y: y - 14, w: 30, h: 28, fn }); };
+  box(x, '−', () => { obj[k] = Math.max(0, v - step); SFX.play('click'); }, v > 0);
+  text(String(v), x + 58, y, 14, v ? '#fff' : '#777', 'center', '700');
+  box(x + 90, '+', () => { obj[k] = Math.min(max, v + step); SFX.play('click'); }, v < max);
+}
+function drawTrade() {
+  const others = S.players.filter(q => q !== S.player);
+  if (!others.length) { tradeOpen = false; return; }
+  if (!others.some(q => q.id === tradeTo)) tradeTo = others[0].id;
+  const w = Math.min(660, VW - 24), rowH = 28, h = 170 + TRADE_ITEMS.length * rowH, x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.97);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('🤝 Handeln', x + 18, y + 24, 20, '#ffe27a');
+  text('×', x + w - 20, y + 23, 22, '#aaa', 'center');
+  ui.push({ x: x + w - 40, y: y + 4, w: 36, h: 36, fn: () => { tradeOpen = false; } });
+  text('Mit:', x + 18, y + 58, 13, '#aaa', 'left', '600');
+  let cx = x + 56;
+  for (const q of others) {
+    ctx.font = '600 13px ' + FONT; const cw = Math.min(150, ctx.measureText(pName(q)).width + 22);
+    if (cx + cw > x + w - 12) break;
+    const on = q.id === tradeTo;
+    ctx.fillStyle = on ? '#8a4a1e' : 'rgba(255,255,255,0.07)'; rr(cx, y + 45, cw, 26, 6); ctx.fill();
+    text(pName(q), cx + cw / 2, y + 58, 13, on ? '#fff' : '#ccc', 'center', '600');
+    ui.push({ x: cx, y: y + 43, w: cw, h: 30, fn: () => { tradeTo = q.id; SFX.play('click'); } });
+    cx += cw + 6;
+  }
+  const colW = (w - 48) / 2, y0 = y + 96;
+  text('DU GIBST', x + 18, y0, 13, '#ffb070', 'left', '700');
+  text('DU BEKOMMST', x + 30 + colW, y0, 13, '#8fe08f', 'left', '700');
+  TRADE_ITEMS.forEach(([k, name, col, step], i) => {
+    const ry = y0 + 26 + i * rowH, have = itemHave(S.player, k);
+    if (i % 2) { ctx.fillStyle = 'rgba(255,255,255,0.03)'; ctx.fillRect(x + 12, ry - 13, w - 24, rowH - 2); }
+    text(name, x + 18, ry, 13, col, 'left', '600');
+    text('(' + have + ')', x + 18 + Math.min(118, colW - 130), ry, 11, '#888', 'left', '600');
+    stepper(x + colW - 110, ry, tradeGive, k, step, have);
+    text(name, x + 30 + colW, ry, 13, col, 'left', '600');
+    stepper(x + w - 136, ry, tradeGet, k, step, CONS_IDS.includes(k) ? CONS_MAX : 99999);
+  });
+  const by = y + h - 46, ok = Object.keys(tradeClean(tradeGive)).length + Object.keys(tradeClean(tradeGet)).length > 0;
+  text('Der andere muss annehmen. Holz/Stein/Gold/Eisen kommen aus eurer Basis.', x + 18, by + 17, 11, '#999', 'left', '600');
+  button('Angebot senden', x + w - 200, by, 184, 34, () => { if (ok) actTradeSend(); }, ok, true);
+}
+function drawTradeInbox() {
+  const now = performance.now();
+  for (let i = tradeInbox.length - 1; i >= 0; i--) if (now - tradeInbox[i].at > 60000) tradeInbox.splice(i, 1);
+  const m = tradeInbox[0];
+  if (!m) return;
+  const w = Math.min(330, VW - 24), x = VW - w - 12, give = wrapLines('Du bekommst: ' + tradeText(m.give), w - 24, '600 12px ' + FONT), get = wrapLines('Du gibst: ' + tradeText(m.get), w - 24, '600 12px ' + FONT);
+  const h = 78 + (give.length + get.length) * 16, y = Math.max(170, VH * 0.36);
+  panel(x, y, w, h, 0.95);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('🤝 ' + m.from + ' will handeln' + (tradeInbox.length > 1 ? ' (+' + (tradeInbox.length - 1) + ')' : ''), x + 12, y + 18, 14, '#ffe27a', 'left', '700');
+  give.forEach((l, i) => text(l, x + 12, y + 40 + i * 16, 12, '#8fe08f', 'left', '600'));
+  get.forEach((l, i) => text(l, x + 12, y + 40 + (give.length + i) * 16, 12, '#ffb070', 'left', '600'));
+  button('Annehmen', x + 10, y + h - 34, (w - 30) / 2, 26, () => actTradeAnswer(m, true), true, true);
+  button('Ablehnen', x + 20 + (w - 30) / 2, y + h - 34, (w - 30) / 2, 26, () => actTradeAnswer(m, false), false, true);
+}
+// ---------- Rangliste: eigene Runden (auf diesem Gerät) + Online-Liste auf dem Spielserver
+const RUNS_KEY = 'nachtwache.runden';
+let rankOpen = false, rankTab = 'web', rankData = null, rankMsg = '';
+const scoreUrl = () => ONLINE_URL ? ONLINE_URL.replace(/^ws/, 'http').replace(/\/ws$/, '/scores') : null;
+const myRuns = () => store.get(RUNS_KEY, []) || [];
+function recordRun() {
+  if (!S || !S.player || !S.started) return;
+  if (!S.runId) S.runId = Math.random().toString(36).slice(2, 10);
+  const me = S.player, solo = S.players.length === 1 && !S.isClient;
+  const e = { run: S.runId, name: me.name || playerName, nights: S.survived, kills: solo ? S.kills : (me.kills | 0), lvl: me.lvl, at: Date.now(), online: !!NET.role };
+  const list = myRuns().filter(r => r.run !== e.run); list.push(e);
+  list.sort((a, b) => b.nights - a.nights || b.kills - a.kills);
+  store.set(RUNS_KEY, list.slice(0, 10));
+  const url = scoreUrl();
+  if (!url || S.isClient || !e.nights || HEADLESS) return;
+  const all = S.players.filter(q => q.name).map(q => ({ run: S.runId + '-' + q.name.toLowerCase(), name: q.name, nights: S.survived, kills: solo ? S.kills : (q.kills | 0), lvl: q.lvl, online: !!NET.role }));
+  try { fetch(url, { method: 'POST', body: JSON.stringify({ list: all }), headers: { 'Content-Type': 'text/plain' } }).catch(() => {}); } catch (err) {}
+}
+function loadRanks() {
+  const url = scoreUrl();
+  if (!url) { rankMsg = 'Kein Online-Server eingestellt.'; return; }
+  rankData = null; rankMsg = 'Lade … (der Server braucht beim ersten Mal bis zu einer Minute zum Aufwachen)';
+  fetch(url, { cache: 'no-store' }).then(r => r.json()).then(d => { rankData = Array.isArray(d) ? d : []; rankMsg = ''; })
+    .catch(() => { rankMsg = 'Server nicht erreichbar – versuch es gleich nochmal.'; });
+}
+function openRanks() { rankOpen = true; if (rankTab === 'web') loadRanks(); SFX.play('click'); }
+function drawRanks() {
+  const w = Math.min(640, VW - 24), rowH = 26, n = 10, h = 150 + n * rowH, x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.97);
+  ui.push({ x, y, w, h, fn: () => {} });
+  text('📊 Rangliste', x + 18, y + 24, 20, '#ffe27a');
+  text('×', x + w - 20, y + 23, 22, '#aaa', 'center');
+  ui.push({ x: x + w - 40, y: y + 4, w: 36, h: 36, fn: () => { rankOpen = false; } });
+  [['web', '🌐 Online'], ['me', '📒 Meine Runden']].forEach(([id, l], i) => {
+    const tx = x + 170 + i * 150, on = rankTab === id;
+    ctx.fillStyle = on ? '#8a4a1e' : 'rgba(255,255,255,0.07)'; rr(tx, y + 10, 142, 28, 6); ctx.fill();
+    text(l, tx + 71, y + 24, 13, on ? '#fff' : '#ccc', 'center', '700');
+    ui.push({ x: tx, y: y + 8, w: 142, h: 32, fn: () => { rankTab = id; if (id === 'web') loadRanks(); SFX.play('click'); } });
+  });
+  const list = (rankTab === 'web' ? rankData || [] : myRuns()).slice(0, n), hy = y + 62;
+  const cols = [[x + 18, '#', 'left'], [x + 52, 'Name', 'left'], [x + w - 250, 'Nächte', 'right'], [x + w - 170, 'Kills', 'right'], [x + w - 105, 'Level', 'right'], [x + w - 18, 'Datum', 'right']];
+  for (const [cx, l, al] of cols) text(l, cx, hy, 11, '#999', al, '700');
+  list.forEach((r, i) => {
+    const ry = hy + 24 + i * rowH, me = rankTab === 'me' ? r.run === (S && S.runId) : r.name === playerName;
+    if (me) { ctx.fillStyle = 'rgba(255,190,110,0.12)'; rr(x + 10, ry - 12, w - 20, rowH - 2, 5); ctx.fill(); }
+    text(i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1), x + 18, ry, 13, '#fff', 'left', '700');
+    text(String(r.name || '?').slice(0, 16) + (r.online ? ' 🌐' : ''), x + 52, ry, 13, '#eee', 'left', '600');
+    text(String(r.nights), x + w - 250, ry, 13, '#ffd36b', 'right', '700');
+    text(String(r.kills), x + w - 170, ry, 13, '#ddd', 'right', '600');
+    text(String(r.lvl), x + w - 105, ry, 13, '#ddd', 'right', '600');
+    text(r.at ? fmtDate(r.at).split(' ')[0] : '', x + w - 18, ry, 12, '#999', 'right', '600');
+  });
+  if (!list.length) text(rankTab === 'web' ? (rankMsg || 'Noch keine Einträge – überlebe eine Nacht!') : 'Noch keine Runden – überlebe deine erste Nacht!', x + w / 2, hy + 80, 14, '#aaa', 'center', '600');
+  text(rankTab === 'web' ? 'Alle Spieler, ab der ersten überlebten Nacht. Der kostenlose Server vergisst die Liste, wenn er neu startet.' : 'Deine 10 besten Runden auf diesem Gerät.', x + w / 2, y + h - 18, 11, '#888', 'center', '600');
 }
 // ---------- Tutorial (4.0): kurze Schritte für Neue – PC und Handy getrennt, jederzeit überspringbar
 let tut = null;
@@ -5214,6 +5438,9 @@ function drawHUD() {
   if (forgeOpen) drawForge();
   if (craftOpen) drawCraft();
   if (listOpen && !skillsOpen && !forgeOpen && !craftOpen) drawPlayerList();
+  if (tradeOpen) drawTrade();
+  if (mode === 'play' && !tradeOpen) drawTradeInbox();
+  if (S.pvp && mode === 'play') text('⚔ PvP AN · außerhalb der Basen', VW - 14, 54, 12, '#ff8a6a', 'right', '700');
   if (mapOpen) drawBigMap();
   drawTouchUI();
   drawAchPopup(1 / 60);
@@ -5356,16 +5583,17 @@ let listOpen = false;
 function drawPlayerList() {
   const list = S.players.slice().sort((a, b) => (a.clan || '~').localeCompare(b.clan || '~') || a.id - b.id);
   const cols = list.length > 8 ? 2 : 1, colW = Math.min(440, (VW - 24) / cols), rowH = 28, rows = Math.ceil(list.length / cols);
-  const W = colW * cols, h = 64 + rows * rowH, X = VW / 2 - W / 2, y = 64;
+  const W = colW * cols, h = 84 + rows * rowH, X = VW / 2 - W / 2, y = 64;
   panel(X, y, W, h, 0.92);
   text('👥 Spieler (' + list.length + '/16)' + (NET.room ? ' · Raum ' + NET.room : ''), X + 16, y + 22, 16, '#ffe27a');
-  text('Clan · Name · Level', X + W - 16, y + 22, 11, '#999', 'right', '600');
+  text('Clan · Name · Level · Kills', X + W - 16, y + 22, 11, '#999', 'right', '600');
+  text(isTouch ? 'Handeln: ☰ Mehr → 🤝 Handeln' : 'Handeln: ESC → 🤝 Handeln', X + W / 2, y + h - 14, 11, '#aaa', 'center', '600');
   list.forEach((q, i) => {
     const x = X + Math.floor(i / rows) * colW, w = colW, ry = y + 48 + (i % rows) * rowH;
     if (q === S.player) { ctx.fillStyle = 'rgba(255,255,255,0.07)'; rr(x + 8, ry - 12, w - 16, rowH - 4, 6); ctx.fill(); }
     ctx.fillStyle = PLAYER_COL[q.id % 8]; circle(x + 22, ry + 2, 7); ctx.fill();
     text((q.clan ? '[' + q.clan + '] ' : '') + (q.name || 'Spieler'), x + 38, ry + 2, 14, q.clan && q.clan === S.player.clan ? '#7fffd0' : '#fff', 'left', '600');
-    text('Lv ' + q.lvl + (q.afk ? ' · 💤' : '') + (q.dead > 0 ? ' · ☠' : '') + (q.ping ? ' · ' + Math.round(q.ping) + ' ms' : ''), x + w - 16, ry + 2, 12, '#ccc', 'right', '600');
+    text('Lv ' + q.lvl + ' · ' + (q.kills | 0) + ' Kills' + (S.pvp && q.pvpKills ? ' · ⚔ ' + q.pvpKills : '') + (q.afk ? ' · 💤' : '') + (q.dead > 0 ? ' · ☠' : '') + (q.ping ? ' · ' + Math.round(q.ping) + ' ms' : ''), x + w - 16, ry + 2, 12, '#ccc', 'right', '600');
   });
 }
 function toggleCraft() {
@@ -5775,7 +6003,9 @@ function drawOverlays() {
       button('🎨 SKIN', cx + bw / 2 + 10, y, bw / 2 - 3, 34, () => { skinOpen = true; }, false, true);
       button('⚙ EINSTELL.', cx + bw + 17, y, bw / 2 - 7, 34, () => { settingsOpen = true; }, false, true);
       y += 46;
-      if (DESKTOP) { button('✖ BEENDEN', cx - bw / 2, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true); y += 44; }
+      button('📊 RANGLISTE', cx - bw * 1.5 - 10, y, bw, 34, openRanks, false, true);
+      if (DESKTOP) button('✖ BEENDEN', cx - bw / 2, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true);
+      y += 44;
     } else {
       const bx = cx - bw / 2;
       button('▶ EINZELSPIELER', bx, y, bw, bh + 6, startSingle, true); y += bh + 18;
@@ -5785,6 +6015,7 @@ function drawOverlays() {
       button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
       button('🎨 SKIN ANPASSEN', bx, y, bw / 2 - 5, 34, () => { skinOpen = true; }, false, true);
       button('⚙ EINSTELLUNGEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { settingsOpen = true; }, false, true); y += 44;
+      button('📊 RANGLISTE', bx, y, bw, 34, openRanks, false, true); y += 44;
       if (DESKTOP) { button('✖ BEENDEN', bx, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true); y += 44; }
       y += 4;
     }
@@ -5814,6 +6045,7 @@ function drawOverlays() {
     if (skinOpen) drawSkinEditor();
     if (settingsOpen) drawSettings();
     if (slotPick) drawSlotPicker();
+    if (rankOpen) drawRanks();
   } else if (mode === 'paused') {
     titleText(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 60, '#e8dcd0');
     text('Nacht ' + S.night + ' · ' + S.kills + ' Kills · ' + S.buildings.length + ' Gebäude', cx, VH * 0.3 + 48, 17, '#ccc', 'center', '600');
@@ -5822,7 +6054,8 @@ function drawOverlays() {
     button('⚙ Einstellungen', cx - 120, VH * 0.48 + 62, 240, 44, () => { settingsOpen = true; });
     button(NET.role ? 'Spiel verlassen' : 'Hauptmenü', cx - 120, VH * 0.48 + 116, 240, 44, leaveGame);
     if (canSave()) button('💾 Jetzt speichern', cx - 120, VH * 0.48 + 170, 240, 40, () => saveNow(), false, true);
-    else if (NET.role === 'client') text('Die Welt speichert der Host – dein Charakter kommt mit deinem Namen zurück.', cx, VH * 0.48 + 190, 13, '#aaa', 'center', '600');
+    if (S.players.length > 1) button('🤝 Handeln', cx - 120, VH * 0.48 + (canSave() ? 220 : 170), 240, 40, () => openTrade(), false, true);
+    else if (NET.role === 'client') text('Die Welt speichert der Host – dein Charakter kommt mit deinem Namen zurück.', cx, VH * 0.48 + 236, 13, '#aaa', 'center', '600');
     if (settingsOpen) drawSettings();
   } else if (mode === 'over') {
     const r = lastResult;
@@ -5902,13 +6135,14 @@ if (!HEADLESS) {
     if (e.code === 'Escape' && achOpen) { achOpen = false; return; }
     if (e.code === 'Escape' && skinOpen) { skinOpen = false; return; }
     if (e.code === 'Escape' && slotPick) { slotPick = null; return; }
-    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick) startSingle(); return; }
+    if (e.code === 'Escape' && rankOpen) { rankOpen = false; return; }
+    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick && !rankOpen) startSingle(); return; }
     if (mode === 'over') { if ((e.code === 'Enter' || e.code === 'Space') && modeT > 1 && NET.role !== 'client') startGame(); return; }
     if (e.code === 'Escape' && settingsOpen) { settingsOpen = false; return; }
     if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
     if (mode !== 'play') return;
     if (e.code === 'Escape') {
-      if (mapOpen) mapOpen = false; else if (craftOpen) craftOpen = false; else if (forgeOpen) forgeOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
+      if (tradeOpen) tradeOpen = false; else if (mapOpen) mapOpen = false; else if (craftOpen) craftOpen = false; else if (forgeOpen) forgeOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
       return;
     }
     if (e.code === 'KeyP') { mode = 'paused'; return; }
@@ -5963,7 +6197,7 @@ if (!HEADLESS) {
   canvas.addEventListener('mousedown', e => {
     SFX.init();
     if (mouseLocked()) { e = { button: e.button, clientX: VW / 2, clientY: VH / 2 }; }
-    else if (R3 && R3.fp && mode === 'play' && !isTouch && e.button === 0 && !hitUI(e.clientX, e.clientY) && !skillsOpen && !forgeOpen && !craftOpen && !mapOpen && !listOpen) {
+    else if (R3 && R3.fp && mode === 'play' && !isTouch && e.button === 0 && !hitUI(e.clientX, e.clientY) && !skillsOpen && !forgeOpen && !craftOpen && !mapOpen && !listOpen && !tradeOpen) {
       // Maus fangen versuchen – aber trotzdem sofort zuschlagen (klappt auch, wenn der Browser das Fangen verweigert)
       try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (err) {}
       e = { button: 0, clientX: VW / 2, clientY: VH / 2 };
@@ -6100,7 +6334,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
