@@ -97,7 +97,7 @@
 
   // ---------------------------------------------------------------- Setup
   let fpView = null, fpTools = null, fpMetal = null, fpHand = null, lastFp = null;
-  let roofSlab, roofTank, roofAC, antenna, signBox, trafficLight, blastDoor, swConsole, floatRock, riftObj = null, ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
+  let hutWall, hutRoof, hutGable, boxBody, boxLid, well, curb, zebra, bench, bin, roofSlab, roofTank, roofAC, antenna, signBox, trafficLight, blastDoor, swConsole, floatRock, riftObj = null, ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
   let projArrow, projBall, parts, glows, rain;
@@ -210,6 +210,33 @@
       ruinTop = inst(k.build().lit, matInst, 9000, true); }
     bunkerWall = inst(new Kit().lit(BX(1, 2.2, 1), '#ffffff', 0, 1.1, 0).lit(BX(1.02, 0.18, 1.02), '#d8a82a', 0, 0.09, 0).lit(BX(1.02, 0.06, 1.02), '#1a1a1a', 0, 0.2, 0)
       .lit(BX(1.04, 0.08, 1.04), '#6a6e76', 0, 2.2, 0).build().lit, matInst, 6000, true);
+    // Holzhütte: Wand aus waagerechten Balken mit Eckpfosten, Satteldach (Größe je Hütte), Giebel
+    { const k = new Kit();
+      for (let j = 0; j < 6; j++) k.lit(CY(0.16, 0.16, 1.02, 7), j % 2 ? '#ffffff' : '#ece4dc', 0, 0.16 + j * 0.33, 0, 0, 0, Math.PI / 2, 1, 1, 1, 0.12);
+      k.lit(BX(1.02, 0.1, 0.36), '#bfb2a6', 0, 2.02, 0);
+      hutWall = inst(k.build().lit, matInst, 3000, true); }
+    { const k = new Kit();   // Dachfläche 1×1 (wird je Hütte gestreckt), Schindelreihen
+      for (let j = 0; j < 4; j++) k.lit(BX(1.04, 0.07, 0.29), j % 2 ? '#ffffff' : '#e6dfd8', 0, 0.06 + j * 0.03, -0.38 + j * 0.25, 0, 0, 0, 1, 1, 1, 0.15);
+      hutRoof = inst(k.build().lit, matInst, 400, true); }
+    { const sh = new T.Shape(); sh.moveTo(-0.5, 0); sh.lineTo(0.5, 0); sh.lineTo(0, 1); sh.lineTo(-0.5, 0);
+      hutGable = inst(new Kit().lit(new T.ExtrudeGeometry(sh, { depth: 0.12, bevelEnabled: false }), '#ffffff', 0, 0, -0.06).build().lit, matInst, 400, true); }
+    // Truhe: Holzkiste mit Eisenbeschlägen; Deckel extra (klappt auf, wenn leer)
+    boxBody = inst(new Kit().lit(BX(0.7, 0.4, 0.46), '#8a5a32', 0, 0.2, 0).lit(BX(0.72, 0.06, 0.48), '#5a5e66', 0, 0.06, 0).lit(BX(0.72, 0.06, 0.48), '#5a5e66', 0, 0.36, 0)
+      .lit(BX(0.06, 0.42, 0.48), '#4a4e56', 0.25, 0.2, 0).lit(BX(0.06, 0.42, 0.48), '#4a4e56', -0.25, 0.2, 0).lit(BX(0.1, 0.12, 0.03), '#d8b040', 0, 0.32, 0.24).build().lit, matInst, 200, true);
+    boxLid = inst(new Kit().lit(CY(0.23, 0.23, 0.7, 10, false, 0, Math.PI), '#9a6a3a', 0, 0, 0.23, 0, 0, Math.PI / 2).lit(CY(0.24, 0.24, 0.06, 10, false, 0, Math.PI), '#5a5e66', 0.25, 0, 0.23, 0, 0, Math.PI / 2)
+      .lit(CY(0.24, 0.24, 0.06, 10, false, 0, Math.PI), '#5a5e66', -0.25, 0, 0.23, 0, 0, Math.PI / 2).build().lit, matInst, 200, true);
+    // Dorfbrunnen
+    { const k = new Kit().lit(CY(0.75, 0.8, 0.7, 12, true), '#8a8680', 0, 0.35, 0).lit(TO(0.75, 0.1, 5, 14), '#9a958e', 0, 0.7, 0, Math.PI / 2).lit(CY(0.68, 0.68, 0.05, 12), '#1a2a3a', 0, 0.45, 0)
+        .lit(BX(0.12, 1.5, 0.12), '#6a4a2a', 0.65, 1.2, 0).lit(BX(0.12, 1.5, 0.12), '#6a4a2a', -0.65, 1.2, 0).lit(CY(0.06, 0.06, 1.4, 6), '#5a3a20', 0, 1.75, 0, 0, 0, Math.PI / 2)
+        .lit(BX(1.7, 0.08, 1.0), '#7a3a26', 0, 2.1, 0.25, 0.5).lit(BX(1.7, 0.08, 1.0), '#7a3a26', 0, 2.1, -0.25, -0.5).lit(CY(0.12, 0.1, 0.22, 8), '#6a5a4a', 0, 1.2, 0);
+      well = inst(k.build().lit, matInst, 20, true); }
+    // Stadt: erhöhter Bürgersteig, Zebrastreifen, Bank, Mülltonne
+    curb = inst(new Kit().lit(BX(1, 0.07, 1), '#ffffff', 0, 0.035, 0, 0, 0, 0, 1, 1, 1, 0.04).build().lit, matInst, 3000, true);
+    { const k = new Kit(); for (let j = 0; j < 3; j++) k.lit(BX(0.95, 0.012, 0.16), '#e8e8e0', 0, 0.006, -0.33 + j * 0.33, 0, 0, 0, 1, 1, 1, 0.03);
+      zebra = inst(k.build().lit, matInst, 600, false); }
+    bench = inst(new Kit().lit(BX(1.1, 0.06, 0.36), '#8a5a32', 0, 0.42, 0).lit(BX(1.1, 0.3, 0.06), '#8a5a32', 0, 0.62, -0.17, -0.2).lit(BX(0.06, 0.42, 0.36), '#3a3e46', 0.48, 0.21, 0)
+      .lit(BX(0.06, 0.42, 0.36), '#3a3e46', -0.48, 0.21, 0).build().lit, matInst, 300, true);
+    bin = inst(new Kit().lit(CY(0.2, 0.17, 0.62, 10), '#4a6a4a', 0, 0.31, 0).lit(CY(0.22, 0.22, 0.06, 10), '#3a4a3a', 0, 0.64, 0).lit(BX(0.24, 0.03, 0.05), '#2a2a2a', 0, 0.68, 0).build().lit, matInst, 300, true);
     // Stadt: Flachdach mit Brüstung, Wassertank, Klimakasten, Antenne, Leuchtreklame, Ampel
     roofSlab = inst(new Kit().lit(BX(1, 0.2, 1), '#ffffff', 0, 0.1, 0).build().lit, matInst, 400, true);
     roofTank = inst(new Kit().lit(CY(0.55, 0.55, 1.1, 10), '#8a6a4a', 0, 1.25, 0).lit(CY(0.58, 0.58, 0.08, 10), '#5a4a3a', 0, 1.82, 0).lit(CO(0.6, 0.3, 10), '#5a4a3a', 0, 2.0, 0)
@@ -450,59 +477,127 @@
   }
 
   // ---------------------------------------------------------------- Boden-Textur
+  // Kachelbare Detailtextur: R = Gras/Erde, G = Sand/Schnee, B = Stein/Asphalt (Mittelwert je ~0.5)
+  let detailTex = null;
+  function makeDetail() {
+    const N = 256, c = document.createElement('canvas'); c.width = c.height = N;
+    const g = c.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+    const R = new Float32Array(N * N).fill(0.5), Gc = new Float32Array(N * N), B = new Float32Array(N * N);
+    const rnd = (i) => hash(i * 1.37 + 0.5);
+    // weiches, kachelbares Rauschen (Summe aus Sinuswellen mit ganzzahligen Perioden)
+    const wave = (x, y, k, o) => { let v = 0; for (let j = 0; j < 6; j++) { const fx = (1 + (j * 3 + k) % 5) * (1 + (j >> 1)), fy = (1 + (j * 7 + k) % 4) * (1 + (j >> 2)); v += Math.sin((x * fx + y * fy) / N * TAU + o + j * 1.7) / (1 + j * 0.6); } return v; };
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const i = y * N + x, n1 = wave(x, y, 1, 0.3), n2 = wave(x, y, 3, 2.1);
+      R[i] = 0.5 + n1 * 0.025 + (rnd(i) - 0.5) * 0.12;
+      Gc[i] = 0.5 + n2 * 0.07 + Math.sin((x * 2 + y * 5) / N * TAU * 3 + n1 * 1.5) * 0.06 + (rnd(i + 9e5) - 0.5) * 0.1;   // Sandrippel
+      B[i] = 0.5 + n1 * 0.04 + (rnd(i + 3e5) - 0.5) * 0.3;                                                                 // Körnung
+    }
+    // Grashalme: kurze dunkle/helle Striche (mit Umbruch an den Rändern)
+    for (let k = 0; k < 2600; k++) {
+      let x = rnd(k + 11) * N, y = rnd(k + 22) * N; const len = 2 + rnd(k + 33) * 4, a = rnd(k + 44) * TAU, v = rnd(k + 55) < 0.55 ? -0.2 : 0.17;
+      for (let t = 0; t < len; t++) { const xi = ((Math.round(x) % N) + N) % N, yi = ((Math.round(y) % N) + N) % N; R[yi * N + xi] += v * (1 - t / len * 0.5); x += Math.cos(a); y += Math.sin(a); }
+    }
+    // Steinplatten-Fugen und Risse im B-Kanal
+    for (let k = 0; k < 40; k++) {
+      let x = rnd(k + 777) * N, y = rnd(k + 888) * N, a = rnd(k + 999) * TAU;
+      for (let t = 0; t < 30; t++) { const xi = ((Math.round(x) % N) + N) % N, yi = ((Math.round(y) % N) + N) % N; B[yi * N + xi] -= 0.22; a += (rnd(k * 31 + t) - 0.5) * 0.9; x += Math.cos(a); y += Math.sin(a); }
+    }
+    for (let i = 0; i < N * N; i++) { d[i * 4] = G.clamp(R[i], 0, 1) * 255; d[i * 4 + 1] = G.clamp(Gc[i], 0, 1) * 255; d[i * 4 + 2] = G.clamp(B[i], 0, 1) * 255; d[i * 4 + 3] = 255; }
+    g.putImageData(img, 0, 0);
+    const t = new T.CanvasTexture(c);
+    t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 4; t.minFilter = T.LinearMipmapLinearFilter; t.magFilter = T.LinearFilter;
+    return t;
+  }
+  let maskTex = null, hutFloor = new Set(), villageDirt = new Map();
   function buildGround(S) {
-    const MAP = G.MAP, px = MAP > 400 ? 4 : MAP > 260 ? 5 : 6;
-    // 1) grobe Farbflecken pro Feld, weich hochskaliert
+    const MAP = G.MAP, px = MAP > 600 ? 3 : MAP > 400 ? 4 : MAP > 260 ? 5 : 6;
+    // 1) grobe Farbflecken pro Feld, weich hochskaliert; dazu eine Maske, welcher Untergrund wo liegt
     const small = document.createElement('canvas'); small.width = small.height = MAP;
     const sg = small.getContext('2d'), img = sg.createImageData(MAP, MAP);
+    const mc = document.createElement('canvas'); mc.width = mc.height = MAP;
+    const mg = mc.getContext('2d'), mimg = mg.createImageData(MAP, MAP);
     // Warnstreifen: vor den Tresortüren und unter den Sicherungsschaltern
     const hazard = new Set();
     if (G.vaultDoors) for (let k = 0; k < G.DUN.n; k++) {
       for (const i of G.vaultDoors(k)) for (const d of [1, -1, MAP, -MAP]) if (S.res[i + d] !== 8) { hazard.add(i + d); if (S.res[i + 2 * d] !== 8) hazard.add(i + 2 * d); }
       for (const sw of G.dunSwitches(k)) { hazard.add((sw.ty + 1) * MAP + sw.tx); hazard.add(sw.ty * MAP + sw.tx); }
     }
+    // Dörfer (Erdplatz) und Hüttenböden (Dielen)
+    const dirt = new Map(), floor = new Set(), sp = G.worldSpots ? G.worldSpots() : { villages: [], huts: [] };
+    for (const v of sp.villages) for (let y = v.y - 13; y <= v.y + 13; y++) for (let x = v.x - 13; x <= v.x + 13; x++) {
+      const d = Math.hypot(x - v.x, y - v.y) + Math.sin(x * 0.7) * 0.8 + Math.cos(y * 0.6) * 0.8;
+      if (d < 12) dirt.set(y * MAP + x, Math.min(1, (12 - d) / 4));
+    }
+    for (const u of sp.huts) {
+      for (let y = u.y0; y <= u.y0 + u.h; y++) for (let x = u.x0; x <= u.x0 + u.w; x++) floor.add(y * MAP + x);   // inkl. Wandfelder, sonst blutet Schnee/Gras in den Raum
+      for (let y = u.y0 - 2; y <= u.y0 + u.h + 2; y++) for (let x = u.x0 - 2; x <= u.x0 + u.w + 2; x++) { const i = y * MAP + x; if (!dirt.has(i)) dirt.set(i, 0.55); }
+    }
     for (let y = 0; y < MAP; y++) for (let x = 0; x < MAP; x++) {
-      const v = S.variant[y * MAP + x], n = Math.sin(x * 0.11) * Math.cos(y * 0.13) + Math.sin((x + y) * 0.05) * 0.6;
-      const bi = S.biome ? S.biome[y * MAP + x] : 0;
-      let r = 82 + n * 8 + (v % 9) - 4, g = 102 + n * 10 + (v % 13) - 6, b = 60 + n * 5;
-      if (v < 14) { r = 104; g = 92; b = 70; }           // Erde / Asche
+      const ii = y * MAP + x, v = S.variant[ii], n = Math.sin(x * 0.11) * Math.cos(y * 0.13) + Math.sin((x + y) * 0.05) * 0.6, n2 = Math.sin(x * 0.023 + 1.3) * Math.cos(y * 0.019) ;
+      const bi = S.biome ? S.biome[ii] : 0;
+      let r = 78 + n * 8 + n2 * 10 + (v % 9) - 4, g = 104 + n * 10 + n2 * 8 + (v % 13) - 6, b = 56 + n * 5, mr = 1, mgc = 0, mb = 0;
+      if (v < 14) { r = 104; g = 92; b = 70; mr = 0.4; mgc = 0.6; }           // Erde / Asche
       else if (v > 245) { r += 12; g += 14; b += 4; }
-      if (bi === 2) { r = 196 + n * 6 + (v % 9); g = 166 + n * 5 + (v % 7); b = 108 + n * 3; }
-      else if (bi === 3) { r = 222 + n * 3 + (v % 7); g = 230 + n * 3 + (v % 5); b = 238 + (v % 5); if (v < 20) { r = 160; g = 176; b = 190; } }
-      else if (bi === 4) { r = 58 + n * 5 + (v % 7); g = 72 + n * 6; b = 44 + n * 3; if (v % 9 === 0) { r = 38; g = 60; b = 66; } }
+      if (bi === 2) { r = 196 + n * 6 + n2 * 8 + (v % 9); g = 166 + n * 5 + n2 * 6 + (v % 7); b = 108 + n * 3; mr = 0; mgc = 1; }
+      else if (bi === 3) { r = 222 + n * 3 + (v % 7); g = 230 + n * 3 + (v % 5); b = 238 + (v % 5); mr = 0; mgc = 1; if (v < 20) { r = 160; g = 176; b = 190; mgc = 0.3; mb = 0.7; } }
+      else if (bi === 4) { r = 58 + n * 5 + (v % 7); g = 72 + n * 6; b = 44 + n * 3; if (v % 9 === 0) { r = 38; g = 60; b = 66; mr = 0.3; mgc = 0.7; } }
       else if (bi === 5) {
-        r = 24 + (v % 7); g = 14 + (v % 5); b = 36 + (v % 9);
+        r = 24 + (v % 7); g = 14 + (v % 5); b = 36 + (v % 9); mr = 0; mb = 1;
         const vein = Math.abs(Math.sin(x * 0.31 + Math.cos(y * 0.17) * 2.2)) < 0.07 || Math.abs(Math.sin(y * 0.27 + Math.sin(x * 0.13) * 2.6)) < 0.06;
         if (vein) { r = 150; g = 70; b = 230; } else if (v % 11 === 0) { r = 80; g = 36; b = 120; }
       }
       if (bi === 6) {
-        if (G.isStreet(x, y)) { const m = (x + 1500) % 15 === 1 || (y + 1500) % 15 === 1; r = 58 + (v % 6); g = 58 + (v % 6); b = 62 + (v % 5); if (m && (x + y) % 3 === 0 && !((x + 1500) % 15 < 3 && (y + 1500) % 15 < 3)) { r = 170; g = 150; b = 70; } }
-        else { r = 112 + (v % 11); g = 108 + (v % 9); b = 100 + (v % 7); if (v < 30) { r = 82; g = 92; b = 62; } }
+        mr = 0; mb = 1;
+        const sx = (x + 1500) % 15, sy = (y + 1500) % 15, lot = G.lotAt ? G.lotAt(Math.floor(x / 15), Math.floor(y / 15)) : null;
+        if (G.isStreet(x, y)) { r = 54 + (v % 6); g = 55 + (v % 6); b = 60 + (v % 5); }
+        else if (sx === 3 || sx === 14 || sy === 3 || sy === 14) { r = 138 + (v % 9); g = 134 + (v % 7); b = 126 + (v % 6); }   // Bürgersteig
+        else if (lot && lot.kind === 'park') { r = 70 + (v % 9) + n * 6; g = 98 + (v % 11) + n * 8; b = 50; mr = 1; mb = 0; }
+        else { r = 112 + (v % 11); g = 108 + (v % 9); b = 100 + (v % 7); if (v < 30) { r = 82; g = 92; b = 62; mr = 0.6; mb = 0.4; } }
       } else if (bi === 7) {
         const bk = Math.floor((x - G.DUN.x0) / G.DUN.w), tone = [[50, 50, 54], [58, 50, 42], [52, 60, 64]][G.clamp(bk, 0, 2)];
-        r = tone[0] + (v % 6); g = tone[1] + (v % 5); b = tone[2] + (v % 6); if ((x + y) % 2 === 0) { r -= 5; g -= 5; b -= 5; }
-        if (hazard.has(y * MAP + x)) { const st = (x + y) % 2 === 0; r = st ? 200 : 30; g = st ? 160 : 28; b = st ? 30 : 24; }
+        r = tone[0] + (v % 6); g = tone[1] + (v % 5); b = tone[2] + (v % 6); if ((x + y) % 2 === 0) { r -= 5; g -= 5; b -= 5; } mr = 0; mb = 1;
+        if (hazard.has(ii)) { const st = (x + y) % 2 === 0; r = st ? 200 : 30; g = st ? 160 : 28; b = st ? 30 : 24; }
       }
-      if (S.res[y * MAP + x] === 6) { r = 92 + (v % 9); g = 86 + (v % 7); b = 80 + (v % 5); }
-      const i = (y * MAP + x) * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+      const dt = dirt.get(ii);
+      if (dt && bi !== 6 && bi !== 7) {   // festgetretene Erde im Dorf
+        const a = dt * (bi === 3 ? 0.5 : 0.85);
+        r += (112 + (v % 9) - r) * a; g += (88 + (v % 7) - g) * a; b += (60 - b) * a; mr = mr * (1 - a) + 0.3 * a; mgc = mgc * (1 - a) + 0.7 * a; mb *= 1 - a;
+      }
+      if (floor.has(ii)) { const pl = (y % 2) * 8 + (v % 5); r = 92 + pl; g = 66 + pl * 0.7; b = 42 + pl * 0.4; mr = 0; mgc = 0.2; mb = 0.8; }
+      if (S.res[ii] === 6) { r = 92 + (v % 9); g = 86 + (v % 7); b = 80 + (v % 5); mr = 0; mgc = 0.2; mb = 0.8; }
+      const i = ii * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+      mimg.data[i] = mr * 255; mimg.data[i + 1] = mgc * 255; mimg.data[i + 2] = mb * 255; mimg.data[i + 3] = 255;
     }
-    sg.putImageData(img, 0, 0);
+    sg.putImageData(img, 0, 0); mg.putImageData(mimg, 0, 0);
+    hutFloor = floor; villageDirt = dirt;
     const c = document.createElement('canvas'); c.width = c.height = MAP * px;
     const g = c.getContext('2d');
     g.imageSmoothingEnabled = true; g.drawImage(small, 0, 0, c.width, c.height);
-    // 2) feine Grashalm-Sprenkel
-    for (let i = 0; i < MAP * MAP * 1.2; i++) {
-      const x = hash(i) * c.width, y = hash(i + 7777) * c.height, k = hash(i + 333);
-      g.fillStyle = k < 0.5 ? 'rgba(30,60,20,0.18)' : k < 0.85 ? 'rgba(150,190,90,0.14)' : 'rgba(110,90,60,0.16)';
-      g.fillRect(x, y, 1 + (k * 2 | 0), 1);
-    }
     if (groundTex) groundTex.dispose();
+    if (maskTex) maskTex.dispose();
+    if (!detailTex) detailTex = makeDetail();
     groundTex = new T.CanvasTexture(c);
     groundTex.colorSpace = T.SRGBColorSpace;
     groundTex.anisotropy = 4;
     groundTex.magFilter = T.LinearFilter; groundTex.minFilter = T.LinearMipmapLinearFilter;
-    if (ground) { ground.geometry.dispose(); scene.remove(ground); }
-    ground = new T.Mesh(new T.PlaneGeometry(MAP, MAP), new T.MeshLambertMaterial({ color: '#ffffff', map: groundTex }));
+    maskTex = new T.CanvasTexture(mc); maskTex.magFilter = T.LinearFilter; maskTex.minFilter = T.LinearFilter; maskTex.generateMipmaps = false;
+    if (ground) { ground.geometry.dispose(); ground.material.dispose(); scene.remove(ground); }
+    const mat = new T.MeshLambertMaterial({ color: '#ffffff', map: groundTex });
+    mat.onBeforeCompile = sh => {
+      sh.uniforms.detailMap = { value: detailTex }; sh.uniforms.maskMap = { value: maskTex }; sh.uniforms.mapSize = { value: MAP };
+      sh.fragmentShader = 'uniform sampler2D detailMap; uniform sampler2D maskMap; uniform float mapSize;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        {
+          vec2 w = vMapUv * mapSize;
+          vec3 m = texture2D(maskMap, vMapUv).rgb;
+          float dg = texture2D(detailMap, w * 0.5).r * 0.65 + texture2D(detailMap, w * 0.21 + 0.37).r * 0.35;
+          float ds = texture2D(detailMap, w * 0.33).g;
+          float db = texture2D(detailMap, w * 0.45).b * 0.7 + texture2D(detailMap, w * 0.13 + 0.61).b * 0.3;
+          float big = texture2D(detailMap, w * 0.031).r;
+          float d = (dg * m.r + ds * m.g + db * m.b) / max(0.05, m.r + m.g + m.b);
+          diffuseColor.rgb *= (0.55 + 0.9 * d) * (0.9 + 0.2 * big);
+        }`);
+    };
+    ground = new T.Mesh(new T.PlaneGeometry(MAP, MAP), mat);
     ground.rotation.x = -Math.PI / 2; ground.position.set(MAP / 2, 0, MAP / 2);
     ground.receiveShadow = true; scene.add(ground);
   }
@@ -1435,7 +1530,7 @@
     // nur so weit, wie man durch den Nebel sieht
     const R = Math.min(30, Math.ceil(scene.fog.far) + 5), R2 = R * R, x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(MAP - 1, Math.ceil(cx + R));
     const z0 = Math.max(0, Math.floor(cz - R - 4)), z1 = Math.min(MAP - 1, Math.ceil(cz + R + 4));
-    let nbd = 0, nfr = 0, nbp = 0, nbl = 0, nbc = 0, nbm = 0, nbt = 0, nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
+    let nbd = 0, nfr = 0, nbp = 0, nbl = 0, nbc = 0, nbm = 0, nbt = 0, nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0, nhw = 0, ncb = 0, nzb = 0, nbe = 0, nbin = 0;
     const BI = S.biome || null;
     const sway = (wet === 2 ? 0.16 : wet ? 0.09 : 0.05);
     for (let ty = z0; ty <= z1; ty++) for (let tx = x0; tx <= x1; tx++) {
@@ -1447,7 +1542,8 @@
       const bi = BI ? BI[i] : 0;
       if (dd > 6 && !(k === 8 && bi === 6 ? inView(px, 4.5, pz, 5.2) : k === 6 ? inView(px, 2, pz, 3.6) : inView(px, 1.2, pz, 2.2))) continue;
       if (!k) {
-        if (S.bmap[i]) continue;
+        if (S.bmap[i] || hutFloor.has(i)) continue;
+        if (villageDirt.has(i) && hash(i + 77) < 0.8) continue;   // Dorfplatz: festgetretene Erde, kaum Gras
         const hv = hash(i);
         // Ruinen der alten Welt (nur Optik, blockiert nichts)
         if (bi !== 5 && bi !== 7 && !(S.hq && Math.abs(tx - S.hq.tx - 1) < 5 && Math.abs(ty - S.hq.ty - 1) < 5)) {
@@ -1465,7 +1561,28 @@
           }
         }
         if (bi === 7) continue;
-        if (bi === 6 && v % 7) continue;   // Stadt: nur vereinzeltes Unkraut
+        if (bi === 6) {
+          const sx = (tx + 1500) % 15, sy = (ty + 1500) % 15, street = G.isStreet(tx, ty);
+          if (!street && (sx === 3 || sx === 14 || sy === 3 || sy === 14)) {
+            if (ncb < 3000) { setInst(curb, ncb, px, 0, pz, 1, 1, 1, 0); curb.setColorAt(ncb, col.setRGB(0.6 + (v % 5) * 0.012, 0.58 + (v % 3) * 0.01, 0.55)); ncb++; }
+            const edgeX = sx === 3 || sx === 14, edgeZ = sy === 3 || sy === 14, face = edgeX && !edgeZ ? (sx === 3 ? -Math.PI / 2 : Math.PI / 2) : (sy === 3 ? Math.PI : 0);
+            if (edgeX !== edgeZ && (edgeX ? sy : sx) % 5 === 1 && nlamp < 600) {   // Straßenlaterne, Ausleger über die Straße
+              const ry = edgeX ? (sx === 3 ? Math.PI : 0) : (sy === 3 ? Math.PI / 2 : -Math.PI / 2);
+              setInst(lamps, nlamp, px, 0.07, pz, 1, 1, 1, ry); lamps.setColorAt(nlamp, WHITE); nlamp++;
+              if (night > 0.3) glowAt(px + 0.62 * Math.cos(ry), 2.25, pz - 0.62 * Math.sin(ry), 0.9, '#ffd890', night * (Math.sin(at * 13 + v) > -0.85 ? 0.95 : 0.2));
+            } else if (edgeX !== edgeZ && v % 17 === 0 && nbe < 300) { setInst(bench, nbe, px, 0.07, pz, 1, 1, 1, face); bench.setColorAt(nbe, WHITE); nbe++; }
+            else if (v % 11 === 0 && nbin < 300) { setInst(bin, nbin, px + 0.25, 0.07, pz + 0.25, 1, 1, 1, v); bin.setColorAt(nbin, col.set(v % 2 ? '#ffffff' : '#c0c8d0')); nbin++; }
+            continue;
+          }
+          if (street && (sx < 3) !== (sy < 3) && ((sx < 3 && (sy === 3 || sy === 14)) || (sy < 3 && (sx === 3 || sx === 14))) && nzb < 600) {
+            setInst(zebra, nzb, px, 0, pz, 1, 1, 1, sx < 3 ? Math.PI / 2 : 0); zebra.setColorAt(nzb, WHITE); nzb++;
+          }
+          if (!street) {
+            const lot = G.lotAt(Math.floor(tx / 15), Math.floor(ty / 15));
+            if (lot && lot.kind === 'park' && v % 29 === 0 && nbe < 300) { setInst(bench, nbe, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2); bench.setColorAt(nbe, WHITE); nbe++; continue; }
+          }
+          if (v % 7) continue;   // sonst nur vereinzeltes Unkraut
+        }
         if (bi === 2 || bi === 3 || bi === 5) {
           if (bi === 5 && v % 13 === 0) glowAt(px + Math.sin(at * 0.7 + i) * 0.4, 0.3 + ((at * 0.4 + hash(i) * 3) % 3), pz, 0.22, '#c890ff', 0.7);
           if (bi === 2 && v % 19 === 0 && nbu < MAXDECO) { setInst(bushes, nbu, px, 0, pz, 0.6, 0.5, 0.6, v); bushes.setColorAt(nbu, col.setRGB(0.55, 0.48, 0.28)); nbu++; }
@@ -1506,7 +1623,8 @@
         continue;
       }
       if (k === 7) {
-        if (v % 3 === 0) { if (ncar < 600) { setInst(cars, ncar, px + ox, 0, pz + oz, sc, sc, sc, v * 0.7, tilt, v % 2 ? 0.06 : 0); cars.setColorAt(ncar, col.set(['#8a3a2a', '#4a5a6a', '#7a6a3a', '#5a5a52'][v % 4]).multiplyScalar(0.85)); ncar++; } }
+        if (v % 3 === 0) { if (ncar < 600) { const cs = sc * 1.5, cry = bi === 6 && G.isStreet(tx, ty) ? ((tx + 1500) % 15 < 3 && (ty + 1500) % 15 >= 3 ? Math.PI / 2 : 0) + (hash(i) - 0.5) * 0.5 : v * 0.7;
+          setInst(cars, ncar, px + ox, 0, pz + oz, cs, cs, cs, cry, tilt, v % 2 ? 0.06 : 0); cars.setColorAt(ncar, col.set(['#8a3a2a', '#4a5a6a', '#7a6a3a', '#5a5a52'][v % 4]).multiplyScalar(0.85)); ncar++; } }
         else for (let b = 0; b < 3 && nbar2 < 1200; b++) { const a = v + b * 2.1; setInst(barrels, nbar2, px + ox + Math.cos(a) * 0.22 * sc, 0, pz + oz + Math.sin(a) * 0.2 * sc, sc, sc, sc, v + b, b === 2 ? Math.PI / 2 : tilt, 0); barrels.setColorAt(nbar2, col.set(['#a84a20', '#3a5a3a', '#8a2a20', '#4a4a52'][(v + b) % 4])); nbar2++; }
         continue;
       }
@@ -1539,6 +1657,13 @@
             setInst(bLampG, nbl, lx + dx * 0.04, 1.75, lz + dz * 0.04, 1, 1, 1, ry); bLampG.setColorAt(nbl, col.set(v % 12 === 0 ? '#ff4a3a' : '#ffe6b0').multiplyScalar(on)); nbl++;
             glowAt(lx + dx * 0.15, 1.75, lz + dz * 0.15, 1.1, v % 12 === 0 ? '#ff4a3a' : '#ffd890', 0.45 * on);
           }
+          continue;
+        }
+        if (bi !== 6) {   // Holzhütte: Balkenwand, an Ecken über Kreuz
+          const hx = S.res[i - 1] === 8 || S.res[i + 1] === 8, hz = S.res[i - MAP] === 8 || S.res[i + MAP] === 8, sh = 0.85 + (v % 7) * 0.03;
+          col.setRGB(0.5 * sh, 0.35 * sh, 0.22 * sh);
+          if ((hx || !hz) && nhw < 3000) { setInst(hutWall, nhw, px, 0, pz, 1, 1, 1, 0); hutWall.setColorAt(nhw, col); nhw++; }
+          if ((hz || !hx) && nhw < 3000) { setInst(hutWall, nhw, px, 0, pz, 1, 1, 1, Math.PI / 2); hutWall.setColorAt(nhw, col); nhw++; }
           continue;
         }
         const lot = G.lotAt(Math.floor(tx / 15), Math.floor(ty / 15));
@@ -1605,6 +1730,7 @@
     bPipe.count = nbp; bLamp.count = bLampG.count = nbl; bCrate.count = nbc; bMachine.count = nbm; bTank.count = bTankG.count = nbt; done(bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG);
     grass.count = ngr; flowers.count = nfl; bushes.count = nbu; cacti.count = nca; snowcap.count = nsc; voids.count = nvo; crystals.count = ncr;
     cars.count = ncar; barrels.count = nbar2; rubble.count = nrub; lamps.count = nlamp;
+    hutWall.count = nhw; curb.count = ncb; zebra.count = nzb; bench.count = nbe; bin.count = nbin; done(hutWall, curb, zebra, bench, bin);
     done(trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, snowcap, voids, crystals, cars, barrels, rubble, lamps);
 
     // Stadt: Dächer, Dachaufbauten, Leuchtreklamen und Ampeln je Grundstück
@@ -1643,6 +1769,41 @@
         }
       }
     }
+    // Hütten: Satteldach (ausgeblendet, solange man selbst drin steht), Truhen, Dorfbrunnen
+    let nhr = 0, nhg = 0, nbx = 0, nwl = 0;
+    if (G.worldSpots && S.biome) {
+      const sp = G.worldSpots(), me = S.player, mx = me ? me.x / TS : -99, mz = me ? me.y / TS : -99;
+      for (const u of sp.huts) {
+        const W = u.w + 1, H = u.h + 1, hcx = u.x0 + W / 2, hcz = u.y0 + H / 2;
+        if ((hcx - cx) ** 2 + (hcz - cz) ** 2 > R2 || !inView(hcx, 2, hcz, Math.max(W, H) * 0.8 + 1)) continue;
+        if (mx > u.x0 && mx < u.x0 + W && mz > u.y0 && mz < u.y0 + H) continue;   // drinnen: Dach weg, damit man etwas sieht
+        const alongX = W >= H, L = (alongX ? W : H) + 0.5, half = (alongX ? H : W) / 2 + 0.3, pitch = 0.62, rise = half * Math.tan(pitch), sl = half / Math.cos(pitch), top = 2.1;
+        const rc = [[0.42, 0.2, 0.14], [0.3, 0.3, 0.32], [0.36, 0.26, 0.16]][u.roof];
+        for (const sd of [-1, 1]) {
+          if (nhr >= 400) break;
+          const ox = alongX ? 0 : sd * half / 2, oz = alongX ? sd * half / 2 : 0;
+          setInst(hutRoof, nhr, hcx + ox, top + rise / 2, hcz + oz, L, 1, sl, alongX ? 0 : Math.PI / 2, sd * pitch * (alongX ? 1 : 1));
+          hutRoof.setColorAt(nhr, col.setRGB(rc[0], rc[1], rc[2])); nhr++;
+          if (nhg < 400) {   // Giebeldreieck an beiden Enden
+            const gx = alongX ? hcx + sd * (W / 2 - 0.1) : hcx, gz = alongX ? hcz : hcz + sd * (H / 2 - 0.1);
+            setInst(hutGable, nhg, gx, top, gz, half * 2, rise, 1, alongX ? Math.PI / 2 : 0); hutGable.setColorAt(nhg, col.setRGB(0.42, 0.3, 0.2)); nhg++;
+          }
+        }
+      }
+      for (const c of sp.chests) {
+        const bx = c.tx + 0.5, bz = c.ty + 0.5;
+        if ((bx - cx) ** 2 + (bz - cz) ** 2 > R2 || nbx >= 200 || !inView(bx, 0.4, bz, 1)) continue;
+        setInst(boxBody, nbx, bx, 0, bz, 1, 1, 1, c.rot); boxBody.setColorAt(nbx, c.kind === 'city' ? col.setRGB(0.75, 0.8, 0.7) : WHITE);
+        const open = G.boxEmpty(c), hx = -0.23 * Math.sin(c.rot), hz = -0.23 * Math.cos(c.rot);
+        setInst(boxLid, nbx, bx + hx, 0.4, bz + hz, 1, 1, 1, c.rot, open ? -1.9 : 0); boxLid.setColorAt(nbx, c.kind === 'city' ? col.setRGB(0.75, 0.8, 0.7) : WHITE);
+        nbx++;
+      }
+      for (const vl of sp.villages) {
+        if ((vl.x - cx) ** 2 + (vl.y - cz) ** 2 > R2 || nwl >= 20 || !inView(vl.x + 0.5, 1, vl.y + 0.5, 2)) continue;
+        setInst(well, nwl, vl.x + 0.5, 0, vl.y + 0.5, 1, 1, 1, 0.3); well.setColorAt(nwl, WHITE); nwl++;
+      }
+    }
+    hutRoof.count = nhr; hutGable.count = nhg; boxBody.count = boxLid.count = nbx; well.count = nwl; done(hutRoof, hutGable, boxBody, boxLid, well);
     roofSlab.count = nrs; roofTank.count = ntk; roofAC.count = nac; antenna.count = nan; signBox.count = nsg; trafficLight.count = ntl;
     done(roofSlab, roofTank, roofAC, antenna, signBox, trafficLight);
     // Bunker: Sicherungsschalter (rot = aus, grün = umgelegt)

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-14T10:37:55.337Z",
+  "updated": "2026-10-14T11:03:50.068Z",
   "games": [
     {
       "id": "blackout",
@@ -13,7 +13,7 @@
         "Online mit bis zu 16 Spielern – Clans, Handel, PvP",
         "3 Spielstände, Musik, Tutorial"
       ],
-      "version": "Alpha 1.5.2",
+      "version": "Alpha 1.6.0",
       "color": "#ff6a2a",
       "cover": "blackout.jpg",
       "icon": "blackout-icon.png",
@@ -29,13 +29,13 @@
         },
         {
           "path": "game.js",
-          "size": 400432,
-          "sha256": "f79243b07d4de3143b2e62ae65e9e493b4b796a0d8b59d7102133a6d0110e70f"
+          "size": 408492,
+          "sha256": "22c578ebdb43162e0c0fab99e1ad5ca64feb4bbae79a78c413a5ea450dd00dbf"
         },
         {
           "path": "render3d.js",
-          "size": 162882,
-          "sha256": "e6ea9a4cacd23c252f42d2c4e1badcec0bc03e50d8f0fae6346fee3559dd781c"
+          "size": 177631,
+          "sha256": "5de1879aa7b196025bfde7c713f57c81d1ff9ea7087cc03ad9e98ad4073637e3"
         },
         {
           "path": "three.min.js",
@@ -48,7 +48,7 @@
           "sha256": "955c7d0342e80867dad220cccb3d69759c81ce96b7e5a88c91972244997e32ee"
         }
       ],
-      "size": 1218722
+      "size": 1241531
     }
   ]
 }

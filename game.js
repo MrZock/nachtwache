@@ -9,10 +9,10 @@ const R3 = (!HEADLESS && ROOT.NW3D) || null;
 // Konstanten & Hilfsfunktionen
 // =====================================================================
 const TS = 40;            // Tile-Größe in Pixeln
-const MAP = 512;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
+const MAP = 768;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
-const DAY_LEN = 90, NIGHT_LEN = 100;   // Nacht länger (Alpha 1.5.0)
-const GAME_VER = 'Alpha 1.5.2';
+const DAY_LEN = 150, NIGHT_LEN = 140;   // längere Tage und Nächte (Alpha 1.6.0)
+const GAME_VER = 'Alpha 1.6.0';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -33,7 +33,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 // Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
-const NET_VER = 35;
+const NET_VER = 36;
 const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -344,7 +344,7 @@ const dunOf = tx => Math.floor((tx - DUN.x0) / DUN.w);
 const dunRoom = (k, i, j) => ({ x: DUN.x0 + k * DUN.w + 3 + i * 13, y: DUN.y0 + 3 + j * 14, w: 10, h: 11 });   // Räume im 3×3-Raster
 const dunExit = k => { const r = dunRoom(k, 1, 2); return { x: (r.x + r.w / 2) * TS, y: (r.y + r.h - 2) * TS }; };
 const DUN_NAME = ['Bunker Alpha', 'Fabrik Beta', 'Labor Gamma'];
-const CITY_R = 34;
+const CITY_R = 38;
 const isStreet = (x, y) => ((x + 1500) % 15) < 3 || ((y + 1500) % 15) < 3;
 const sRand = (n) => { let h = Math.imul((n | 0) ^ 0x5bd1e995, 2654435761) >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13; return (h >>> 0) / 4294967296; };
 // Grundstück im Straßenraster (gx, gy): Park, Haus oder Hochhaus – alles aus dem Seed berechnet
@@ -362,23 +362,135 @@ function lotAt(gx, gy) {
       const w = tower ? 9 : 6 + Math.floor(h(2) * 6), hh = tower ? 9 : 6 + Math.floor(h(3) * 6);
       lot = { gx, gy, lx, ly, kind: tower ? 'tower' : 'house', w, h: hh, x0: lx + (tower ? 1 : Math.floor(h(4) * (12 - w))), y0: ly + (tower ? 1 : Math.floor(h(5) * (12 - hh))),
         door: Math.floor(h(6) * 4), floors: tower ? 9 + Math.floor(h(7) * 3) : 2 + Math.floor(h(7) * 4), style: tower ? 4 : Math.floor(h(8) * 4),
-        roof: tower || h(9) < 0.5, divider: !tower && w >= 8 && h(10) < 0.5, tank: h(11) < 0.45, sign: h(12) < 0.35, signCol: Math.floor(h(13) * 4) };
+        roof: tower || h(9) < 0.5, divider: !tower && w >= 8 && h(10) < 0.5, tank: h(11) < 0.45, sign: h(12) < 0.35, signCol: Math.floor(h(13) * 4), chest: !tower && h(14) < 0.3 };
     }
   }
   lotCache.set(key, lot);
   return lot;
 }
+const cityCache = { seed: null, list: null };
 function cityCenters() {
+  const key = (S && S.seed) || 1;
+  if (cityCache.seed === key) return cityCache.list;
+  cityCache.seed = key; return (cityCache.list = cityCentersCalc());
+}
+function cityCentersCalc() {
   const sd = (S && S.seed) || 1, out = [];
-  for (let k = 0; k < 2; k++) for (let t = 0; t < 30; t++) {
-    const a = sRand(sd * 7 + k * 101 + t * 13) * TAU, d = MAP * (0.22 + 0.16 * sRand(sd + k * 37 + t));
+  for (let k = 0; k < Math.round(MAP * MAP / 150000); k++) for (let t = 0; t < 40; t++) {
+    const a = sRand(sd * 7 + k * 101 + t * 13) * TAU, d = MAP * (0.2 + 0.2 * sRand(sd + k * 37 + t));
     const x = Math.round(MAP / 2 + Math.cos(a) * d), y = Math.round(MAP / 2 + Math.sin(a) * d);
     if (x < CITY_R + 12 || y < CITY_R + 12 || x > MAP - CITY_R - 12 || y > MAP - CITY_R - 12) continue;
     if (Math.abs(x - (DIM.x0 + DIM.x1) / 2) < 70 && y < DIM.y1 + 40 || x < DUN.x0 + DUN.n * DUN.w + 40 && y < DUN.y0 + DUN.h + 40) continue;
-    if (out.some(c => Math.hypot(c.x - x, c.y - y) < CITY_R * 3)) continue;
+    if (out.some(c => Math.hypot(c.x - x, c.y - y) < CITY_R * 3.4)) continue;
     out.push({ x, y }); break;
   }
   return out;
+}
+// ---------- Dörfer und verlassene Hütten (aus dem Seed, damit alle dieselben Plätze kennen) – in jeder Hütte eine Truhe
+const spotCache = { seed: null, huts: [], chests: [], villages: [] };
+function worldSpots() {
+  const sd = (S && S.seed) || 1;
+  if (!S || !S.biome) return { huts: [], chests: [], villages: [] };
+  if (spotCache.seed === sd) return spotCache;
+  const huts = [], villages = [], chests = [], cities = cityCenters(), hatches = [0, 1, 2].map(hatchPos), c0 = MAP / 2;
+  const okTile = (x, y) => inMap(x, y) && x > 22 && y > 22 && x < MAP - 23 && y < MAP - 23 && !inDim(x, y) && !inDun(x, y) && S.biome[y * MAP + x] !== 6 && S.biome[y * MAP + x] !== 5 && S.biome[y * MAP + x] !== 7;
+  const okSite = (x, y, r) => {
+    if (Math.hypot(x - c0, y - c0) < 48 + r) return false;
+    if (cities.some(c => Math.hypot(c.x - x, c.y - y) < CITY_R + 14 + r)) return false;
+    if (hatches.some(h => Math.hypot(h.tx - x, h.ty - y) < 8 + r)) return false;
+    for (let a = 0; a < 8; a++) if (!okTile(Math.round(x + Math.cos(a * TAU / 8) * r), Math.round(y + Math.sin(a * TAU / 8) * r))) return false;
+    return okTile(x, y);
+  };
+  const addHut = (cx, cy, h, toward, vil) => {
+    const w = 5 + Math.floor(h(1) * 2), hh = 4 + Math.floor(h(2) * 2), x0 = Math.round(cx - w / 2), y0 = Math.round(cy - hh / 2);
+    const dx = toward ? toward.x - cx : h(3) - 0.5, dy = toward ? toward.y - cy : h(4) - 0.5;
+    const door = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 3 : 2) : (dy > 0 ? 1 : 0);
+    // Truhe in die Ecke gegenüber der Tür
+    const tx = door === 2 ? x0 + w - 1 : x0 + 1, ty = door === 0 ? y0 + hh - 1 : y0 + 1;
+    huts.push({ id: huts.length, x0, y0, w, h: hh, door, vil, holes: vil ? 0.02 : 0.1, roof: Math.floor(h(5) * 3) });
+    chests.push({ i: chests.length, tx, ty, kind: 'hut', rot: door === 0 || door === 1 ? 0 : Math.PI / 2 });
+  };
+  const nV = Math.round(MAP * MAP / 75000);
+  for (let k = 0; k < nV; k++) for (let t = 0; t < 60; t++) {
+    const h = n => sRand(sd * 13 + k * 7717 + t * 389 + n * 131);
+    const x = Math.round(30 + h(0) * (MAP - 60)), y = Math.round(30 + h(9) * (MAP - 60));
+    if (!okSite(x, y, 15) || villages.some(v => Math.hypot(v.x - x, v.y - y) < 70)) continue;
+    const n = 4 + Math.floor(h(8) * 3), v = { x, y, n, name: VILLAGE_NAMES[(sd + k * 3) % VILLAGE_NAMES.length] };
+    villages.push(v);
+    for (let j = 0; j < n; j++) {
+      const a = j / n * TAU + h(10 + j) * 0.5, r = 8.5 + h(20 + j) * 1.5;
+      addHut(x + Math.cos(a) * r, y + Math.sin(a) * r, m => h(30 + j * 7 + m), v, true);
+    }
+    break;
+  }
+  const nH = Math.round(MAP * MAP / 18000);
+  for (let k = 0; k < nH; k++) for (let t = 0; t < 30; t++) {
+    const h = n => sRand(sd * 17 + k * 9173 + t * 577 + n * 211);
+    const x = Math.round(30 + h(0) * (MAP - 60)), y = Math.round(30 + h(9) * (MAP - 60));
+    if (!okSite(x, y, 5) || villages.some(v => Math.hypot(v.x - x, v.y - y) < 26) || huts.some(u => Math.hypot(u.x0 - x, u.y0 - y) < 14)) continue;
+    addHut(x, y, h, null, false);
+    break;
+  }
+  // Vorratskisten in manchen Stadthäusern
+  for (const cc of cities) for (let gy = Math.floor((cc.y - CITY_R) / 15); gy <= Math.ceil((cc.y + CITY_R) / 15); gy++)
+    for (let gx = Math.floor((cc.x - CITY_R) / 15); gx <= Math.ceil((cc.x + CITY_R) / 15); gx++) {
+      const lot = lotAt(gx, gy);
+      if (!lot || lot.kind !== 'house' || !lot.chest) continue;
+      const tx = lot.door === 2 ? lot.x0 + lot.w - 1 : lot.x0 + 1, ty = lot.door === 0 ? lot.y0 + lot.h - 1 : lot.y0 + 1;
+      if (S.biome[ty * MAP + tx] === 6) chests.push({ i: chests.length, tx, ty, kind: 'city', rot: 0 });
+    }
+  Object.assign(spotCache, { seed: sd, huts, chests, villages });
+  return spotCache;
+}
+const VILLAGE_NAMES = ['Birkenau', 'Moosbach', 'Eichenried', 'Kaltenbrunn', 'Hirschfeld', 'Grauwald', 'Lindenhof', 'Steinach', 'Wolfsgrund', 'Nebelheim', 'Fuchsberg', 'Rabenstein'];
+function genHuts() {
+  const R = S.res, sp = worldSpots();
+  for (const v of sp.villages) for (let y = v.y - 14; y <= v.y + 14; y++) for (let x = v.x - 14; x <= v.x + 14; x++) {
+    const d = Math.hypot(x - v.x, y - v.y);
+    if (inMap(x, y) && (d < 11.5 || d < 14 && R[y * MAP + x] !== 1)) R[y * MAP + x] = 0;   // Dorfplatz frei, außen bleibt Wald stehen
+  }
+  for (const u of sp.huts) {
+    for (let y = u.y0 - 1; y <= u.y0 + u.h + 1; y++) for (let x = u.x0 - 1; x <= u.x0 + u.w + 1; x++) if (inMap(x, y)) R[y * MAP + x] = 0;
+    const mx = u.x0 + (u.w >> 1), my = u.y0 + (u.h >> 1);
+    for (let y = u.y0; y <= u.y0 + u.h; y++) for (let x = u.x0; x <= u.x0 + u.w; x++) {
+      if (!(x === u.x0 || y === u.y0 || x === u.x0 + u.w || y === u.y0 + u.h)) continue;
+      const isDoor = (u.door === 0 && y === u.y0 && x === mx) || (u.door === 1 && y === u.y0 + u.h && x === mx) || (u.door === 2 && x === u.x0 && y === my) || (u.door === 3 && x === u.x0 + u.w && y === my);
+      if (isDoor || Math.random() < u.holes) continue;
+      R[y * MAP + x] = 8;
+    }
+  }
+  for (const c of sp.chests) R[c.ty * MAP + c.tx] = 0;
+}
+// Truhen: F drücken, gibt Beute; füllt sich nach 10 Minuten wieder. Nicht auf der Karte zu sehen – man muss sie finden.
+function nearBox(p) {
+  if (!p || !S || !S.biome) return null;
+  for (const c of worldSpots().chests) if (Math.hypot((c.tx + 0.5) * TS - p.x, (c.ty + 0.5) * TS - p.y) < 1.5 * TS) return c;
+  return null;
+}
+const boxEmpty = c => !!S.boxes && (S.boxes[c.i] || 0) > S.t;
+function useBox(p) {
+  const c = nearBox(p); if (!c) return false;
+  if (!S.boxes) S.boxes = {};
+  if (boxEmpty(c)) { toastFor(p, '📦 Die Truhe ist leer – in ein paar Minuten liegt wieder etwas drin', '#aaa'); return true; }
+  S.boxes[c.i] = S.t + 600;
+  withTeam(teamOf(p), () => lootBox(c, p));
+  return true;
+}
+function lootBox(c, q) {
+  const m = 1 + 0.15 * (S.night - 1), x = (c.tx + 0.5) * TS, y = (c.ty + 0.5) * TS, city = c.kind === 'city', got = [];
+  const w = Math.round(rand(20, 45) * m), st = Math.round(rand(15, 35) * m), g = Math.round(rand(30, 70) * m * lootMul() * (city ? 1.4 : 1));
+  if (Math.random() < 0.7) { S.wood += w; got.push('+' + w + ' 🪵'); }
+  if (Math.random() < 0.5) { S.stone += st; got.push('+' + st + ' 🪨'); }
+  S.gold += g; S.goldEarned += g; got.push('+' + g + ' 💰');
+  if (Math.random() < (city ? 0.7 : 0.4)) { const n = randi(2, 5); S.iron = (S.iron || 0) + n; got.push('+' + n + ' 🔩'); }
+  giveMat(q, 'c', randi(1, 3)); giveMat(q, 'e', city ? randi(1, 3) : randi(0, 1)); giveMat(q, 'h', randi(0, 2));
+  if (Math.random() < 0.45) { const id = ['med', 'gren', 'molo'][randi(0, 2)], C = CONS.find(x => x.id === id); q.cons[id] = Math.min(CONS_MAX, (q.cons[id] | 0) + 1); got.push('+1 ' + C.icon); }
+  giveXp(q, 20);
+  S.chestsOpened = (S.chestsOpened || 0) + 1;
+  burst(x, y, '#ffe27a', 26, 170, 0.7, 3.5); ring(x, y, 50, 0.4, '#ffe27a');
+  floatText(x, y - 24, got.join('  '), '#ffe27a', 15);
+  sfxFor(q, 'upgrade');
+  toastFor(q, '📦 Truhe: ' + got.join('  ') + ' + Material', '#ffe27a');
 }
 // Bunker-Eingänge in der normalen Welt (aus dem Seed, damit alle dieselben Plätze kennen)
 function hatchPos(k) {
@@ -809,7 +921,7 @@ function genMap() {
   }
   // Schrott der alten Welt: einzelne Wracks + ein paar Schrottplätze
   for (let i = 0; i < MAP * MAP; i++) { const b = S.biome[i]; if (!R[i] && (b === 0 || b === 2 || b === 4) && Math.random() < 0.0045) R[i] = 7; }
-  for (let k = 0; k < 9; k++) {
+  for (let k = 0; k < Math.round(9 * MAP * MAP / 262144); k++) {
     const cx = randi(20, MAP - 21), cy = randi(20, MAP - 21);
     if (Math.hypot(cx - MAP / 2, cy - MAP / 2) < 30 || inDim(cx, cy)) continue;
     for (let n = 0; n < 14; n++) { const x = cx + randi(-4, 4), y = cy + randi(-4, 4); if (inMap(x, y) && S.biome[y * MAP + x] !== 5) R[y * MAP + x] = 7; }
@@ -847,7 +959,7 @@ function genMap() {
   }
   for (let k = 0; k < 70; k++) { const x = randi(DIM.x0 + 3, DIM.x1 - 4), y = randi(DIM.y0 + 3, DIM.y1 - 4); if (!R[y * MAP + x]) R[y * MAP + x] = 5; }
   for (let y = dcy - 4; y <= dcy + 4; y++) for (let x = dcx - 4; x <= dcx + 4; x++) R[y * MAP + x] = 0;
-  genCities(); genDungeons();
+  genCities(); genHuts(); genDungeons();
   for (let k = 0; k < DUN.n; k++) { const h = hatchPos(k); for (let y = h.ty - 2; y <= h.ty + 2; y++) for (let x = h.tx - 2; x <= h.tx + 2; x++) if (inMap(x, y)) R[y * MAP + x] = 0; }
   // Startbereich in der Mitte etwas lichten
   const c = MAP / 2 | 0;
@@ -1815,7 +1927,7 @@ function startNight() {
   S.phase = 'night'; S.phaseT = NIGHT_LEN; S.nightT = 0; S.hqWarned = false;
   S.bloodMoon = N % 7 === 0;
   S.spawnPts = []; S.spawnQueue = [];
-  const dur = Math.min(72, 30 + N * 3), nPts = Math.min(6, 2 + Math.floor(N / 3));
+  const dur = Math.min(100, 42 + N * 4), nPts = Math.min(6, 2 + Math.floor(N / 3));
   for (const hq of allHQs()) withTeam(S.teams.get(hq.team), () => {
     // jede Basis bekommt ihre eigene Welle (größer, wenn mehr Leute dazugehören) – verlassene Basen haben Ruhe
     if (!teamMembers(hq.team).length) return;
@@ -1828,7 +1940,7 @@ function startNight() {
     for (let i = 0; i < plan.length; i++) S.spawnQueue.push({ type: plan[i], at: (i / plan.length) * dur + rand(0, 1.5), pt: base + i % nPts });
     if (N % 5 === 0) {
       const nb = Math.max(1, Math.floor(N / 10) + (N % 10 === 5 && N > 5 ? 1 : 0));
-      for (let i = 0; i < nb; i++) S.spawnQueue.push({ type: 'boss', at: 34 + i * 8, pt: base + i % nPts });
+      for (let i = 0; i < nb; i++) S.spawnQueue.push({ type: 'boss', at: 46 + i * 10, pt: base + i % nPts });
     }
   });
   S.spawnQueue.sort((a, b) => a.at - b.at);
@@ -2524,6 +2636,7 @@ function actCraftEq(kind, id) {
 function interact(p) {
   if (!p || p.dead > 0) return;
   if (useSwitch(p)) return;
+  if (useBox(p)) return;
   useHatch(p);
 }
 function actInteract() {
@@ -2952,7 +3065,7 @@ function worldState() {
     v: SAVE_VER, map: MAP, seed: S.seed, tgt: S.resTarget.slice(),
     g: { t: S.t, phase: S.phase, phaseT: S.phaseT, night: S.night, survived: S.survived, nightT: S.nightT, started: S.started, kills: S.kills,
       weather: S.weather || 0, stormSurvived: S.stormSurvived || 0, bossKills: S.bossKills || 0, chestsOpened: S.chestsOpened || 0, bloodMoon: !!S.bloodMoon,
-      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, lordAt: S.zombies.some(z => z.lord && !z.dead) ? 0 : S.lordAt || 0, dunSw: S.dunSw || [], nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {}, runId: S.runId || '' },
+      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, lordAt: S.zombies.some(z => z.lord && !z.dead) ? 0 : S.lordAt || 0, dunSw: S.dunSw || [], nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {}, runId: S.runId || '', boxes: Object.keys(S.boxes || {}).filter(i => S.boxes[i] > S.t).map(i => [+i, Math.round(S.boxes[i] - S.t)]) },
     po: S.portal ? [S.portal.x, S.portal.y, S.portal2.x, S.portal2.y] : null,
     teams: [...S.teams.values()].map(t => ({ id: t.id, name: t.name, wood: Math.floor(t.wood), stone: Math.floor(t.stone), gold: Math.floor(t.gold), iron: Math.floor(t.iron || 0), goldEarned: Math.floor(t.goldEarned || 0) })),
     bld: S.buildings.filter(b => !b.dead).map(b => [b.id, b.type, b.tx, b.ty, b.lvl, Math.round(b.hp), b.spent.w | 0, b.spent.s | 0, b.spent.g | 0, b.team, b.plated ? 1 : 0]),
@@ -2988,6 +3101,7 @@ function saveNowSync() {
 async function decodeSave(str) {
   if (!str) throw new Error('leer');
   const w = JSON.parse(str.slice(str.indexOf('\n') + 1));
+  if (w && w.map && w.map !== MAP) throw new Error('aus einer älteren Version mit kleinerer Welt – starte hier ein neues Spiel');
   if (!w || w.v !== SAVE_VER || w.map !== MAP) throw new Error('falsche Version');
   w.res = await unpackU8(w.res); w.rhp = await unpackU8(w.rhp);
   if (w.res.length !== MAP * MAP || w.rhp.length !== MAP * MAP) throw new Error('Karte unvollständig');
@@ -3010,6 +3124,7 @@ function applySave(w) {
   const g = w.g || {};
   for (const k of ['t', 'phase', 'phaseT', 'night', 'survived', 'nightT', 'started', 'kills', 'weather', 'stormSurvived', 'bossKills', 'chestsOpened', 'bloodMoon',
     'bloodSurvived', 'bomberKills', 'animalKills', 'nextId', 'nextZid', 'nextChest', 'eggUsed', 'runId', 'lordAt', 'dunSw']) if (g[k] !== undefined) S[k] = g[k];
+  S.boxes = {}; for (const [i, r] of g.boxes || []) S.boxes[i] = S.t + r;
   if (w.po) { S.portal = { x: w.po[0], y: w.po[1] }; S.portal2 = { x: w.po[2], y: w.po[3] }; }
   // Basen abwesender Mitspieler heißen „s:<name>“, bis sie zurückkommen
   const away = new Map();
@@ -3721,7 +3836,7 @@ function netHostTick(dt) {
     t: 'S',
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
-        S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0), S.pvp ? 1 : 0, (S.dunSw || []).map(a => a.map(v => v ? 1 : 0).join('')).join(','), S.lordAt || 0],
+        S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0), S.pvp ? 1 : 0, (S.dunSw || []).map(a => a.map(v => v ? 1 : 0).join('')).join(','), S.lordAt || 0, Object.keys(S.boxes || {}).filter(i => S.boxes[i] > S.t).join(',')],
     p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '', [p.eq.h, p.eq.v, p.eq.g, p.eq.b, p.mat.c, p.mat.e, p.mat.h, p.cons.med, p.cons.gren, p.cons.molo], [p.kills | 0, p.pvpKills | 0]]),
     ch: S.chests.filter(c => !c.open).map(c => [c.id, c.x | 0, c.y | 0, c.dun !== undefined ? 1 : 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
@@ -3867,6 +3982,7 @@ function clientSnapshot(m) {
   S.phase = g[1] ? 'night' : 'day'; S.phaseT = g[2]; S.night = g[3]; S.survived = g[4]; S.nightT = g[5]; S.kills = g[6];
   S.started = !!g[10]; S.ending = g[11]; S.qLen = g[12];
   S.bossKills = g[15] || 0; S.chestsOpened = g[16] || 0; S.bloodMoon = !!g[17]; S.bloodSurvived = g[18] || 0; S.bomberKills = g[19] || 0; S.animalKills = g[20] || 0; S.weather = g[21] || 0; S.stormSurvived = g[22] || 0; S.pvp = !!g[24];
+  if (typeof g[27] === 'string') { S.boxes = {}; for (const i of g[27].split(',')) if (i) S.boxes[i] = 1e12; }
   if (typeof g[25] === 'string') S.dunSw = g[25].split(',').map(t => t.split('').map(c => c === '1'));
   if (S.survived > (S.lastRec | 0)) { S.lastRec = S.survived; recordRun(); }
   if (m.tm) for (const a of m.tm) { const t = ensureTeam(a[0], a[6]); t.wood = a[1]; t.stone = a[2]; t.gold = a[3]; t.iron = a[4]; t.goldEarned = a[5]; t.name = a[6]; }
@@ -4195,6 +4311,7 @@ function mmColor(i) {
   if (k === 1 && b === 3) return [200, 220, 230];
   if (k === 2 && b === 5) return [60, 50, 80];
   if (k === 7) return [168, 92, 50];
+  if (k === 8 && b !== 6 && b !== 7) return [122, 86, 54];
   if (k === 6) { const h = S.mtn ? S.mtn[i] : 1; return h >= 3 || b === 3 ? [214, 218, 224] : b === 2 ? [150, 108, 78] : [96 + h * 6, 90 + h * 6, 84 + h * 6]; }
   return MM_RES[k];
 }
@@ -4936,7 +5053,7 @@ function drawTouchUI() {
     ['⤒', 'Springen', () => jump()],
     ['🛠', 'Bauen', () => toggleCraft()],
     ['☰', 'Mehr', () => { touch.more = !touch.more; }],
-    ...(nearHatch(S.player) || nearSwitch(S.player) ? [[nearSwitch(S.player) ? '⚡' : '🔦', 'Aktion', () => actInteract()]] : []),
+    ...(nearHatch(S.player) || nearSwitch(S.player) || nearBox(S.player) ? [[nearSwitch(S.player) ? '⚡' : nearBox(S.player) ? '📦' : '🔦', 'Aktion', () => actInteract()]] : []),
     ...CONS.filter(c => S.player.cons && S.player.cons[c.id] > 0).map(c => [c.icon, c.name, () => actUse(c.id)]),
   ];
   if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
@@ -5430,8 +5547,8 @@ function drawHUD() {
   }
   // Hinweis für Interaktion (Bunker)
   if (mode === 'play' && p.dead <= 0) {
-    const h = nearHatch(p), sw = !h && nearSwitch(p);
-    const msg = sw ? (sw.on ? '⚡ Schalter ist umgelegt' : '⚡ ' + (isTouch ? 'Schalter – Knopf rechts' : 'F = Sicherungsschalter umlegen')) : h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
+    const h = nearHatch(p), sw = !h && nearSwitch(p), bx = !h && !sw && nearBox(p);
+    const msg = bx ? (boxEmpty(bx) ? '📦 Die Truhe ist leer' : '📦 ' + (isTouch ? 'Truhe – Knopf rechts' : 'F = Truhe öffnen')) : sw ? (sw.on ? '⚡ Schalter ist umgelegt' : '⚡ ' + (isTouch ? 'Schalter – Knopf rechts' : 'F = Sicherungsschalter umlegen')) : h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
     if (msg) { ctx.font = 'bold 15px ' + FONT; const w = ctx.measureText(msg).width + 30; panel(VW / 2 - w / 2, VH * 0.62, w, 34, 0.85); text(msg, VW / 2, VH * 0.62 + 17, 15, '#ffe27a', 'center'); }
   }
   // Oben links: Rohstoffe (Zeile 1), Gold/s, Material und Medkit/Granate/Molotow (Zeile 2)
@@ -6182,7 +6299,7 @@ function drawHelp() {
     ['Mehr (☰)', [['🗺', 'Karte mit Planquadraten'], ['★ ⚒', 'Skills, Schmiede'], ['💬 📍', 'Chat, Markierung'], ['👥 🤝', 'Spieler, Handeln'], ['⚙', 'Einstellungen']]],
   ] : [
     ['Bewegen & Kämpfen', [['W A S D', 'laufen'], ['Maus', 'umsehen (Linksklick fängt die Maus)'], ['Linksklick', 'angreifen / abbauen'], ['Leertaste', 'springen'], ['Shift', 'Spezialfähigkeit'], ['O / F5', 'Ego ↔ Third-Person'], ['Mausrad', 'Kamera-Abstand']]],
-    ['Waffen & Bauen', [['Q E R C V B', 'Waffen'], ['L · G · Z', 'Medkit · Granate · Molotow'], ['I', 'Inventar & Bauen'], ['1 – 0', 'Gebäude wählen'], ['F', 'Falle / Aktion (Luke, Schalter)'], ['J', 'Kryoturm'], ['U · X', 'Upgrade · Verkaufen']]],
+    ['Waffen & Bauen', [['Q E R C V B', 'Waffen'], ['L · G · Z', 'Medkit · Granate · Molotow'], ['I', 'Inventar & Bauen'], ['1 – 0', 'Gebäude wählen'], ['F', 'Falle / Aktion (Truhe, Luke, Schalter)'], ['J', 'Kryoturm'], ['U · X', 'Upgrade · Verkaufen']]],
     ['Info & Online', [['M', 'Karte (Planquadrate A–H, 1–8)'], ['K · H', 'Skills · Schmiede'], ['Tab', 'Spielerliste'], ['T / Enter', 'Chat (Mausrad = ältere)'], ['Y', 'Markierung setzen'], ['/wo', 'eigenes Planquadrat'], ['N · ESC', 'Ton · Menü']]],
   ];
   const cw = Math.min(300, (VW - 60) / cols.length), w = cw * cols.length + 40, h = 96 + Math.max(...cols.map(c => c[1].length)) * 30, x = VW / 2 - w / 2, y = Math.max(16, VH / 2 - h / 2 - 20);
@@ -6324,7 +6441,7 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['RANGLISTE MIT SPIELER-ID', 'NAME ÄNDERN GEHT JETZT AUCH IN DER DESKTOP-VERSION', 'NEUE WAFFEN & ANIMATIONEN', 'BEIDE HÄNDE · AUSHOLEN & ZUSCHLAGEN', 'STÄDTE · BUNKER · SCHATTENREICH', 'HOCHHAUS · TRESOR · SCHATTENFÜRST', 'LÄNGERE NÄCHTE', 'STREUNER-ZOMBIES AM TAG', 'EISEN: VERSTÄRKEN & REPARIEREN', 'KARTE MIT PLANQUADRATEN A1–H8', 'NEUES DESIGN · CHATFILTER', 'F1 = STEUERUNG · CHAT SCROLLEN'];
+      const news = ['VIEL GRÖSSERE WELT', 'MEHR STÄDTE · 8 DÖRFER', 'VERLASSENE HÜTTEN MIT TRUHEN', 'F = TRUHE ÖFFNEN (NICHT AUF DER KARTE!)', 'NEUE BODENTEXTUREN', 'GRAS · SAND · SCHNEE · ASPHALT', 'STÄDTE: BÜRGERSTEIGE & LATERNEN', 'ZEBRASTREIFEN · BÄNKE · GRÖSSERE AUTOS', 'LÄNGERE TAGE UND NÄCHTE', 'TAG 150 S · NACHT 140 S'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
       titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
@@ -6459,7 +6576,7 @@ if (!HEADLESS) {
     if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyI') { toggleCraft(); return; }
-    if (e.code === 'KeyF') { if (nearHatch(S.player) || nearSwitch(S.player)) actInteract(); else selectBuild('trap'); return; }
+    if (e.code === 'KeyF') { if (nearHatch(S.player) || nearSwitch(S.player) || nearBox(S.player)) actInteract(); else selectBuild('trap'); return; }
     if (e.code === 'KeyJ') { selectBuild('frost'); return; }
     if (e.code === 'Space') { jump(); return; }
     if (e.code === 'KeyO' || e.code === 'F5') { e.preventDefault(); toggleView(); return; }
@@ -6637,7 +6754,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { lotAt, dunSwitches, vaultDoors, nearSwitch, useSwitch, riftPos, get dunSw() { return S.dunSw; }, chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { lotAt, worldSpots, nearBox, boxEmpty, dunSwitches, vaultDoors, nearSwitch, useSwitch, riftPos, get dunSw() { return S.dunSw; }, chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
