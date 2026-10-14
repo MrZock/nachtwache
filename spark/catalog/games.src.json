@@ -15,6 +15,7 @@
       "version": "4.0.0",
       "color": "#ff6a2a",
       "cover": "blackout.jpg",
+      "icon": "blackout-icon.png",
       "base": "https://mrzock.github.io/nachtwache/",
       "local": "../..",
       "entry": "index.html",

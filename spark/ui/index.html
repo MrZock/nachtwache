@@ -30,6 +30,7 @@
   .game:hover { background: var(--panel2); }
   .game.sel { background: linear-gradient(90deg, rgba(255,106,31,.22), rgba(255,106,31,.04)); box-shadow: inset 3px 0 0 var(--spark2); }
   .game .thumb { width: 54px; height: 54px; border-radius: 8px; background: #222 center / cover; flex: none; }
+  .game .thumb.icon { background-color: transparent; background-size: contain; background-repeat: no-repeat; border-radius: 0; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
   .game .nm { font-weight: 700; letter-spacing: .5px; }
   .game .tag { font-size: 12px; color: var(--dim); }
   .game .tag.up { color: var(--spark1); }
@@ -121,7 +122,7 @@ async function load() {
 function renderList() {
   $('list').innerHTML = S.games.map(g => {
     const [t, c] = status(g);
-    return '<button class="game' + (g.id === sel ? ' sel' : '') + '" data-id="' + esc(g.id) + '"><div class="thumb" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div><div class="nm">' + esc(g.name) + '</div><div class="tag ' + c + '">' + t + '</div></div></button>';
+    return '<button class="game' + (g.id === sel ? ' sel' : '') + '" data-id="' + esc(g.id) + '"><div class="thumb' + (g.iconUrl ? ' icon' : '') + '" style="background-image:url(\'' + esc(g.iconUrl || g.coverUrl) + '\')"></div><div><div class="nm">' + esc(g.name) + '</div><div class="tag ' + c + '">' + t + '</div></div></button>';
   }).join('');
   for (const b of document.querySelectorAll('.game')) b.onclick = () => { sel = b.dataset.id; localStorage.setItem('spark.sel', sel); confirmDel = false; renderList(); renderMain(); };
 }

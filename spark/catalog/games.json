@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-14T06:48:32.263Z",
+  "updated": "2026-10-14T07:13:44.465Z",
   "games": [
     {
       "id": "blackout",
@@ -16,6 +16,7 @@
       "version": "4.0.0",
       "color": "#ff6a2a",
       "cover": "blackout.jpg",
+      "icon": "blackout-icon.png",
       "base": "https://mrzock.github.io/nachtwache/",
       "entry": "index.html",
       "query": "app=1",

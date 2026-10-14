@@ -54,23 +54,27 @@ async function loadCatalog() {
   }
   loading = false;
 }
+// Titelbild und Symbol einmal laden und für offline aufheben
 async function cacheCover(g) {
-  if (!g.cover || !okFile(g.cover)) return;
-  const f = path.join(coverDir(), g.id + path.extname(g.cover)), meta = st()['cover:' + g.id];
-  if (fs.existsSync(f) && meta === g.cover + g.version) return;
-  const buf = await getBuf(resolve(isWeb(CATALOG_URL) ? CATALOG_URL : path.dirname(CATALOG_URL), g.cover));
-  fs.mkdirSync(coverDir(), { recursive: true }); fs.writeFileSync(f, buf);
-  st()['cover:' + g.id] = g.cover + g.version; saveState();
+  for (const [key, file] of [['cover', g.cover], ['icon', g.icon]]) {
+    if (!file || !okFile(file)) continue;
+    const f = path.join(coverDir(), g.id + (key === 'icon' ? '-icon' : '') + path.extname(file)), meta = st()[key + ':' + g.id];
+    if (fs.existsSync(f) && meta === file + g.version) continue;
+    const buf = await getBuf(resolve(isWeb(CATALOG_URL) ? CATALOG_URL : path.dirname(CATALOG_URL), file));
+    fs.mkdirSync(coverDir(), { recursive: true }); fs.writeFileSync(f, buf);
+    st()[key + ':' + g.id] = file + g.version; saveState();
+  }
 }
 // Zustand eines Spiels für die Oberfläche
 function view(g) {
   const inst = st()[g.id], dir = path.join(gamesDir(), g.id);
   const installed = !!inst && fs.existsSync(path.join(dir, g.entry || 'index.html'));
   const update = installed && !!inst.files && g.files.some(f => inst.files[f.path] !== f.sha256);
-  const cover = g.cover && path.join(coverDir(), g.id + path.extname(g.cover));
+  const cover = g.cover && path.join(coverDir(), g.id + path.extname(g.cover)), icon = g.icon && path.join(coverDir(), g.id + '-icon' + path.extname(g.icon));
   return Object.assign({}, g, { files: undefined, installed, update, playing: running.has(g.id), busy: busy.has(g.id),
     installedVersion: inst && inst.version, playMs: (inst && inst.playMs) || 0, lastPlayed: inst && inst.lastPlayed,
-    coverUrl: cover && fs.existsSync(cover) ? pathToFileURL(cover).href + '?v=' + encodeURIComponent(g.version) : '' });
+    coverUrl: cover && fs.existsSync(cover) ? pathToFileURL(cover).href + '?v=' + encodeURIComponent(g.version) : '',
+    iconUrl: icon && fs.existsSync(icon) ? pathToFileURL(icon).href + '?v=' + encodeURIComponent(g.version) : '' });
 }
 const findGame = id => catalog.games.find(g => g.id === id);
 
