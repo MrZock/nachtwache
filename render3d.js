@@ -707,9 +707,25 @@
       if (p.glow) sub.add(new T.Mesh(p.glow, matGlow));
       anims.push({ o: sub, p });
     }
-    grp.userData = { lvl: b.lvl, type: b.type, anims, mat, spec };
+    if (b.plated) grp.add(new T.Mesh(platingGeo(b.size), matLit));
+    grp.userData = { lvl: b.lvl, type: b.type, plated: !!b.plated, anims, mat, spec };
     scene.add(grp);
     return grp;
+  }
+  // Stahlplatten mit Nieten rund um den Sockel (Eisen-Verstärkung), je Größe nur einmal gebaut
+  function platingGeo(n) {
+    return geo('plating' + n, () => {
+      const k = new Kit(), h = 0.42, r = n / 2 + 0.03;
+      for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const along = n * 0.94, px = sx * r, pz = sz * r;
+        k.lit(BX(sz ? along : 0.05, h, sx ? along : 0.05), '#8a929c', px, h / 2, pz).lit(BX(sz ? along + 0.02 : 0.06, 0.05, sx ? along + 0.02 : 0.06), '#5a626c', px, h, pz);
+        for (let i = 0; i < Math.max(2, n * 2); i++) {
+          const t = (i + 0.5) / Math.max(2, n * 2) - 0.5;
+          k.lit(SP(0.025, 5, 4), '#c8d0dc', px + (sz ? t * along : sx * 0.03), h * 0.72, pz + (sx ? t * along : sz * 0.03));
+        }
+      }
+      return k.build().lit;
+    });
   }
   function disposeGroup(grp) { scene.remove(grp); if (grp.userData.mat) grp.userData.mat.dispose(); }
   function ghostFor(type) {
@@ -1494,7 +1510,7 @@
     for (const b of S.buildings) {
       seen.add(b.id);
       let o = buildingObjs.get(b.id);
-      if (o && (o.userData.lvl !== b.lvl || o.userData.type !== b.type)) { disposeGroup(o); o = null; }
+      if (o && (o.userData.lvl !== b.lvl || o.userData.type !== b.type || o.userData.plated !== !!b.plated)) { disposeGroup(o); o = null; }
       if (!o) { o = makeBuilding(b); buildingObjs.set(b.id, o); }
       const bx = b.tx + b.size / 2, bz = b.ty + b.size / 2;
       o.position.set(bx, 0, bz);

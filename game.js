@@ -11,7 +11,8 @@ const R3 = (!HEADLESS && ROOT.NW3D) || null;
 const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 512;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
-const DAY_LEN = 90, NIGHT_LEN = 60;
+const DAY_LEN = 90, NIGHT_LEN = 100;   // Nacht länger (Alpha 1.5.0)
+const GAME_VER = 'Alpha 1.5.0';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -32,7 +33,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 // Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
-const NET_VER = 33;
+const NET_VER = 34;
 const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -399,6 +400,34 @@ function genBiomes() {
 const NAME_KEY = 'nachtwache.name';
 let playerName = store.get(NAME_KEY, '') || ('Spieler' + randi(10, 99));
 const chatLog = [];   // { name, text, color, t }
+let chatScroll = 0, chatKeepT = 0;   // Zeilen nach oben gescrollt (Chat-Verlauf)
+// Chatfilter: Wörter werden vereinfacht (Groß/klein, 3→e, 0→o, doppelte Buchstaben …) und mit der Liste verglichen.
+// „=“ am Anfang: nur als ganzes Wort (sonst würden harmlose Wörter mitgetroffen).
+const BAD_WORDS = ['arschloch', 'arschgeige', 'arschgesicht', '=arsch', 'wichser', 'wixer', 'hurensohn', 'hurenkind', '=hure', '=huren', 'fotze', 'schlampe', 'missgeburt', 'spast', 'spacko',
+  'behindert', 'mongo', '=opfer', 'vollidiot', '=idiot', '=idioten', 'trottel', '=depp', '=penner', 'bastard', 'fick', 'fuck', 'bitch', 'scheis', 'kacke', 'dummkopf', '=dumm', 'dumme', 'dummer',
+  'nigger', 'nigga', '=neger', 'schwuchtel', '=fag', 'faggot', 'retard', 'cunt', 'pussy', 'motherf', '=kys', '=stfu', 'nazi', 'hitler', 'kanake', 'zigeuner', 'schwanzlutscher',
+  'pisser', 'drecksau', 'dreckssau', 'sauhund', 'missgeburt', 'krüppel', 'kruppel', '=noob', '=loser', '=looser', 'halt die fresse', 'halts maul', '=fresse', 'verpiss', 'piss dich'];
+const normWord = w => w.toLowerCase().replace(/ß/g, 'ss').replace(/[äÄ]/g, 'ae').replace(/[öÖ]/g, 'oe').replace(/[üÜ]/g, 'ue')
+  .replace(/[@4]/g, 'a').replace(/3/g, 'e').replace(/[1!|]/g, 'i').replace(/0/g, 'o').replace(/[5$]/g, 's').replace(/7/g, 't').replace(/[^a-z ]/g, '').replace(/(.)\1+/g, '$1');
+const BAD_N = BAD_WORDS.map(b => b[0] === '=' ? { w: normWord(b.slice(1)), whole: true } : { w: normWord(b), whole: false });
+const isBad = n => !!n && BAD_N.some(b => b.whole ? n === b.w : n.includes(b.w));
+function chatFilter(text) {
+  const words = String(text).split(/(\s+)/), out = words.slice();
+  // einzelne Wörter
+  for (let i = 0; i < words.length; i += 2) if (isBad(normWord(words[i]))) out[i] = '*'.repeat(Math.max(3, words[i].length));
+  // auseinandergeschrieben: „f u c k“ oder „a r s c h“
+  for (let i = 0; i < words.length; i += 2) {
+    if (words[i].length !== 1) continue;
+    let j = i, joined = '';
+    while (j < words.length && words[j].length === 1) { joined += words[j]; j += 2; }
+    if (j - i >= 6 && isBad(normWord(joined))) for (let k = i; k < j; k += 2) out[k] = '*';
+  }
+  // Wortgruppen wie „halt die fresse“
+  let res = out.join('');
+  const flat = normWord(res);
+  if (BAD_N.some(b => !b.whole && b.w.includes(' ') && flat.includes(b.w))) res = res.replace(/\S/g, c => c === ' ' ? c : '*');
+  return res;
+}
 function cleanText(s, n) { return String(s || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, n); }
 const PLAYER_COL = ['#3a6ea8', '#b8433f', '#3f9a4a', '#c9a227', '#8a4ac0', '#2aa8a8', '#d07a2a', '#c04a8a'];
 // ---------- Skin (im Hauptmenü einstellbar, wird online mitgeschickt)
@@ -1037,6 +1066,8 @@ function hurtAnimal(an, dmg, p) {
 // ---------- Markierung (Ping) für den Mitspieler
 function addPing(x, y, pid) {
   S.pings.push({ x, y, pid, t: 4 });
+  const who = S.players.find(q => q.id === pid);
+  if (who) { const m = '📍 ' + pName(who) + ' markiert ' + sectorOf(x, y); addChat('', m, pingCol(pid)); hostEv(['c', '', m, 102]); }
   if (S.pings.length > 6) S.pings.shift();
   hostEv(['P', x | 0, y | 0, pid]);
   SFX.play('ping', undefined, undefined, true);
@@ -1414,7 +1445,7 @@ function upgradeBuilding(b, who) {
   pay(c);
   b.spent.w += c.w; b.spent.s += c.s; b.spent.g += c.g;
   b.lvl++;
-  b.maxHp = BDEF[b.type].hp[b.lvl - 1]; b.hp = b.maxHp;
+  b.maxHp = bMaxHp(b); b.hp = b.maxHp;
   if (b.type === 'harv') countNodes(b);
   if (b.type === 'hq') { for (const p of S.players) recalcMaxHp(p); toastAll('Baubereich vergrößert! (' + (buildRange() * 2 + 1) + ' × ' + (buildRange() * 2 + 1) + ' Felder)', '#ffe27a'); }
   giveXp(who, 6);
@@ -1424,6 +1455,35 @@ function upgradeBuilding(b, who) {
   SFX.play('upgrade', ce.x, ce.y);
   S.navVer++; NET.bDirty = true;
   return true;
+}
+const bMaxHp = b => Math.round(BDEF[b.type].hp[b.lvl - 1] * (b.plated ? 1.5 : 1));
+const plateCost = b => ({ w: 0, s: 0, g: 0, i: Math.round((4 + 3 * b.lvl) * (b.size === 3 ? 3 : b.size === 2 ? 2 : 1)) });
+const fixCost = b => ({ w: 0, s: 0, g: 0, i: Math.max(1, Math.ceil((1 - b.hp / b.maxHp) * (2 + 2 * b.lvl) * (b.size === 3 ? 3 : b.size === 2 ? 2 : 1))) });
+function plateBuilding(b, who) {
+  who = who || S.player;
+  if (b.team && b.team !== tidOf(who)) return 'Gehört einer anderen Basis';
+  if (b.plated) return 'Schon mit Stahl verstärkt';
+  const c = plateCost(b);
+  if (!canAfford(c)) return 'Du brauchst ' + c.i + ' Eisen (Schrott in Städten abbauen)';
+  pay(c); b.plated = true; const add = bMaxHp(b) - b.maxHp; b.maxHp = bMaxHp(b); b.hp += add;
+  const ce = bCenter(b); burst(ce.x, ce.y, '#c8d0dc', 22, 150, 0.6, 3); ring(ce.x, ce.y, b.size * TS, 0.4, '#c8d0dc'); SFX.play('upgrade', ce.x, ce.y);
+  toastFor(who, '🔩 ' + BDEF[b.type].name + ' mit Stahl verstärkt: +50 % HP', '#c8d0dc');
+  NET.bDirty = true; return null;
+}
+function fixBuilding(b, who) {
+  who = who || S.player;
+  if (b.team && b.team !== tidOf(who)) return 'Gehört einer anderen Basis';
+  if (b.hp >= b.maxHp) return 'Ist nicht beschädigt';
+  const c = fixCost(b);
+  if (!canAfford(c)) return 'Du brauchst ' + c.i + ' Eisen zum Reparieren';
+  pay(c); b.hp = b.maxHp;
+  const ce = bCenter(b); burst(ce.x, ce.y, '#8fe08f', 16, 120, 0.5, 3); SFX.play('upgrade', ce.x, ce.y);
+  NET.bDirty = true; return null;
+}
+function actIron(b, what) {
+  if (NET.role === 'client') { netSendR({ t: 'C', c: what, id: b.id }); return; }
+  const err = what === 'plate' ? plateBuilding(b) : fixBuilding(b);
+  if (err) { toast(err, '#ff7b6b'); SFX.play('error', undefined, undefined, true); }
 }
 function sellBuilding(b, who) {
   who = who || S.player;
@@ -1681,7 +1741,7 @@ function startNight() {
   S.phase = 'night'; S.phaseT = NIGHT_LEN; S.nightT = 0; S.hqWarned = false;
   S.bloodMoon = N % 7 === 0;
   S.spawnPts = []; S.spawnQueue = [];
-  const dur = Math.min(40, 18 + N * 2), nPts = Math.min(6, 2 + Math.floor(N / 3));
+  const dur = Math.min(72, 30 + N * 3), nPts = Math.min(6, 2 + Math.floor(N / 3));
   for (const hq of allHQs()) withTeam(S.teams.get(hq.team), () => {
     // jede Basis bekommt ihre eigene Welle (größer, wenn mehr Leute dazugehören) – verlassene Basen haben Ruhe
     if (!teamMembers(hq.team).length) return;
@@ -1694,7 +1754,7 @@ function startNight() {
     for (let i = 0; i < plan.length; i++) S.spawnQueue.push({ type: plan[i], at: (i / plan.length) * dur + rand(0, 1.5), pt: base + i % nPts });
     if (N % 5 === 0) {
       const nb = Math.max(1, Math.floor(N / 10) + (N % 10 === 5 && N > 5 ? 1 : 0));
-      for (let i = 0; i < nb; i++) S.spawnQueue.push({ type: 'boss', at: 6 + i * 8, pt: base + i % nPts });
+      for (let i = 0; i < nb; i++) S.spawnQueue.push({ type: 'boss', at: 34 + i * 8, pt: base + i % nPts });
     }
   });
   S.spawnQueue.sort((a, b) => a.at - b.at);
@@ -1833,12 +1893,15 @@ function dimTick(dt) {
   }
 }
 // Schattenwesen jagen nur Spieler im Schattenreich, ohne Wegsuche
+// Zombies, die nur Spieler jagen: Schatten (Schattenreich), Wächter (Bunker) und Streuner (tagsüber)
 function shadeTick(z, dt) {
-  const D = ZDEF[z.type], guard = typeof z.guard === 'number';
-  let best = null, bd = guard ? 520 : 700;
+  const D = ZDEF[z.type], guard = typeof z.guard === 'number', stray = !!z.stray;
+  let best = null, bd = guard ? 520 : stray ? 9 * TS : 700;
   for (const q of S.players) {
     if (q.dead > 0 || q.afk) continue;
-    if (guard ? (S.biome[tileAt(q.x, q.y)] !== 7 || dunOf(q.x / TS) !== z.guard) : S.biome[tileAt(q.x, q.y)] !== 5) continue; const d = Math.hypot(q.x - z.x, q.y - z.y); if (d < bd) { bd = d; best = q; } }
+    const qb = S.biome[tileAt(q.x, q.y)];
+    if (guard ? (qb !== 7 || dunOf(q.x / TS) !== z.guard) : stray ? (qb === 5 || qb === 7) : qb !== 5) continue;
+    const d = Math.hypot(q.x - z.x, q.y - z.y); if (d < bd) { bd = d; best = q; } }
   let tx, ty, sp = D.speed * z.spMul * (z.frostT > 0 ? 0.6 : 1);
   if (best) {
     tx = best.x; ty = best.y;
@@ -1848,7 +1911,7 @@ function shadeTick(z, dt) {
     tx = z.wx; ty = z.wy; sp *= 0.35;
     if (guard) { if (!z.hx) { z.hx = z.x; z.hy = z.y; } if (Math.hypot(z.wx - z.hx, z.wy - z.hy) > 150) { z.wx = z.hx; z.wy = z.hy; } }
     z.idleT = (z.idleT || 0) + dt;
-    if (z.idleT > (guard ? 120 : 40)) { z.dead = true; return; }   // verschwindet, wenn lange niemand da ist
+    if (z.idleT > (guard ? 120 : stray ? 50 : 40)) { z.dead = true; return; }   // verschwindet, wenn lange niemand da ist
   }
   if (best) z.idleT = 0;
   const dx = tx - z.x, dy = ty - z.y, d = Math.hypot(dx, dy);
@@ -1881,9 +1944,36 @@ function weatherTick(dt) {
     ring(x, y, 70, 0.3, '#e8f0ff');
   }
 }
+function strayTick(dt) {
+  if (!S.started || S.phase !== 'day') return;
+  S.strayT = (S.strayT === undefined ? 6 : S.strayT) - dt;
+  if (S.strayT > 0) return;
+  S.strayT = rand(5, 9);
+  const strays = S.zombies.filter(z => z.stray && !z.dead), N = S.night;
+  for (const p of S.players) {
+    if (p.dead > 0 || p.afk) continue;
+    const b0 = S.biome[tileAt(p.x, p.y)];
+    if (b0 === 5 || b0 === 7) continue;
+    const city = b0 === 6, near = strays.filter(z => Math.hypot(z.x - p.x, z.y - p.y) < 26 * TS).length;
+    const cap = (city ? 4 : 1) + Math.min(2, Math.floor(N / 4));
+    if (near >= cap || Math.random() > (city ? 0.85 : 0.4)) continue;
+    for (let tries = 0; tries < 30; tries++) {
+      const a = rand(0, TAU), d = rand(14, 22), tx = Math.floor(p.x / TS + Math.cos(a) * d), ty = Math.floor(p.y / TS + Math.sin(a) * d);
+      if (!inMap(tx, ty) || tx < 2 || ty < 2 || tx >= MAP - 2 || ty >= MAP - 2) continue;
+      const i = ty * MAP + tx, bi = S.biome[i];
+      if (S.res[i] || S.bmap[i] || bi === 5 || bi === 7 || (city && bi !== 6)) continue;
+      if (allHQs().some(h => { const c = bCenter(h); return Math.hypot(c.x - (tx + 0.5) * TS, c.y - (ty + 0.5) * TS) < (buildRange() + 5) * TS; })) continue;
+      const r = Math.random(), type = city && r < 0.15 ? 'armored' : r < 0.3 ? 'runner' : 'normal';
+      const z = spawnZombie(type, { tx, ty }); z.stray = true;
+      strays.push(z);
+      break;
+    }
+  }
+}
 function spawnTick(dt) {
   weatherTick(dt);
   dimTick(dt);
+  strayTick(dt);
   if (S.phase !== 'night') return;
   S.nightT += dt;
   while (S.spawnQueue.length && S.spawnQueue[0].at <= S.nightT) {
@@ -2101,7 +2191,7 @@ function nearestPlayer(x, y) {
 function updZombie(z, dt) {
   const D = ZDEF[z.type];
   z.flash -= dt; z.atkCd -= dt; z.lunge = Math.max(0, z.lunge - dt); z.slowT = (z.slowT || 0) - dt; z.frostT = (z.frostT || 0) - dt;
-  if (D.shade || typeof z.guard === 'number') { shadeTick(z, dt); return; }
+  if (D.shade || typeof z.guard === 'number' || z.stray) { shadeTick(z, dt); return; }
   if (z.type === 'shaman') {
     z.healT = (z.healT === undefined ? 2 : z.healT) - dt;
     if (z.healT <= 0) {
@@ -2775,7 +2865,7 @@ function worldState() {
       bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {}, runId: S.runId || '' },
     po: S.portal ? [S.portal.x, S.portal.y, S.portal2.x, S.portal2.y] : null,
     teams: [...S.teams.values()].map(t => ({ id: t.id, name: t.name, wood: Math.floor(t.wood), stone: Math.floor(t.stone), gold: Math.floor(t.gold), iron: Math.floor(t.iron || 0), goldEarned: Math.floor(t.goldEarned || 0) })),
-    bld: S.buildings.filter(b => !b.dead).map(b => [b.id, b.type, b.tx, b.ty, b.lvl, Math.round(b.hp), b.spent.w | 0, b.spent.s | 0, b.spent.g | 0, b.team]),
+    bld: S.buildings.filter(b => !b.dead).map(b => [b.id, b.type, b.tx, b.ty, b.lvl, Math.round(b.hp), b.spent.w | 0, b.spent.s | 0, b.spent.g | 0, b.team, b.plated ? 1 : 0]),
     me: charOf(me), chars,
     clans: [...S.clans.values()].map(c => ({ name: c.name, open: !!c.open, leader: (pById(c.leader) || {}).name || '' })),
     z: night ? S.zombies.filter(z => !z.dead && z.guard === undefined && ZDEF[z.type] && z.type !== 'shade').map(z => [z.type, Math.round(z.x), Math.round(z.y), Math.round(z.hp), Math.round(z.maxHp), z.golden ? 1 : 0]) : [],
@@ -2837,10 +2927,11 @@ function applySave(w) {
   S.teams = new Map();
   for (const t of w.teams || []) { const id = away.get(t.id) || t.id; S.teams.set(id, Object.assign(newTeam(id, t.name), { wood: t.wood, stone: t.stone, gold: t.gold, iron: t.iron, goldEarned: t.goldEarned })); }
   for (const a of w.bld || []) {
-    const [id, type, tx, ty, lvl, hp, sw, ss, sg, team0] = a, d = BDEF[type];
+    const [id, type, tx, ty, lvl, hp, sw, ss, sg, team0, plated] = a, d = BDEF[type];
     if (!d || !inMap(tx, ty)) continue;
     const team = away.get(team0) || team0, L = clamp(lvl | 0, 1, 5);
-    const b = { id, type, tx, ty, size: d.size, lvl: L, hp: clamp(hp, 1, d.hp[L - 1]), maxHp: d.hp[L - 1], cd: rand(0, 0.5), flash: 0, angle: -Math.PI / 2,
+    const mh = Math.round(d.hp[L - 1] * (plated ? 1.5 : 1));
+    const b = { id, type, tx, ty, size: d.size, lvl: L, hp: clamp(hp, 1, mh), maxHp: mh, plated: !!plated, cd: rand(0, 0.5), flash: 0, angle: -Math.PI / 2,
       spent: { w: sw, s: ss, g: sg }, dead: false, acc: 0, nodes: { t: 0, r: 0 }, born: -99, team };
     S.buildings.push(b); S.bById.set(id, b);
     for (let y = ty; y < ty + d.size; y++) for (let x = tx; x < tx + d.size; x++) S.bmap[y * MAP + x] = id;
@@ -3206,7 +3297,8 @@ function retagTeam(t, newId, name) {
 const pName = p => (p.clan ? '[' + p.clan + '] ' : '') + (p.name || ('Spieler ' + (p.id + 1)));
 function addChat(name, text, color) {
   chatLog.push({ name, text, color: color || '#ddd', t: performance.now() });
-  if (chatLog.length > 40) chatLog.shift();
+  if (chatLog.length > 200) chatLog.shift();
+  if (chatScroll > 0) chatScroll++;   // beim Zurückscrollen bleibt die Stelle stehen
 }
 function toggleFullscreen() {
   const el = document.documentElement;
@@ -3221,7 +3313,7 @@ function toggleFullscreen() {
   } catch (e) { toast('Vollbild geht hier nicht', '#ff9a7a'); }
 }
 function chatSend(text) {
-  text = cleanText(text, 120);
+  text = chatFilter(cleanText(text, 120));
   if (!text || !S) return;
   if (/^\/(full|vollbild|fullscreen|fs)$/i.test(text)) { toggleFullscreen(); return; }
   if (text[0] === '/') {
@@ -3246,15 +3338,17 @@ function chatOpen() {
       e.stopPropagation();
       if (e.key === 'Enter') { chatSend(chatEl.value); chatClose(); }
       else if (e.key === 'Escape') chatClose();
+      else if (e.key === 'PageUp' || e.key === 'ArrowUp') { chatScroll += e.key === 'PageUp' ? 6 : 1; e.preventDefault(); }
+      else if (e.key === 'PageDown' || e.key === 'ArrowDown') { chatScroll = Math.max(0, chatScroll - (e.key === 'PageDown' ? 6 : 1)); e.preventDefault(); }
     });
-    chatEl.addEventListener('blur', () => setTimeout(chatClose, 0));
+    chatEl.addEventListener('blur', () => setTimeout(() => { if (performance.now() - chatKeepT < 400) chatEl.focus(); else chatClose(); }, 0));
   }
   for (const k in keys) keys[k] = false;
   input.down = false;
   chatEl.value = ''; chatEl.style.display = 'block';
   setTimeout(() => chatEl.focus(), 0);
 }
-function chatClose() { if (chatEl) { chatEl.style.display = 'none'; chatEl.blur(); } }
+function chatClose() { chatScroll = 0; if (chatEl) { chatEl.style.display = 'none'; chatEl.blur(); } }
 function chatIsOpen() { return !!chatEl && chatEl.style.display === 'block'; }
 function setName() {
   const n = cleanText(prompt('Wie soll dein Spielername lauten?', playerName), 16);
@@ -3322,8 +3416,9 @@ function runCommand(p, text) {
   const parts = text.slice(1).trim().split(/\s+/), cmd = (parts[0] || '').toLowerCase(), args = parts.slice(1);
   const rest = args.join(' ');
   if (cmd === 'afk') setAfk(p, !p.afk);
+  else if (cmd === 'wo' || cmd === 'pos') sysMsg(p, '📍 Du bist in ' + sectorOf(p.x, p.y) + ' (Karte: M)');
   else if (cmd === 'hilfe' || cmd === 'help' || cmd === '?') {
-    sysMsg(p, 'Befehle: /afk · /full (Vollbild) · /heim (zur Basis) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
+    sysMsg(p, 'Befehle: /wo (dein Planquadrat) · /afk · /full (Vollbild) · /heim (zur Basis) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
     sysMsg(p, 'Jeder hat seine eigene Basis. Im Clan teilt ihr Reaktor, Rohstoffe und Gebäude.');
     sysMsg(p, 'Clans: /clan gründen <Name> · /clan einladen <Spieler> · /clan beitreten <Name> · /clan verlassen · /clan offen · /clan kick <Spieler> · /clan info');
     sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · Y Markierung · I Inventar · L Medkit · G Granate · Z Molotow · N Ton · O = Ego-Perspektive');
@@ -3505,7 +3600,7 @@ function netHostTick(dt) {
   NET.sendT = 0;
   if (NET.bDirty && NET.bT > 0.2) {
     NET.bDirty = false; NET.bT = 0;
-    netSendR({ t: 'B', b: S.buildings.map(b => [b.id, BTYPES.indexOf(b.type), b.tx, b.ty, b.lvl, Math.ceil(b.hp), b.maxHp, b.spent.w, b.spent.s, b.spent.g, b.team]) });
+    netSendR({ t: 'B', b: S.buildings.map(b => [b.id, BTYPES.indexOf(b.type), b.tx, b.ty, b.lvl, Math.ceil(b.hp), b.maxHp, b.spent.w, b.spent.s, b.spent.g, b.team, b.plated ? 1 : 0]) });
   }
   if (NET.ev.length) { netSendR({ t: 'E', e: NET.ev }); NET.ev = []; }
   const bd = [];
@@ -3537,11 +3632,12 @@ function hostHandleClient(m, p) {
     p.inp.down = !!m.d; p.lastInput = S.t;
   } else if (m.t === 'name') {
     if (m.skin && /^[0-9.]{1,40}$/.test(m.skin)) p.skin = skinStr(skinParse(m.skin));
-    const old = p.name; p.name = cleanText(m.name, 16) || p.name;
+    const nn = cleanText(m.name, 16), old = p.name;
+    p.name = nn && chatFilter(nn) === nn ? nn : p.name;
     if (old && old !== p.name) { addChat('', old + ' heißt jetzt ' + p.name, '#aaa'); hostEv(['c', '', old + ' heißt jetzt ' + p.name, 101]); }
     restoreChar(p);
   } else if (m.t === 'chat') {
-    const text = cleanText(m.text, 120);
+    const text = chatFilter(cleanText(m.text, 120));
     if (!text) return;
     if (text[0] === '/') { runCommand(p, text); return; }
     addChat(pName(p), text, chatCol(p.id));
@@ -3577,12 +3673,13 @@ function hostHandleClient(m, p) {
   } else if (m.t === 'C' && mode !== 'over') {
     if (m.c === 'place' && BDEF[m.type]) {
       const err = placeError(m.type, m.tx | 0, m.ty | 0);
-      if (err) { netSendR({ t: 'T', text: err, color: '#ff7b6b', err: 1 }); return; }
+      if (err) { netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 }); return; }
       placeBuilding(m.type, m.tx | 0, m.ty | 0, p);
-    } else if (m.c === 'up' || m.c === 'sell') {
+    } else if (m.c === 'up' || m.c === 'sell' || m.c === 'plate' || m.c === 'fix') {
       const b = S.bById.get(m.id);
       if (!b) return;
-      if (m.c === 'up') upgradeBuilding(b, p); else sellBuilding(b, p);
+      if (m.c === 'up') upgradeBuilding(b, p); else if (m.c === 'sell') sellBuilding(b, p);
+      else { const err = m.c === 'plate' ? plateBuilding(b, p) : fixBuilding(b, p); if (err) netSendTo(p, { t: 'T', text: err, color: '#ff7b6b', err: 1 }); }
     }
   }
 }
@@ -3640,7 +3737,7 @@ function clientBuildings(list) {
   for (const a of list) {
     const type = BTYPES[a[1]], d = BDEF[type];
     const b = old.get(a[0]) || { id: a[0], flash: 0, angle: -Math.PI / 2, nodes: { t: 0, r: 0, g: 0 } };
-    Object.assign(b, { type, tx: a[2], ty: a[3], size: d.size, lvl: a[4], hp: a[5], maxHp: a[6], spent: { w: a[7], s: a[8], g: a[9] }, dead: false, team: a[10] || 'p:0' });
+    Object.assign(b, { type, tx: a[2], ty: a[3], size: d.size, lvl: a[4], hp: a[5], maxHp: a[6], spent: { w: a[7], s: a[8], g: a[9] }, dead: false, team: a[10] || 'p:0', plated: !!a[11] });
     S.buildings.push(b); S.bById.set(b.id, b);
     for (let y = b.ty; y < b.ty + b.size; y++) for (let x = b.tx; x < b.tx + b.size; x++) S.bmap[y * MAP + x] = b.id;
     const bt = ensureTeam(b.team);
@@ -5454,16 +5551,17 @@ function drawHUD() {
 }
 function drawChat() {
   const open = chatIsOpen(), now = performance.now();
-  const list = chatLog.filter(c => open || now - c.t < 12000).slice(open ? -10 : -6);
+  const list = open ? chatLog : chatLog.filter(c => now - c.t < 12000).slice(-6);
   if (!list.length && !open) return;
-  const x = 14, w = Math.min(420, VW - 28), lh = 19, bottom = VH - (open ? 178 : 140);
+  const x = 14, w = Math.min(420, VW - 28), lh = 19, bottom = VH - (open ? 178 : 140), maxRows = open ? 14 : 12;
   ctx.font = '600 13px ' + FONT;
   const rows = [];
   for (const c of list) {
     const head = c.name ? c.name + ': ' : '';
     rows.push(...wrapLines(head + c.text, w - 20, '600 13px ' + FONT).map((l, i) => ({ l, c, first: i === 0, head })));
   }
-  const shown = rows.slice(-12);
+  chatScroll = clamp(chatScroll, 0, Math.max(0, rows.length - maxRows));
+  const end = rows.length - (open ? chatScroll : 0), shown = rows.slice(Math.max(0, end - maxRows), end);
   const h = shown.length * lh + 12;
   if (open || shown.length) { ctx.globalAlpha = open ? 1 : 0.85; panel(x - 4, bottom - h, w, h, open ? 0.75 : 0.45); }
   shown.forEach((r, i) => {
@@ -5477,6 +5575,17 @@ function drawChat() {
     } else text(r.l, x + 4, y, 13, r.c.name ? '#eee' : r.c.color, 'left', '600');
   });
   ctx.globalAlpha = 1;
+  if (open && rows.length > maxRows) {
+    // Scroll-Leiste + Knöpfe (Handy) – der Chat bleibt dabei offen
+    const top = bottom - h, frac = maxRows / rows.length, pos = 1 - (chatScroll + maxRows) / rows.length;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; rr(x + w - 10, top + 4, 4, h - 8, 2); ctx.fill();
+    ctx.fillStyle = '#ffb070'; rr(x + w - 10, top + 4 + (h - 8) * pos, 4, Math.max(10, (h - 8) * frac), 2); ctx.fill();
+    if (chatScroll > 0) text('↓ ' + chatScroll + ' neuere', x + w - 18, bottom + 10, 11, '#ffb070', 'right', '700');
+    else text(isTouch ? '▲ ältere Nachrichten' : '↑ Mausrad / Bild↑ = ältere Nachrichten', x + 4, top - 10, 11, '#aaa', 'left', '600');
+    for (const [l, dy, d] of [['▲', top, 4], ['▼', bottom - 30, -4]]) {
+      button(l, x + w + 2, dy, 30, 30, () => { chatKeepT = performance.now(); chatScroll = Math.max(0, chatScroll + d); }, false, true);
+    }
+  }
 }
 function drawToolIcon(id, x, y, s, met) {
   met = met || '#dfe6ee';
@@ -5834,7 +5943,32 @@ function mmDraw(x, y, size) {
   ctx.fillStyle = 'rgb(58,84,48)';   // wie normale Wiese – man soll nicht sehen, dass dort etwas ist
   for (const h of v.hide) ctx.fillRect(ox + h[0] * TS * k, oy + h[1] * TS * k, h[2] * TS * k, h[3] * TS * k);
   const vis = (wx, wy) => { const tx = wx / TS, ty = wy / TS; if (tx < v.x0 || ty < v.y0 || tx >= v.x0 + v.n || ty >= v.y0 + v.n) return false; for (const h of v.hide) if (tx >= h[0] && ty >= h[1] && tx < h[0] + h[2] && ty < h[1] + h[3]) return false; return true; };
-  return { k, ox, oy, vis };
+  return { k, ox, oy, vis, inside: !v.hide.length };
+}
+// Planquadrat wie „C5“ (nur in der Oberwelt)
+const GRID_N = 8;
+function sectorOf(x, y) {
+  const tx = x / TS, ty = y / TS;
+  if (inDim(Math.floor(tx), Math.floor(ty))) return 'Schattenreich';
+  if (inDun(Math.floor(tx), Math.floor(ty))) return 'Bunker';
+  const c = clamp(Math.floor(tx / MAP * GRID_N), 0, GRID_N - 1), r = clamp(Math.floor(ty / MAP * GRID_N), 0, GRID_N - 1);
+  return 'ABCDEFGH'[c] + (r + 1);
+}
+function drawGrid(M, x, y, size, big) {
+  if (M.inside) return;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, size, size); ctx.clip();
+  ctx.strokeStyle = big ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+  const step = MAP * TS / GRID_N;
+  for (let k = 1; k < GRID_N; k++) {
+    const gx = Math.round(M.ox + k * step * M.k) + 0.5, gy = Math.round(M.oy + k * step * M.k) + 0.5;
+    ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + size); ctx.moveTo(x, gy); ctx.lineTo(x + size, gy); ctx.stroke();
+  }
+  if (big) for (let k = 0; k < GRID_N; k++) {
+    const c = M.ox + (k + 0.5) * step * M.k;
+    text('ABCDEFGH'[k], c, y + 10, 12, 'rgba(255,255,255,0.75)', 'center', '700');
+    text(String(k + 1), x + 8, M.oy + (k + 0.5) * step * M.k, 12, 'rgba(255,255,255,0.75)', 'center', '700');
+  }
+  ctx.restore();
 }
 function mmSize() { return VW < 900 ? 120 : 170; }
 let mapOpen = false;
@@ -5844,6 +5978,7 @@ function drawBigMap() {
   panel(x - 8, y - 34, size + 16, size + 42, 0.95);
   text('Karte (M zum Schließen) · Klick setzt eine Markierung', x, y - 17, 13, '#ffe27a', 'left');
   const M = mmDraw(x, y, size), k = M.k, vis = M.vis, X = wx => M.ox + wx * k, Y = wy => M.oy + wy * k;
+  drawGrid(M, x, y, size, true);
   if (S.hq && vis(S.hq.tx * TS, S.hq.ty * TS)) {
     const hx = (S.hq.tx + 1.5) * TS, hy = (S.hq.ty + 1.5) * TS, R = (buildRange() + 0.5) * TS;
     ctx.strokeStyle = 'rgba(255,230,140,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(X(hx - R), Y(hy - R), 2 * R * k, 2 * R * k);
@@ -5876,6 +6011,7 @@ function drawMinimap() {
   const x = VW - size - m, y = VH - size - m;
   panel(x - 4, y - 4, size + 8, size + 8, 0.8);
   const M = mmDraw(x, y, size), k = M.k, vis = M.vis, X = wx => M.ox + wx * k, Y = wy => M.oy + wy * k;
+  drawGrid(M, x, y, size, false);
   if (S.hq && vis(S.hq.tx * TS, S.hq.ty * TS)) {
     const hx = (S.hq.tx + 1.5) * TS, hy = (S.hq.ty + 1.5) * TS, R = (buildRange() + 0.5) * TS;
     ctx.strokeStyle = 'rgba(255,230,140,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(X(hx - R), Y(hy - R), 2 * R * k, 2 * R * k);
@@ -5916,7 +6052,7 @@ function towerStats(type, L) {
 }
 function drawBuildMenu(b) {
   const d = BDEF[b.type], c = bCenter(b);
-  const w = 270, h = 172;
+  const w = 270, h = 214;
   const scx = (c.x - camX) / uiS, scy = (c.y - camY) / uiS, half = b.size * TS / 2 / uiS;
   let x = scx + half + 14, y = scy - h / 2;
   if (x + w > VW - 70) x = scx - half - 14 - w;
@@ -5950,6 +6086,16 @@ function drawBuildMenu(b) {
     text('+' + Math.floor((b.spent.w + b.spent.s + b.spent.g) * f), sx + sw / 2, by + 50, 11, '#ffd8a0', 'center', '600');
     ui.push({ x: sx, y: by, w: sw, h: bh, fn: () => actSell(b) });
   }
+  // Eisen: verstärken (+50 % HP, Stahlplatten) und reparieren
+  const iy = by + bh + 8, iw = (w - 28) / 2, own = !b.team || b.team === tidOf(S.player);
+  const pc = plateCost(b), fc = fixCost(b), dmg = b.hp < b.maxHp;
+  const ironBtn = (ix, label, sub, ok, fn) => {
+    ctx.fillStyle = ok ? 'rgba(110,125,145,0.75)' : 'rgba(80,80,90,0.45)'; rr(ix, iy, iw, 34, 6); ctx.fill();
+    text(label, ix + iw / 2, iy + 11, 12, ok ? '#fff' : '#999', 'center', '700'); text(sub, ix + iw / 2, iy + 25, 10, ok ? '#dfe6ee' : '#888', 'center', '600');
+    if (own) ui.push({ x: ix, y: iy, w: iw, h: 34, fn });
+  };
+  ironBtn(x + 10, b.plated ? '🔩 Verstärkt' : '🔩 Verstärken', b.plated ? '+50 % HP' : pc.i + ' Eisen · +50 % HP', !b.plated && (S.iron || 0) >= pc.i, () => actIron(b, 'plate'));
+  ironBtn(x + 18 + iw, '🔧 Reparieren', dmg ? fc.i + ' Eisen' : 'ist heil', dmg && (S.iron || 0) >= fc.i, () => actIron(b, 'fix'));
 }
 function button(label, x, y, w, h, fn, primary, small) {
   const hov = input.sx >= x && input.sx <= x + w && input.sy >= y && input.sy <= y + h;
@@ -5983,7 +6129,7 @@ function drawOverlays() {
     ctx.fillStyle = '#c8c0b8'; ctx.fillText(R3 ? '3D SURVIVAL GAME' : 'SURVIVAL GAME · 2D', cx, y);
     y += ls * 0.32;
     ctx.font = '12px ' + FONT_P; ctx.fillStyle = '#ff8a3a';
-    ctx.fillText('v3.0 · DIE WELT IST DUNKEL. DEIN REAKTOR IST DAS LETZTE LICHT.', cx, y);
+    ctx.fillText(GAME_VER.toUpperCase() + ' · DIE WELT IST DUNKEL. DEIN REAKTOR IST DAS LETZTE LICHT.', cx, y);
     // Umschalter 2D/3D
     if (isTouch) button(document.fullscreenElement ? 'VOLLBILD AUS' : '⛶ VOLLBILD', 14, 14, 170, 40, () => {
       const el = document.documentElement;
@@ -6284,6 +6430,7 @@ if (!HEADLESS) {
   canvas.addEventListener('touchend', e => { e.preventDefault(); for (const t of e.changedTouches) onTouchEnd(t); }, touchOpts);
   canvas.addEventListener('touchcancel', e => { for (const t of e.changedTouches) onTouchEnd(t); });
   canvas.addEventListener('wheel', e => {
+    if (chatIsOpen()) { chatScroll = Math.max(0, chatScroll + (e.deltaY < 0 ? 2 : -2)); return; }
     if (R3) { R3.zoom(e.deltaY); return; }
     if (mode !== 'play') return;
     const order = TOOL_ORDER.filter(k => S.player.tl[k] > 0), n = order.length;
@@ -6334,7 +6481,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
