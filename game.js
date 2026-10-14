@@ -2200,7 +2200,7 @@ function useAbility(p) {
       const a = Math.atan2(z.y - p.y, z.x - p.x); z.lastHit = p;
       hurtZombie(z, critDmg(p, dmg), { x: Math.cos(a) * 420, y: Math.sin(a) * 420 }); lifeSteal(p, dmg * 0.5);
     });
-    ring(p.x, p.y, R, 0.35, '#9fd8ff'); burst(p.x, p.y, '#cfe8ff', 30, 260, 0.5, 3); p.swing = 0.22;
+    ring(p.x, p.y, R, 0.35, '#9fd8ff'); burst(p.x, p.y, '#cfe8ff', 30, 260, 0.5, 3); p.swing = 0.3;
     SFX.play('swing', p.x, p.y); SFX.play('boom', p.x, p.y); shakeFor(p, 4);
   } else if (A.id === 'dash') {
     p.dashHit = 0.3; p.dashN = (p.dashN || 0) + 1; p.invT = 0.4;
@@ -2245,7 +2245,7 @@ function actAbility() {
     netSendR({ t: 'abUse', f: r2(p.face) });
     const A = ABIL.find(a => a.id === p.ab); p.abCd = A.cd;
     if (p.ab === 'dash') { p.dashT = 0.18; p.invT = 0.4; }
-    if (p.ab === 'whirl') p.swing = 0.22;
+    if (p.ab === 'whirl') p.swing = 0.3;
     return;
   }
   useAbility(p);
@@ -2667,7 +2667,7 @@ function playerAttack(p) {
   if (!(p.tl[p.tool] > 0)) p.tool = 'sword';
   const T = TOOLS[p.tool] || TOOLS.sword, L = p.tl[p.tool] || 1, mul = (1 + 0.3 * (hqLvl() - 1)) * toolMul(L) * (p.rageT > 0 ? 1.4 : 1) * clanBonus(p);
   const ranged = p.tool === 'bow' || p.tool === 'staff', melee = (1 + 0.15 * p.sk.str), rangedM = (1 + 0.12 * p.sk.bow);
-  p.cd = T.cd * (ranged ? 1 - 0.06 * p.sk.bow : 1) * (1 - armorAtk(p)); p.swing = 0.22;
+  p.cd = T.cd * (ranged ? 1 - 0.06 * p.sk.bow : 1) * (1 - armorAtk(p)); p.swing = 0.3;
   if (p.tool === 'bow') {
     const sp = 760, n = L >= 5 ? 3 : L >= 3 ? 2 : 1;
     for (let k = 0; k < n; k++) {
@@ -3924,7 +3924,7 @@ function clientUpdate(dt) {
   // Schwung-Animation lokal vorhersagen (Treffer berechnet der Host)
   p.cd -= dt; p.swing -= dt; p.abCd = Math.max(0, (p.abCd || 0) - dt); p.invT = (p.invT || 0) - dt;
   for (const q of S.players) q.danceT = (q.danceT || 0) - dt;
-  if (p.inp.down && p.cd <= 0 && p.dead <= 0) { p.cd = (TOOLS[p.tool] || TOOLS.sword).cd; p.swing = 0.22; }
+  if (p.inp.down && p.cd <= 0 && p.dead <= 0) { p.cd = (TOOLS[p.tool] || TOOLS.sword).cd; p.swing = 0.3; }
   const k = Math.min(1, dt * 12);
   for (const q of S.players) if (q !== p) {
     const ox = q.x, oy = q.y;
@@ -4430,7 +4430,7 @@ function drawPlayer(p) {
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(2, 9, 14, 7, 0, 0, TAU); ctx.fill();
   if (p.z > 0) { const k = 1 + p.z / 420; ctx.translate(0, -p.z * 0.45); ctx.scale(k, k); }
   ctx.rotate(p.danceT > 0 ? animT * 12 : p.face);
-  const sw = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
+  const sw = p.swing > 0 ? Math.sin((1 - p.swing / 0.3) * Math.PI) : 0;
   const skin = p.flash > 0 ? '#ff8080' : '#f0c9a0';
   if (p.rageT > 0) { ctx.fillStyle = 'rgba(255,90,40,' + (0.25 + 0.1 * Math.sin(animT * 10)) + ')'; circle(0, 0, p.r * 1.7); ctx.fill(); }
   // Werkzeug

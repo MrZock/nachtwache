@@ -124,7 +124,9 @@
     mesh.setMatrixAt(i, m4);
   }
   // Basis-Matrix (Position, Drehung, Größe) für Körperteile
-  function base(x, y, z, rotY, sc) { e3.set(0, rotY, 0, 'YXZ'); qB.setFromEuler(e3); mB.compose(pB.set(x, y, z), qB, s3.set(sc, sc, sc)); }
+  function base(x, y, z, rotY, sc, rotZ) { e3.set(0, rotY, rotZ || 0, 'YXZ'); qB.setFromEuler(e3); mB.compose(pB.set(x, y, z), qB, s3.set(sc, sc, sc)); }
+  // Zombies, die gerade verschwunden sind (gestorben, verbrannt), fallen noch um
+  const zPrev = new Map(), corpses = [];
   function part(mesh, i, px, py, pz, rx, ry, rz, sx, sy, sz) {
     e3.set(rx, ry, rz, 'YXZ'); q4.setFromEuler(e3);
     mL.compose(v3.set(px, py, pz), q4, s3.set(sx, sy === undefined ? sx : sy, sz === undefined ? sx : sz));
@@ -978,16 +980,42 @@
   }
   function makePlayer(p) { const grp = buildPlayer(p); scene.add(grp); return grp; }
   // Waffe in der Hand: der Arm führt die Bewegung, der Griff sitzt immer genau in der Hand (auch mitten im Schlag)
-  const HAND = new T.Vector3();
-  function poseTool(u, tool, swp) {
+  const HAND = new T.Vector3(), GRIP2 = new T.Vector3(), SHOULDER_L = new T.Vector3(0, 0.82, -0.255), DOWN = new T.Vector3(0, -1, 0), qT = new T.Quaternion();
+  // Zweite Hand: Griffpunkt auf der Waffe (Werkzeug-Koordinaten); Schwert ist einhändig
+  const GRIP_2 = { pick: [0.3, 0, 0], axe: [0.3, 0, 0], spear: [0.42, 0, 0], bow: [0.3, -0.02, 0], staff: [0.45, -0.05, 0] };
+  const smooth = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+  // t = Fortschritt des Schlags (0…1), -1 = kein Schlag. wind = Ausholen, hit = Zuschlagen, beide 0…1
+  function poseTool(u, tool, t) {
     for (const k in u.tools) u.tools[k].visible = k === tool;
-    const arm = u.arms[1], ranged = tool === 'bow' || tool === 'staff';
-    arm.rotation.set(ranged ? -0.15 : -0.35, 0, (ranged ? 1.15 : 0.75) + swp * (tool === 'spear' ? 0.85 : tool === 'pick' ? 0.9 : 0.4));
-    arm.updateMatrix();
+    const on = t >= 0, wind = on ? (t < 0.3 ? smooth(t / 0.3) : 1 - smooth((t - 0.3) / 0.12)) : 0;
+    const hit = on ? (t < 0.3 ? 0 : t < 0.48 ? smooth((t - 0.3) / 0.18) : 1 - smooth((t - 0.48) / 0.52)) : 0;
+    const arm = u.arms[1];
+    let az, ax = -0.35, yaw, roll = 0, twist = 0;
+    switch (tool) {
+      case 'pick':   // über den Kopf ausholen, nach vorne-unten hacken
+        az = 0.6 + wind * 2.0 - hit * 0.1; ax = -0.3; yaw = 0.35; roll = 0.12 + wind * 1.6 - hit * 1.25; break;
+      case 'axe':    // schräg gehalten, weit nach rechts ausholen, quer durchziehen
+        az = 0.7 + wind * 0.35 + hit * 0.2; ax = -0.3; yaw = 0.6 + wind * 1.2 - hit * 2.2; roll = 0.45 + wind * 0.3 - hit * 0.45; twist = wind * 0.45 - hit * 0.6; break;
+      case 'spear':  // waagerecht nach vorne, zurückziehen und zustoßen
+        az = 1.1 - wind * 0.35 + hit * 0.5; ax = -0.25; yaw = 0.12; roll = 0.04; break;
+      case 'bow': case 'staff':   // im Anschlag, Rückstoß beim Schuss
+        az = 1.25 - hit * 0.12; ax = -0.12; yaw = 0.06; roll = 0.06 + hit * 0.25; break;
+      default:       // Schwert: schräg nach oben, nach rechts ausholen, quer schlagen
+        az = 0.8 + wind * 0.45 + hit * 0.15; ax = -0.35; yaw = 0.35 + wind * 1.1 - hit * 1.9; roll = 0.55 + wind * 0.3 - hit * 0.55; twist = wind * 0.2 - hit * 0.35;
+    }
+    arm.rotation.set(ax, 0, az); arm.updateMatrix();
     HAND.set(0.005, -0.31, 0).applyMatrix4(arm.matrix);
     u.tool.position.copy(HAND);
-    u.tool.rotation.set(0, ranged ? 0.12 : tool === 'spear' ? 0.25 : tool === 'axe' ? 1.6 - swp * 3.6 : tool === 'pick' ? 0.9 - swp * 0.6 : 0.9 - swp * 2.2, tool === 'pick' ? 0.35 - swp * 1.1 : ranged ? 0.1 : 0);
-    u.body.rotation.y = tool === 'axe' ? -swp * 0.5 : 0;
+    u.tool.rotation.set(0, yaw, roll); u.tool.updateMatrix();
+    u.body.rotation.y = twist;
+    // linke Hand: greift zweihändige Waffen am zweiten Griff (einfaches IK), sonst frei
+    const g2 = GRIP_2[tool], la = u.arms[0];
+    if (g2) {
+      GRIP2.set(g2[0], g2[1], g2[2]).applyMatrix4(u.tool.matrix).sub(SHOULDER_L);
+      const d = GRIP2.length();
+      qT.setFromUnitVectors(DOWN, GRIP2.normalize()); la.quaternion.copy(qT);
+      la.userData.held = d;
+    } else la.userData.held = 0;
   }
   // Aussehen = Skin + Rüstungsstufen; nur wenn sich das ändert, wird das Modell neu gebaut
   function lookKey(p) { const e = p.eq; return (p.skin || '') + '|' + (e ? e.h + '' + e.v + e.g + e.b : ''); }
@@ -1045,7 +1073,7 @@
       fpView.traverse(o => { o.renderOrder = 10; if (o.material) { o.material = o.material; } });
     }
     for (const k in fpTools) fpTools[k].visible = k === p.tool;
-    const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
+    const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.3) * Math.PI) : 0;
     const w = walkPh.get('p' + p.id) || { ph: 0, mv: 0 };
     const aim = p.tool === 'bow' || p.tool === 'staff';   // Fernwaffen zeigen auf das Fadenkreuz
     fpView.position.set((aim ? 0.2 : 0.3) + Math.sin(w.ph) * 0.015 * w.mv, (aim ? -0.25 : -0.32) + Math.abs(Math.cos(w.ph)) * 0.015 * w.mv, -0.5 - (p.tool === 'spear' ? swp * 0.35 : 0));
@@ -1269,6 +1297,7 @@
       for (const o of animalObjs.values()) scene.remove(o); animalObjs.clear();
       if (hatchObjs) { for (const hb of hatchObjs) { scene.remove(hb.o1); scene.remove(hb.o2); } hatchObjs = null; }
       if (riftObj) { scene.remove(riftObj); riftObj = null; }
+      zPrev.clear(); corpses.length = 0;
     }
 
     // Kamera: schräg von oben, folgt dem Spieler
@@ -1675,15 +1704,22 @@
 
     // Zombies
     let nz = 0, nl = 0, na = 0, ne = 0, nh = 0, nbar = 0, nhelm = 0, nplate = 0, nhat = 0, nstaff = 0, nsack = 0;
-    const K = 1.35;
+    const K = 1.35, alive = new Set();
+    for (const z of S.zombies) alive.add(z.id);
+    for (const [id, d] of zPrev) if (!alive.has(id)) { if (corpses.length < 40 && (d.x - cx) ** 2 + (d.zz - cz) ** 2 < R2) { d.t = 0; corpses.push(d); } zPrev.delete(id); }
     for (const z of S.zombies) {
       if (nz >= MAXZ) break;
       const type = z.type, boss = type === 'boss', brute = type === 'brute', runner = type === 'runner';
       const rr = z.r / TS * K, x = z.x / TS, zz = z.y / TS, f = z.face || 0;
+      let zp = zPrev.get(z.id); if (!zp) { zp = { id: z.id, type }; zPrev.set(z.id, zp); }
+      zp.x = x; zp.zz = zz; zp.f = f; zp.rr = rr; zp.golden = z.golden;
       if (!inView(x, rr, zz, rr * 2 + 0.6)) continue;
       const w = phase('z' + z.id, x, zz, runner ? 4.2 : 3.2 / Math.max(0.6, rr));
       const ph = w.ph, mv = Math.max(w.mv, (Math.abs(z.vx || 0) + Math.abs(z.vy || 0)) > 2 ? 0.8 : 0);
-      const lean = runner ? 0.45 : boss ? 0.15 : 0.25;
+      const flinch = z.flash > 0 ? 1 : 0, lp = z.lunge > 0 ? 1 - z.lunge / 0.18 : -1;
+      const claw = lp < 0 ? 0 : lp < 0.35 ? smooth(lp / 0.35) * 1.1 : 1.1 - smooth((lp - 0.35) / 0.45) * 1.7;   // Arme hoch, dann runterreißen
+      const lean = (runner ? 0.45 : boss ? 0.15 : 0.25) + (lp >= 0 ? Math.sin(lp * Math.PI) * 0.25 : 0) - flinch * 0.22;
+      const roll = Math.sin(ph) * 0.07 * mv + Math.sin(at * 1.3 + z.id) * 0.035;   // Hin-und-her-Schwanken
       const bob = Math.abs(Math.sin(ph)) * 0.08 * mv;
       base(x, bob * rr, zz, -f, rr);
       // Farben
@@ -1702,11 +1738,11 @@
         zLeg.setColorAt(nl, tint(pants)); nl++;
       }
       // Körper
-      part(zTorso, nz, lean * 0.3, 1.5, 0, 0, 0, -lean, wide, boss ? 1.1 : 1, wide);
+      part(zTorso, nz, lean * 0.3, 1.5, 0, roll, 0, -lean, wide, boss ? 1.1 : 1, wide);
       zTorso.setColorAt(nz, tint(shirt));
-      part(zGore, nz, lean * 0.3, 1.5, 0, 0, 0, -lean, wide, boss ? 1.1 : 1, wide);
+      part(zGore, nz, lean * 0.3, 1.5, 0, roll, 0, -lean, wide, boss ? 1.1 : 1, wide);
       zGore.setColorAt(nz, flash ? WHITE : frozen ? FROST : z.golden ? GOLD : WHITE);
-      const hx = 0.18 + lean * 0.55, tiltX = Math.sin(z.id * 1.7) * 0.22 + Math.sin(at * 2 + z.id) * 0.05;
+      const hx = 0.18 + lean * 0.55, tiltX = Math.sin(z.id * 1.7) * 0.22 + Math.sin(at * 2 + z.id) * 0.05 + roll * 1.6 + Math.sin(ph * 2) * 0.05 * mv;
       part(zHead, nz, hx, 2.24 + (boss ? 0.08 : 0), 0, tiltX, Math.sin(z.id) * 0.2, -0.1, boss ? 1.15 : 1);
       zHead.setColorAt(nz, tint(skin));
       part(zSkull, nz, hx, 2.24 + (boss ? 0.08 : 0), 0, tiltX, Math.sin(z.id) * 0.2, -0.1, boss ? 1.15 : 1);
@@ -1714,8 +1750,10 @@
       // Arme: nach vorne gestreckt, beim Zuschlagen hoch
       const lunge = z.lunge > 0 ? 1 : 0;
       for (const s of [-1, 1]) {
-        const swing = Math.sin(ph + (s > 0 ? Math.PI : 0)) * 0.18 * mv;
-        part(zArm, na, 0.12 + lean * 0.4, 1.92, s * 0.55 * wide, s * 0.1, -s * 0.12, -0.18 + swing + lunge * 0.55 + (type === 'spitter' ? 0.2 : 0), brute ? 1.15 : boss ? 0.8 : 1, brute ? 1.5 : 1, brute ? 1.5 : 1);
+        const swing = Math.sin(ph + (s > 0 ? Math.PI : 0)) * (runner ? 0.55 : 0.22) * mv;
+        // Normale greifen abwechselnd nach vorne, Läufer reißen die Arme nach hinten, beim Angriff Krallenschlag
+        const armZ = runner ? -0.75 + swing * 1.4 + claw : -0.18 + swing + (s > 0 ? 0.14 : -0.06) + Math.sin(at * 1.7 + z.id + s) * 0.06 + claw + (type === 'spitter' ? 0.2 : 0);
+        part(zArm, na, 0.12 + lean * 0.4, 1.92, s * 0.55 * wide, s * 0.1 + roll, -s * 0.12, armZ - lunge * 0, brute ? 1.15 : boss ? 0.8 : 1, brute ? 1.5 : 1, brute ? 1.5 : 1);
         zArm.setColorAt(na, tint(skin)); na++;
         // Augen
         const ex = hx + 0.3, ey = 2.32 + (boss ? 0.08 : 0);
@@ -1747,6 +1785,22 @@
       }
       nz++;
     }
+    for (let ci = corpses.length - 1; ci >= 0; ci--) {
+      const c = corpses[ci]; c.t += dt || 0.016;
+      if (c.t > 1.7 || nz >= MAXZ) { corpses.splice(ci, 1); continue; }
+      if (!inView(c.x, c.rr, c.zz, c.rr * 2 + 0.8)) continue;
+      const fall = smooth(c.t / 0.55) * 1.45, sink = c.t > 1.0 ? (c.t - 1.0) * 0.9 : 0, dim = Math.max(0.25, 1 - c.t * 0.5);
+      base(c.x, -sink * c.rr, c.zz, -c.f, c.rr, fall);
+      const ty = c.type, wide = ty === 'brute' ? 1.3 : ty === 'boss' ? 1.15 : ty === 'runner' ? 0.85 : 1;
+      const sk = col.copy(zColor(ty)).multiplyScalar(dim), sh = col2.set(TSHIRT[ty] || SHIRTS[c.id % SHIRTS.length]).multiplyScalar(dim);
+      for (const s2 of [-1, 1]) { part(zLeg, nl, 0, 1.0, s2 * 0.22 * wide, 0, 0, s2 * 0.25 * smooth(c.t / 0.5), wide, 1, wide); zLeg.setColorAt(nl, col.copy(PANTS[(c.id * 7) % PANTS.length]).multiplyScalar(dim)); nl++; }
+      part(zTorso, nz, 0, 1.5, 0, 0, 0, 0.2, wide, 1, wide); zTorso.setColorAt(nz, sh);
+      part(zGore, nz, 0, 1.5, 0, 0, 0, 0.2, wide, 1, wide); zGore.setColorAt(nz, WHITE);
+      part(zHead, nz, 0.05, 2.24, 0, 0.3, 0.2, 0.5, ty === 'boss' ? 1.15 : 1); zHead.setColorAt(nz, sk);
+      part(zSkull, nz, 0.05, 2.24, 0, 0.3, 0.2, 0.5, ty === 'boss' ? 1.15 : 1); zSkull.setColorAt(nz, WHITE);
+      for (const s2 of [-1, 1]) { part(zArm, na, 0.05, 1.92, s2 * 0.55 * wide, s2 * 0.4, 0, 0.9 + s2 * 0.2, 1, 1, 1); zArm.setColorAt(na, sk); na++; }
+      nz++;
+    }
     for (const [m, n] of [[zGore, nz], [zSkull, nz], [zLeg, nl], [zTorso, nz], [zHead, nz], [zArm, na], [zEye, ne], [zHorn, nh], [zBarrel, nbar], [zHelm, nhelm], [zPlate, nplate], [zHat, nhat], [zStaff, nstaff], [zSack, nsack]]) { m.count = n; done(m); }
 
     // Tiere
@@ -1771,7 +1825,7 @@
       let o = playerObjs.get(p.id);
       if (o && o.userData.skin !== lookKey(p)) { scene.remove(o); o.userData.mat.dispose(); o.userData.metal.dispose(); o = null; }
       if (!o) { o = makePlayer(p); playerObjs.set(p.id, o); }
-      o.visible = p.dead <= 0 && !(fpOn && p === S.player);
+      o.visible = (p.dead <= 0 || p.dead > 3.8) && !(fpOn && p === S.player);   // beim Sterben noch kurz umfallen
       if (fpOn && p === S.player) updateFpView(p, at);
       if (!o.visible) continue;
       const u = o.userData, px = p.x / TS, pz = p.y / TS, wp = phase('p' + p.id, px, pz, 11), mv = wp.mv;
@@ -1780,10 +1834,17 @@
       o.children[1] && (o.children[1].position.y = 0.02 - jz);
       o.rotation.y = p.danceT > 0 ? -at * 12 : -(p.face || 0);
       if (p.rageT > 0) glowAt(px, 0.6, pz, 1.6, '#ff5a2a', 0.5 + 0.2 * Math.sin(at * 10));
-      u.legs[0].rotation.z = Math.sin(wp.ph) * 0.7 * mv; u.legs[1].rotation.z = -Math.sin(wp.ph) * 0.7 * mv;
-      u.arms[0].rotation.z = -Math.sin(wp.ph) * 0.6 * mv;
-      poseTool(u, p.tool, p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0);
-      u.head.rotation.y = Math.sin(at * 0.7 + p.id) * 0.1;
+      const air = jz > 0.05, dying = p.dead > 0 ? smooth((5 - p.dead) / 1.0) : 0;
+      if (air) { u.legs[0].rotation.z = 0.55; u.legs[1].rotation.z = -0.25; }   // Sprung: Beine angezogen
+      else { const st = Math.sin(wp.ph) * 0.75 * mv; u.legs[0].rotation.z = st; u.legs[1].rotation.z = -st; }
+      poseTool(u, p.tool, p.swing > 0 ? 1 - p.swing / 0.3 : -1);
+      if (!u.arms[0].userData.held) { u.arms[0].quaternion.identity(); u.arms[0].rotation.set(0.12, 0, air ? 0.6 : -Math.sin(wp.ph) * 0.6 * mv); }
+      // Vorlage beim Laufen, Wippen, Zurückzucken bei Treffern, Umfallen beim Tod
+      const flinch = p.flash > 0 ? p.flash / 0.15 : 0;
+      u.body.rotation.z = -0.1 * mv + flinch * 0.18 + dying * 1.45;
+      u.body.rotation.x = Math.sin(wp.ph) * 0.035 * mv;
+      u.body.position.y = air ? 0 : Math.sin(at * 2.1 + p.id) * 0.006 * (1 - mv) - dying * 0.12;
+      u.head.rotation.y = Math.sin(at * 0.7 + p.id) * 0.1 * (1 - mv); u.head.rotation.z = -0.05 * mv - flinch * 0.15;
       const lv = (p.tl && p.tl[p.tool]) || 1;
       if (u.lv !== lv) { u.lv = lv; u.metal.color.set(G.TMET[Math.min(4, lv - 1)]); }
       u.mat.emissive.set(p.flash > 0 ? '#aa2020' : '#000000');
