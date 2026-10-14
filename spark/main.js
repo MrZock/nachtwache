@@ -45,7 +45,7 @@ function cleanCatalog(c) {
 }
 async function loadCatalog() {
   try {
-    const c = cleanCatalog(JSON.parse((await timeout(getBuf(CATALOG_URL), 12000, 'Katalog')).toString('utf8')));
+    const c = cleanCatalog(JSON.parse((await timeout(getBuf(CATALOG_URL), 45000, 'Katalog')).toString('utf8')));
     catalog = c; offline = false; writeJson(cacheFile(), c);
     await Promise.all(c.games.map(g => cacheCover(g).catch(() => {})));
   } catch (e) {
@@ -196,6 +196,7 @@ async function selftest() {
     await loadCatalog(); createLauncher();
     out.offline = offline; out.games = catalog.games.map(g => g.id);
     const g = catalog.games[0];
+    if (!g) throw new Error('Katalog leer/offline');
     const r1 = await install(g.id); out.install = r1.ok ? Math.round(r1.loaded / 1024) + ' KB geladen' : r1.error;
     const r2 = await install(g.id); out.reinstall = r2.ok ? r2.loaded + ' Bytes geladen (nichts geändert)' : r2.error;
     out.update = view(g).update;
