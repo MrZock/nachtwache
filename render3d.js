@@ -43,6 +43,11 @@
   const OC = r => geo('oc' + r, () => new T.OctahedronGeometry(r, 0));
   const DO = r => geo('do' + r, () => new T.DodecahedronGeometry(r, 0));
   const TO = (r, t, rs, ts, arc) => geo('to' + [r, t, rs, ts, arc].join('_'), () => new T.TorusGeometry(r, t, rs || 6, ts || 16, arc || TAU));
+  const EX = (pts, d, bev) => geo('ex' + pts.join(';') + '_' + d + '_' + bev, () => {
+    const sh = new T.Shape(); pts.forEach(([x, y], i) => i ? sh.lineTo(x, y) : sh.moveTo(x, y)); sh.closePath();
+    const g = new T.ExtrudeGeometry(sh, { depth: d, bevelEnabled: !!bev, bevelThickness: bev || 0, bevelSize: bev || 0, bevelSegments: 1, curveSegments: 2 });
+    g.translate(0, 0, -d / 2); g.deleteAttribute('uv'); return g;
+  });
 
   // ---------------------------------------------------------------- Mesh-Baukasten
   // add(layer, geometrie, farbe, x, y, z, rx, ry, rz, sx, sy, sz) – Ebenen: 'lit' (beleuchtet), 'glow' (leuchtet selbst)
@@ -741,65 +746,84 @@
   const toolCache = {};
   function toolKit(id) {
     if (toolCache[id]) return toolCache[id];
-    const k = new Kit(), W = '#7a5530', D = '#4a3018', GO = '#c9a227';
+    // Alle Werkzeuge: Griff im Ursprung, Spitze/Klinge Richtung +x. 'metal' wird je nach Werkzeugstufe eingefärbt.
+    const k = new Kit(), WOOD = '#7a5230', WOODD = '#5a3a20', LEATH = '#3a2416', IRON = '#4a4e56', DARK = '#2a2c30';
+    const alongX = (g, c, x, y, z) => k.lit(g, c, x, y || 0, z || 0, 0, 0, -Math.PI / 2);
+    const wraps = (x0, n, r, step) => { for (let i = 0; i < n; i++) alongX(CY(r, r, 0.014, 8), LEATH, x0 + i * step); };
     switch (id) {
       case 'sword': {
-        // Schrott-Machete: umwickelter Griff, Zahnrad-Parierstange, Klinge mit Sägerücken
-        for (let i = 0; i < 4; i++) k.lit(CY(0.032, 0.032, 0.035, 6), i % 2 ? '#2a2a2a' : '#8a3a2a', -0.06 + i * 0.04, 0, 0, 0, 0, Math.PI / 2);
-        k.lit(SP(0.04, 6, 5), '#5a4a3a', -0.11, 0, 0).add('metal', CY(0.075, 0.075, 0.03, 8), '#ffffff', 0.04, 0, 0, Math.PI / 2, 0, 0)
-          .lit(CY(0.02, 0.02, 0.035, 6), '#3a3a3a', 0.04, 0, 0, Math.PI / 2, 0, 0)
-          .add('metal', BX(0.6, 0.02, 0.1), '#ffffff', 0.37, 0, 0.005).add('metal', CO(0.058, 0.14, 4), '#ffffff', 0.72, 0, 0.005, Math.PI / 4, 0, -Math.PI / 2, 1, 1, 0.45)
-          .lit(BX(0.5, 0.022, 0.012), '#3a3a3e', 0.36, 0, 0.02);
-        for (let i = 0; i < 6; i++) k.add('metal', CO(0.018, 0.04, 3), '#d8d8d8', 0.14 + i * 0.075, 0, -0.058, -Math.PI / 2, 0, 0);
-        k.lit(BX(0.08, 0.024, 0.03), '#7a1a10', 0.5, 0, 0.03).lit(BX(0.04, 0.024, 0.02), '#6a1410', 0.62, 0, 0.035);
+        // Schwert: Knauf, umwickelter Griff, Parierstange mit Kappen, Klinge mit Hohlkehle
+        k.add('metal', SP(0.036, 8, 6), '#ffffff', -0.135, 0, 0);
+        alongX(CY(0.025, 0.028, 0.22, 8), '#4a3020', -0.01);
+        wraps(-0.1, 5, 0.029, 0.045);
+        k.add('metal', BX(0.04, 0.26, 0.055), '#ffffff', 0.115, 0, 0).add('metal', SP(0.03, 8, 6), '#ffffff', 0.115, 0.13, 0).add('metal', SP(0.03, 8, 6), '#ffffff', 0.115, -0.13, 0);
+        k.lit(BX(0.05, 0.07, 0.034), '#8a2a1e', 0.155, 0, 0);
+        k.add('metal', EX([[0.13, -0.046], [0.78, -0.036], [0.93, 0], [0.78, 0.036], [0.13, 0.046]], 0.018, 0.007), '#ffffff');
+        k.lit(BX(0.52, 0.013, 0.034), '#5a6270', 0.46, 0, 0);
         break;
       }
-      case 'pick':
-        // Rohr-Spitzhacke mit Klebeband, Schraube und Stahlkopf
-        k.lit(CY(0.026, 0.026, 0.66, 6), '#6a6e76', 0.3, 0, 0, 0, 0, Math.PI / 2)
-          .lit(CY(0.03, 0.03, 0.12, 6), '#2a2a2a', 0.02, 0, 0, 0, 0, Math.PI / 2).lit(CY(0.03, 0.03, 0.05, 6), '#c8a040', 0.4, 0, 0, 0, 0, Math.PI / 2)
-          .add('metal', BX(0.1, 0.09, 0.12), '#ffffff', 0.6, 0, 0).lit(CY(0.02, 0.02, 0.13, 6), '#3a3a3a', 0.6, 0, 0, Math.PI / 2, 0, 0)
-          .add('metal', CO(0.04, 0.3, 5), '#ffffff', 0.59, 0, 0.21, Math.PI / 2 - 0.25, 0, 0).add('metal', CO(0.03, 0.22, 4), '#ffffff', 0.6, 0, -0.17, -Math.PI / 2 + 0.2, 0, 0, 1.6, 1, 0.6);
+      case 'pick': {
+        // Spitzhacke: Holzstiel mit Griffband, Stahlkopf (spitze Hacke oben, Meißel unten), Keil im Auge
+        alongX(CY(0.024, 0.03, 0.8, 8), WOOD, 0.26);
+        wraps(-0.1, 4, 0.032, 0.04);
+        k.lit(BX(0.1, 0.11, 0.075), IRON, 0.62, 0, 0).lit(BX(0.03, 0.05, 0.08), '#8a8e96', 0.68, 0, 0);
+        k.add('metal', EX([[0.66, 0.05], [0.64, 0.2], [0.59, 0.33], [0.51, 0.43], [0.535, 0.32], [0.575, 0.19], [0.585, 0.05], [0.585, -0.05], [0.58, -0.17], [0.55, -0.28], [0.53, -0.33], [0.575, -0.34], [0.635, -0.2], [0.66, -0.05]], 0.06, 0.008), '#ffffff');
         break;
-      case 'axe':
-        // Kriegsaxt aus einem Sägeblatt mit Dorn am Rücken
-        k.lit(CY(0.028, 0.032, 0.86, 6), '#5a3a1e', 0.36, 0, 0, 0, 0, Math.PI / 2);
-        for (let i = 0; i < 3; i++) k.lit(CY(0.034, 0.034, 0.04, 6), '#2a2a2a', 0.04 + i * 0.06, 0, 0, 0, 0, Math.PI / 2);
-        k.lit(BX(0.12, 0.08, 0.08), '#3a3a3a', 0.72, 0, 0)
-          .add('metal', CY(0.23, 0.23, 0.03, 16), '#ffffff', 0.7, 0, 0.16, 0, 0, 0, 0.75, 1, 1).lit(CY(0.05, 0.05, 0.035, 8), '#3a3a3a', 0.7, 0, 0.06);
-        for (let i = 0; i < 9; i++) { const an = -1.0 + i * 0.26, ex = Math.cos(an) * 0.1725, ez = Math.sin(an) * 0.23, n = Math.atan2(ez / 0.0529, ex / 0.0298); k.add('metal', CO(0.022, 0.055, 3), '#e8e8e8', 0.7 + ex + Math.cos(n) * 0.018, 0, 0.16 + ez + Math.sin(n) * 0.018, 0, -n, -Math.PI / 2, 0.5, 1, 1); }
-        k.add('metal', CO(0.04, 0.18, 4), '#ffffff', 0.71, 0, -0.13, -Math.PI / 2, 0, 0).lit(BX(0.06, 0.03, 0.08), '#7a1a10', 0.62, 0.01, 0.26);
+      }
+      case 'axe': {
+        // Streitaxt: langer Stiel, Bartaxt-Blatt mit gebogener Schneide, Dorn hinten und Spitze oben
+        alongX(CY(0.026, 0.032, 0.94, 8), WOOD, 0.33);
+        wraps(-0.12, 4, 0.034, 0.045);
+        k.lit(BX(0.11, 0.12, 0.07), IRON, 0.7, 0, 0);
+        k.add('metal', EX([[0.66, 0.05], [0.755, 0.05], [0.765, 0.15], [0.87, 0.29], [0.855, 0.355], [0.8, 0.385], [0.72, 0.39], [0.64, 0.37], [0.565, 0.31], [0.535, 0.24], [0.6, 0.235], [0.655, 0.15]], 0.034, 0.01), '#ffffff');
+        k.add('metal', EX([[0.665, -0.05], [0.745, -0.05], [0.705, -0.17]], 0.03, 0.006), '#ffffff');
+        k.add('metal', CO(0.03, 0.12, 6), '#ffffff', 0.8, 0, 0, 0, 0, -Math.PI / 2);
+        k.lit(BX(0.04, 0.03, 0.075), '#8a2a1e', 0.62, 0.0, 0);
         break;
-      case 'spear':
-        // Speer: Schaft mit Klebeband, Blattspitze, Querstrebe und roter Stofffahne
-        k.lit(CY(0.022, 0.024, 1.25, 6), '#6a4a2a', 0.38, 0, 0, 0, 0, Math.PI / 2);
-        for (let i = 0; i < 3; i++) k.lit(CY(0.027, 0.027, 0.04, 6), '#2a2a2a', 0.1 + i * 0.05, 0, 0, 0, 0, Math.PI / 2);
-        k.lit(CY(0.034, 0.034, 0.1, 6), '#3a3a3a', 0.98, 0, 0, 0, 0, Math.PI / 2).add('metal', BX(0.03, 0.03, 0.18), '#ffffff', 1.02, 0, 0)
-          .add('metal', OC(0.075), '#ffffff', 1.16, 0, 0, 0, 0, 0, 2.6, 0.35, 1)
-          .lit(BX(0.04, 0.16, 0.012), '#b03a2a', 0.94, -0.09, 0.03, 0, 0, 0.2).lit(BX(0.04, 0.12, 0.012), '#8a2a1e', 0.9, -0.15, 0.03, 0, 0, 0.5);
+      }
+      case 'spear': {
+        // Speer: langer Schaft, Metalltülle, Blattspitze mit Mittelgrat und Flügeln, rote Quaste
+        alongX(CY(0.02, 0.024, 1.27, 8), WOOD, 0.38);
+        wraps(-0.06, 3, 0.027, 0.05);
+        alongX(CY(0.026, 0.032, 0.13, 8), IRON, 1.03);
+        k.add('metal', EX([[1.06, -0.02], [1.12, -0.065], [1.26, -0.05], [1.4, 0], [1.26, 0.05], [1.12, 0.065], [1.06, 0.02]], 0.018, 0.008), '#ffffff');
+        k.lit(BX(0.26, 0.012, 0.036), '#5a6270', 1.21, 0, 0);
+        k.add('metal', EX([[1.0, 0.02], [1.06, 0.02], [1.02, 0.09]], 0.02, 0.004), '#ffffff').add('metal', EX([[1.0, -0.02], [1.06, -0.02], [1.02, -0.09]], 0.02, 0.004), '#ffffff');
+        for (let i = 0; i < 3; i++) k.lit(BX(0.016, 0.12, 0.012), i === 1 ? '#c8402a' : '#9a2a1e', 0.975 + i * 0.012, -0.075, (i - 1) * 0.012, 0, 0, 0.12 * (i - 1));
         break;
-      case 'bow':
-        // Armbrust: Schaft, gebogene Wurfarme, Sehne, eingelegter Bolzen, Zielfernrohr
-        k.lit(BX(0.62, 0.06, 0.07), '#6a4526', 0.18, -0.01, 0).lit(BX(0.16, 0.12, 0.07), '#5a3a1e', -0.1, -0.04, 0)
-          .lit(BX(0.04, 0.08, 0.03), '#2a2a2a', 0.08, -0.07, 0).lit(BX(0.1, 0.03, 0.06), '#3a3a3a', 0.43, 0.025, 0)
-          .add('metal', BX(0.05, 0.035, 0.3), '#ffffff', 0.45, 0, 0.16, 0, 0.45, 0).add('metal', BX(0.05, 0.035, 0.3), '#ffffff', 0.45, 0, -0.16, 0, -0.45, 0)
-          .lit(BX(0.43, 0.008, 0.008), '#e8e8e8', 0.357, 0.03, 0.147, 0, -0.75, 0).lit(BX(0.43, 0.008, 0.008), '#e8e8e8', 0.357, 0.03, -0.147, 0, 0.75, 0)
-          .lit(BX(0.48, 0.014, 0.014), '#c8a070', 0.3, 0.04, 0).add('metal', CO(0.022, 0.07, 4), '#ffffff', 0.57, 0.04, 0, 0, 0, -Math.PI / 2)
-          .lit(BX(0.04, 0.006, 0.03), '#d84a3a', 0.08, 0.045, 0)
-          .lit(CY(0.022, 0.022, 0.2, 8), '#2a2a2e', 0.18, 0.075, 0, 0, 0, Math.PI / 2).lit(BX(0.05, 0.05, 0.03), '#2a2a2e', 0.18, 0.04, 0);
-        k.glow(CY(0.016, 0.016, 0.005, 8), '#ff5a3a', 0.281, 0.08, 0, 0, 0, Math.PI / 2);
+      }
+      case 'bow': {
+        // Armbrust: Schaft mit Kolben und Abzugsbügel, gebogener Stahlbogen, Sehne zur Nuss, eingelegter Bolzen, Zielfernrohr
+        k.lit(EX([[-0.22, -0.1], [-0.23, 0.0], [-0.05, 0.03], [0.5, 0.03], [0.5, -0.01], [0.06, -0.02], [0.0, -0.065], [-0.12, -0.1]], 0.06, 0.008), '#6a4526');
+        k.lit(BX(0.5, 0.012, 0.024), DARK, 0.25, 0.037, 0).lit(BX(0.04, 0.04, 0.07), DARK, 0.18, 0.035, 0);
+        k.lit(TO(0.035, 0.008, 4, 10, Math.PI), DARK, 0.05, -0.02, 0, 0, 0, Math.PI).lit(BX(0.012, 0.04, 0.012), '#8a8e96', 0.05, -0.04, 0);
+        k.add('metal', TO(0.36, 0.017, 5, 14, 1.4), '#ffffff', 0.12, 0.02, 0, Math.PI / 2, 0, -0.7);
+        k.lit(BX(0.06, 0.06, 0.08), DARK, 0.48, 0.015, 0);
+        const tipX = 0.12 + 0.36 * Math.cos(0.7), tipZ = 0.36 * Math.sin(0.7);
+        for (const sd of [-1, 1]) { const dx = tipX - 0.18, dz = tipZ * sd, L = Math.hypot(dx, dz); k.lit(BX(L, 0.006, 0.006), '#e8e0d0', 0.18 + dx / 2, 0.045, dz / 2, 0, -Math.atan2(dz, dx), 0); }
+        alongX(CY(0.008, 0.008, 0.4, 5), '#c8a070', 0.36, 0.046);
+        k.add('metal', CO(0.016, 0.05, 4), '#ffffff', 0.58, 0.046, 0, 0, 0, -Math.PI / 2);
+        k.lit(BX(0.05, 0.03, 0.004), '#d84a3a', 0.19, 0.06, 0);
+        alongX(CY(0.02, 0.02, 0.18, 8), '#2a2a2e', 0.08, 0.088);
+        k.lit(BX(0.04, 0.04, 0.02), '#2a2a2e', 0.08, 0.055, 0);
+        k.glow(CY(0.014, 0.014, 0.004, 8), '#ff5a3a', 0.172, 0.088, 0, 0, 0, Math.PI / 2);
         break;
-      case 'staff':
-        // Plasmawerfer: Lauf mit Kühlrippen, leuchtende Energiezellen, Mündung mit Zinken
-        k.lit(CY(0.045, 0.05, 0.62, 8), '#3a3e46', 0.42, 0, 0, 0, 0, Math.PI / 2)
-          .lit(BX(0.26, 0.1, 0.09), '#4a4e56', 0.08, -0.02, 0).lit(BX(0.07, 0.16, 0.06), '#2a2a2e', 0.02, -0.12, 0, 0, 0, 0.25)
-          .lit(BX(0.05, 0.06, 0.04), '#2a2a2e', 0.12, -0.08, 0);
-        for (let i = 0; i < 4; i++) k.add('metal', CY(0.065, 0.065, 0.025, 10), '#ffffff', 0.32 + i * 0.07, 0, 0, 0, 0, Math.PI / 2);
-        k.lit(CY(0.05, 0.05, 0.2, 8), '#2a2a2e', 0.12, 0.075, 0, 0, 0, Math.PI / 2).glow(CY(0.035, 0.035, 0.17, 8), '#ffb347', 0.12, 0.075, 0, 0, 0, Math.PI / 2)
-          .lit(CY(0.065, 0.05, 0.08, 8), '#4a4e56', 0.76, 0, 0, 0, 0, Math.PI / 2);
-        for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; k.add('metal', CO(0.02, 0.12, 4), '#ffffff', 0.84, Math.cos(a) * 0.05, Math.sin(a) * 0.05, a, 0, -Math.PI / 2 + 0.3); }
-        k.glow(IC(0.05, 1), '#ffb347', 0.86, 0, 0).glow(CY(0.047, 0.047, 0.02, 8), '#ff8a2a', 0.58, 0, 0, 0, 0, Math.PI / 2);
+      }
+      case 'staff': {
+        // Plasmawerfer: Gehäuse mit Leuchtstreifen, Griff, Lauf mit Kühlringen, Energiezelle oben, Mündung mit drei Zinken
+        k.lit(EX([[-0.18, -0.05], [-0.18, 0.05], [0.3, 0.06], [0.34, 0.02], [0.34, -0.045], [0.05, -0.05]], 0.09, 0.01), '#3a3e46');
+        k.lit(BX(0.065, 0.16, 0.06), '#2a2a2e', 0.0, -0.11, 0, 0, 0, 0.22).lit(BX(0.05, 0.07, 0.04), '#2a2a2e', 0.1, -0.075, 0);
+        k.glow(BX(0.22, 0.018, 0.112), '#ffb347', 0.1, 0.0, 0);
+        alongX(CY(0.045, 0.05, 0.52, 10), '#4a4e56', 0.57);
+        for (let i = 0; i < 4; i++) k.add('metal', CY(0.062, 0.062, 0.024, 12), '#ffffff', 0.42 + i * 0.07, 0, 0, 0, 0, Math.PI / 2);
+        alongX(CY(0.065, 0.05, 0.07, 10), '#5a5e66', 0.85);
+        for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; k.add('metal', CO(0.018, 0.1, 4), '#ffffff', 0.92, Math.cos(a) * 0.045, Math.sin(a) * 0.045, 0, 0, -Math.PI / 2); }
+        k.glow(IC(0.045, 1), '#ffb347', 0.93, 0, 0);
+        alongX(CY(0.04, 0.04, 0.18, 10), '#2a2a2e', 0.12, 0.09);
+        k.glow(CY(0.028, 0.028, 0.15, 10), '#ffb347', 0.12, 0.09, 0, 0, 0, -Math.PI / 2);
+        k.add('metal', CY(0.044, 0.044, 0.02, 10), '#ffffff', 0.03, 0.09, 0, 0, 0, Math.PI / 2).add('metal', CY(0.044, 0.044, 0.02, 10), '#ffffff', 0.21, 0.09, 0, 0, 0, Math.PI / 2);
         break;
+      }
     }
     return (toolCache[id] = k.build());
   }
