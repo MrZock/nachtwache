@@ -1,0 +1,56 @@
+{
+  "name": "spark",
+  "productName": "SPARK",
+  "version": "1.0.0",
+  "description": "SPARK – Spiele-Launcher: Spiele installieren, aktualisieren und starten",
+  "author": "MrZock",
+  "license": "MIT",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "catalog": "node scripts/update-catalog.js",
+    "start": "electron .",
+    "build": "node scripts/make-icon.js && electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.github.mrzock.spark",
+    "productName": "SPARK",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "game-preload.js",
+      "ui/**/*",
+      "build/icon.png"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SPARK",
+      "artifactName": "SPARK-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "SPARK-${version}-portable.exe"
+    }
+  },
+  "allowScripts": {
+    "electron@33.4.11": true
+  }
+}

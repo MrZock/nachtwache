@@ -1,0 +1,26 @@
+{
+  "games": [
+    {
+      "id": "blackout",
+      "name": "BLACKOUT",
+      "tagline": "3D-Survival · Einzelspieler & Online",
+      "description": "Die Welt ist dunkel. Dein Reaktor ist das letzte Licht. Tagsüber sammelst du Holz, Stein, Gold und Schrott, baust Mauern und Türme – nachts stürmen Zombies deine Basis. Erkunde Ruinenstädte, Bunker und das Schattenreich, stell Rüstung her und spiel online mit Freunden.",
+      "features": [
+        "Tag sammeln & bauen, nachts den Reaktor verteidigen",
+        "Third-Person, Wetter, Blutmond und Bosse",
+        "Ruinenstädte, Bunker-Dungeons, Schattenreich",
+        "Online mit bis zu 16 Spielern – Clans, Handel, PvP",
+        "3 Spielstände, Musik, Tutorial"
+      ],
+      "version": "4.0.0",
+      "color": "#ff6a2a",
+      "cover": "blackout.jpg",
+      "base": "https://mrzock.github.io/nachtwache/",
+      "local": "../..",
+      "entry": "index.html",
+      "query": "app=1",
+      "saveDir": "BLACKOUT",
+      "files": ["index.html", "game.js", "render3d.js", "three.min.js", "style.css"]
+    }
+  ]
+}

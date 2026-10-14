@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>SPARK</title>
+<style>
+  :root {
+    --bg: #0b0d12; --panel: #12151d; --panel2: #181c26; --line: #232836; --text: #eceef3; --dim: #8b91a1; --faint: #5b6172;
+    --spark1: #ffcf3a; --spark2: #ff6a1f; --ok: #5fd88a; --bad: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, sans-serif; overflow: hidden; user-select: none; }
+  button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+  .app { display: grid; grid-template-rows: 38px 1fr; grid-template-columns: 260px 1fr; height: 100%; }
+  /* Titelleiste (zum Verschieben des Fensters) */
+  .bar { grid-column: 1 / 3; display: flex; align-items: center; gap: 10px; padding: 0 150px 0 14px; -webkit-app-region: drag; border-bottom: 1px solid var(--line); }
+  .bar .logo { display: flex; align-items: center; gap: 8px; font-weight: 800; letter-spacing: 3px; font-size: 15px; }
+  .bar .logo svg { width: 20px; height: 20px; filter: drop-shadow(0 0 6px rgba(255,140,40,.7)); }
+  .bar .net { margin-left: auto; font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+  .bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .bar .dot.off { background: var(--faint); box-shadow: none; }
+  .bar button { -webkit-app-region: no-drag; background: transparent; color: var(--dim); padding: 4px 8px; border-radius: 6px; }
+  .bar button:hover { background: var(--panel2); color: var(--text); }
+  /* Bibliothek */
+  aside { background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  aside h2 { margin: 18px 18px 8px; font-size: 11px; letter-spacing: 2px; color: var(--faint); font-weight: 700; }
+  .list { flex: 1; overflow: auto; padding: 0 10px; }
+  .game { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px; border-radius: 10px; background: transparent; text-align: left; margin-bottom: 4px; }
+  .game:hover { background: var(--panel2); }
+  .game.sel { background: linear-gradient(90deg, rgba(255,106,31,.22), rgba(255,106,31,.04)); box-shadow: inset 3px 0 0 var(--spark2); }
+  .game .thumb { width: 54px; height: 54px; border-radius: 8px; background: #222 center / cover; flex: none; }
+  .game .nm { font-weight: 700; letter-spacing: .5px; }
+  .game .tag { font-size: 12px; color: var(--dim); }
+  .game .tag.up { color: var(--spark1); }
+  .game .tag.run { color: var(--ok); }
+  .soon { margin: 6px 8px; padding: 12px; border: 1px dashed var(--line); border-radius: 10px; color: var(--faint); font-size: 12px; text-align: center; }
+  .foot { padding: 12px 18px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); display: flex; justify-content: space-between; align-items: center; }
+  .foot button { background: transparent; color: var(--dim); padding: 4px 6px; border-radius: 6px; }
+  .foot button:hover { color: var(--text); background: var(--panel2); }
+  /* Spielseite */
+  main { position: relative; overflow: auto; min-height: 0; }
+  .hero { position: relative; height: 58%; min-height: 300px; overflow: hidden; }
+  .hero .bgimg { position: absolute; inset: -30px; background: #111 center / cover; filter: blur(28px) brightness(.45); transform: scale(1.1); }
+  .hero .img { position: absolute; inset: 0; background: center / cover no-repeat; mask-image: linear-gradient(to bottom, #000 55%, transparent); -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+  .hero .shade { position: absolute; inset: 0; background: linear-gradient(to right, rgba(11,13,18,.92) 0%, rgba(11,13,18,.55) 45%, rgba(11,13,18,0) 75%), linear-gradient(to top, var(--bg) 0%, rgba(11,13,18,0) 45%); }
+  .hero .info { position: absolute; left: 40px; bottom: 26px; right: 40px; }
+  .title { font-size: 54px; font-weight: 900; letter-spacing: 8px; line-height: 1; margin: 0 0 8px; text-shadow: 0 4px 30px rgba(0,0,0,.6); }
+  .tagline { color: #d8dbe4; font-size: 16px; margin-bottom: 22px; }
+  .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .play { min-width: 210px; height: 52px; padding: 0 28px; border-radius: 10px; font-weight: 800; font-size: 17px; letter-spacing: 2px; color: #1a0d04;
+    background: linear-gradient(135deg, var(--spark1), var(--spark2)); box-shadow: 0 8px 30px rgba(255,106,31,.35); transition: transform .12s, box-shadow .12s, filter .12s; }
+  .play:hover { transform: translateY(-1px); box-shadow: 0 10px 36px rgba(255,106,31,.5); filter: brightness(1.06); }
+  .play:disabled { filter: grayscale(.7) brightness(.7); cursor: default; transform: none; box-shadow: none; }
+  .play.green { background: linear-gradient(135deg, #8dffb0, #2fbf6a); box-shadow: 0 8px 30px rgba(47,191,106,.3); }
+  .sec { height: 44px; padding: 0 16px; border-radius: 10px; background: rgba(255,255,255,.08); color: #dde; backdrop-filter: blur(6px); }
+  .sec:hover { background: rgba(255,255,255,.15); }
+  .sec.danger:hover { background: rgba(255,90,90,.25); }
+  .prog { flex: 1; min-width: 220px; max-width: 420px; }
+  .prog .barbg { height: 8px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .prog .fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--spark1), var(--spark2)); transition: width .15s; }
+  .prog .lbl { font-size: 12px; color: var(--dim); margin-top: 6px; }
+  .body { padding: 6px 40px 40px; display: grid; grid-template-columns: 1fr 300px; gap: 36px; }
+  .chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; }
+  .chip b { display: block; font-size: 11px; color: var(--faint); letter-spacing: 1px; font-weight: 700; }
+  .desc { color: #c9ccd6; font-size: 15px; max-width: 760px; }
+  .feat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; align-self: start; }
+  .feat h3 { margin: 0 0 10px; font-size: 11px; letter-spacing: 2px; color: var(--faint); }
+  .feat li { margin: 0 0 8px; color: #d6d9e2; list-style: none; padding-left: 18px; position: relative; }
+  .feat li::before { content: ""; position: absolute; left: 0; top: 8px; width: 7px; height: 7px; border-radius: 2px; background: linear-gradient(135deg, var(--spark1), var(--spark2)); transform: rotate(45deg); }
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--dim); text-align: center; }
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(20px); opacity: 0; background: #2a1416; border: 1px solid #6b2a2e; color: #ffd0d0;
+    padding: 10px 18px; border-radius: 10px; transition: .2s; pointer-events: none; max-width: 70%; }
+  .toast.show { opacity: 1; transform: translateX(-50%); }
+  .toast.ok { background: #12261a; border-color: #2a6b40; color: #c8ffd8; }
+  @media (max-width: 1000px) { .body { grid-template-columns: 1fr; } .title { font-size: 42px; } }
+  ::-webkit-scrollbar { width: 10px; } ::-webkit-scrollbar-thumb { background: #262b38; border-radius: 5px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <div class="logo"><svg viewBox="0 0 24 24"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd84a"/><stop offset="1" stop-color="#ff5a1a"/></linearGradient></defs><path fill="url(#g)" d="M13.5 1 4 13.5h6.2L8.8 23 20 9.6h-6.4L16.4 1z"/></svg>SPARK</div>
+    <div class="net"><span class="dot" id="dot"></span><span id="net">Verbinde …</span></div>
+    <button id="refresh" title="Katalog neu laden">⟳</button>
+  </div>
+  <aside>
+    <h2>BIBLIOTHEK</h2>
+    <div class="list" id="list"></div>
+    <div class="soon">Weitere Spiele folgen …</div>
+    <div class="foot"><span id="ver">SPARK</span><button id="folder" title="Ordner mit den installierten Spielen öffnen">📁 Spieleordner</button></div>
+  </aside>
+  <main id="main"><div class="empty" id="empty">Lade Spiele …</div></main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let S = { games: [] }, sel = localStorage.getItem('spark.sel') || '', progress = {}, confirmDel = false;
+function toast(msg, ok) { const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (ok ? ' ok' : ''); clearTimeout(toast.t); toast.t = setTimeout(() => t.className = 'toast', 3800); }
+const size = b => b > 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+const time = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' Min.' : Math.floor(m / 60) + ' Std. ' + (m % 60) + ' Min.'; };
+const date = t => { if (!t) return '–'; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return 'heute'; return d.toLocaleDateString('de-DE'); };
+function status(g) {
+  if (g.playing) return ['Läuft gerade', 'run'];
+  if (g.busy) return ['Wird geladen …', 'up'];
+  if (g.update) return ['Update verfügbar', 'up'];
+  if (g.installed) return ['Installiert', ''];
+  return ['Nicht installiert', ''];
+}
+async function load() {
+  S = await window.spark.state();
+  $('dot').className = 'dot' + (S.offline ? ' off' : '');
+  $('net').textContent = S.loading ? 'Verbinde …' : S.offline ? 'Offline – installierte Spiele gehen trotzdem' : 'Online';
+  $('ver').textContent = 'SPARK ' + S.version;
+  if (!S.games.find(g => g.id === sel) && S.games[0]) sel = S.games[0].id;
+  renderList(); renderMain();
+}
+function renderList() {
+  $('list').innerHTML = S.games.map(g => {
+    const [t, c] = status(g);
+    return '<button class="game' + (g.id === sel ? ' sel' : '') + '" data-id="' + esc(g.id) + '"><div class="thumb" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div><div class="nm">' + esc(g.name) + '</div><div class="tag ' + c + '">' + t + '</div></div></button>';
+  }).join('');
+  for (const b of document.querySelectorAll('.game')) b.onclick = () => { sel = b.dataset.id; localStorage.setItem('spark.sel', sel); confirmDel = false; renderList(); renderMain(); };
+}
+function renderMain() {
+  const g = S.games.find(x => x.id === sel), main = $('main');
+  if (!g) { main.innerHTML = '<div class="empty">' + (S.loading ? 'Lade Spiele …' : S.offline ? 'Keine Verbindung und noch keine Spiele installiert.<br>Prüf dein Internet und klick oben auf ⟳.' : 'Noch keine Spiele im Katalog.') + '</div>'; return; }
+  const p = progress[g.id];
+  let primary;
+  if (g.playing) primary = '<button class="play green" disabled>LÄUFT …</button>';
+  else if (g.busy) primary = '<button class="play" disabled>LÄDT …</button>';
+  else if (!g.installed) primary = '<button class="play" id="act" data-a="install">INSTALLIEREN</button>';
+  else if (g.update && !S.offline) primary = '<button class="play" id="act" data-a="update">UPDATE & SPIELEN</button>';
+  else primary = '<button class="play green" id="act" data-a="play">▶ SPIELEN</button>';
+  const extra = g.installed && !g.busy && !g.playing
+    ? (g.update && !S.offline ? '<button class="sec" id="playold">Ohne Update spielen</button>' : '')
+      + '<button class="sec" id="saves">💾 Spielstände</button><button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
+  main.innerHTML =
+    '<div class="hero"><div class="bgimg" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="img" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="shade"></div>' +
+    '<div class="info"><h1 class="title" style="color:' + esc(g.color || '#fff') + '">' + esc(g.name) + '</h1><div class="tagline">' + esc(g.tagline || '') + '</div>' +
+    '<div class="actions">' + primary + (g.busy ? '<div class="prog"><div class="barbg"><div class="fill" id="fill" style="width:' + Math.round((p ? p.p : 0) * 100) + '%"></div></div><div class="lbl" id="plbl">' + (p ? Math.round(p.p * 100) + ' % · ' + esc(p.file) : 'Starte …') + '</div></div>' : '') + extra + '</div></div></div>' +
+    '<div class="body"><div><div class="chips">' +
+    '<div class="chip"><b>VERSION</b>' + esc(g.installed && g.installedVersion && g.installedVersion !== g.version ? g.installedVersion + ' → ' + g.version : g.version) + '</div>' +
+    '<div class="chip"><b>GRÖSSE</b>' + size(g.size || 0) + '</div>' +
+    '<div class="chip"><b>GESPIELT</b>' + time(g.playMs) + '</div>' +
+    '<div class="chip"><b>ZULETZT</b>' + date(g.lastPlayed) + '</div></div>' +
+    '<div class="desc">' + esc(g.description || '') + '</div></div>' +
+    (g.features && g.features.length ? '<div class="feat"><h3>DAS ERWARTET DICH</h3><ul style="margin:0;padding:0">' + g.features.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>' : '') + '</div>';
+  const act = $('act');
+  if (act) act.onclick = () => act.dataset.a === 'play' ? play(g) : installThen(g, true);
+  if ($('playold')) $('playold').onclick = () => play(g);
+  if ($('saves')) $('saves').onclick = () => window.spark.saves(g.id);
+  if ($('del')) $('del').onclick = async () => {
+    if (!confirmDel) { confirmDel = true; renderMain(); setTimeout(() => { if (confirmDel) { confirmDel = false; renderMain(); } }, 4000); return; }
+    confirmDel = false;
+    const r = await window.spark.uninstall(g.id);
+    r.ok ? toast(g.name + ' wurde deinstalliert – deine Spielstände bleiben erhalten.', true) : toast(r.error);
+  };
+}
+async function installThen(g, start) {
+  progress[g.id] = { p: 0, file: '' };
+  const r = await window.spark.install(g.id);
+  delete progress[g.id];
+  if (!r.ok) { toast('Fehler: ' + r.error); load(); return; }
+  toast(g.name + (g.installed ? ' ist aktuell.' : ' ist installiert!'), true);
+  await load();
+  if (start) play(S.games.find(x => x.id === g.id));
+}
+async function play(g) { const r = await window.spark.play(g.id); if (!r.ok) toast(r.error); }
+window.spark.onProgress(d => {
+  progress[d.id] = d;
+  if (d.id === sel && $('fill')) { $('fill').style.width = Math.round(d.p * 100) + '%'; $('plbl').textContent = Math.round(d.p * 100) + ' % · ' + d.file; }
+});
+window.spark.onChanged(load);
+$('refresh').onclick = async () => { $('net').textContent = 'Verbinde …'; await window.spark.refresh(); await load(); };
+$('folder').onclick = () => window.spark.folder('');
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && $('act')) $('act').click(); });
+load();
+</script>
+</body>
+</html>

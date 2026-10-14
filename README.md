@@ -80,6 +80,10 @@ Inventar (Taste I) → Reiter **🛡 Ausrüstung**:
 - **Rangliste** (Hauptmenü → 📊 Rangliste): „Online“ zeigt die besten Runden aller Spieler (Nächte, dann Kills) vom Spielserver, „Meine Runden“ die 10 besten auf diesem Gerät. Eingetragen wird jeden Morgen und bei Game Over. Die Spielerliste (Tab) zeigt jetzt auch die Kills jedes Spielers.
 - Hinweis: Der kostenlose Render-Server vergisst die Online-Rangliste bei einem Neustart (Datei `scores.json` auf dem Server).
 
+## SPARK – unser Spiele-Launcher
+
+Im Ordner [`spark/`](spark/README.md) liegt **SPARK**, eine Windows-App zum Installieren, Aktualisieren und Starten unserer Spiele (BLACKOUT ist das erste). Neue Spiele und Updates kommen über den Katalog `spark/catalog/games.json`. **Nach jeder Änderung an BLACKOUT:** `cd spark && npm run catalog` und mit committen.
+
 ## Windows-Version
 
 Im Ordner `desktop/` liegt eine richtige Windows-App (Electron) mit denselben Spieldateien wie die Web-Version:
