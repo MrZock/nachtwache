@@ -4859,6 +4859,7 @@ function drawUI() {
     drawHUD();
     drawTutorial();
     drawOverlays();
+    if (helpOpen && (mode === 'play' || mode === 'paused')) drawHelp();
     if (SET.fps) text(Math.round(fpsAvg) + ' FPS', VW - 8, VH - 8, 11, fpsAvg > 45 ? '#8fe08f' : fpsAvg > 25 ? '#ffcf7a' : '#ff7b6b', 'right', '700');
     if (isTouch && rh > rw * 1.05) {
       ctx.fillStyle = 'rgba(5,8,12,0.88)'; ctx.fillRect(0, 0, VW, VH);
@@ -4935,6 +4936,7 @@ function drawTouchMore() {
     ...(S.players.length > 1 ? [['👥', 'Spieler', close(() => { listOpen = !listOpen; })], ['🤝', 'Handeln', close(() => openTrade())]] : []),
     ['⛶', document.fullscreenElement ? 'Vollbild aus' : 'Vollbild', close(() => toggleFullscreen())],
     ['⚙', 'Einstellungen', close(() => { settingsOpen = true; mode = 'paused'; })],
+    ['❓', 'Steuerung', close(() => { helpOpen = true; })],
     ['⏸', 'Pause / Menü', close(() => { mode = 'paused'; })],
   ];
   const cols = Math.min(4, Math.max(3, Math.floor((VW - 160) / 150))), tw = 140, th = 92, gap = 10, rows = Math.ceil(items.length / cols);
@@ -5005,14 +5007,20 @@ function drawLighting(cx, cy) {
 }
 
 // ---------- HUD
+// Einheitlicher Stil (Alpha 1.5.0): dunkles Glas, weiche Ecken, feine Lichtkante oben
 function panel(x, y, w, h, a) {
-  ctx.fillStyle = 'rgba(20,17,15,' + (a || 0.74) + ')'; rr(x, y, w, h, 6); ctx.fill();
-  ctx.strokeStyle = 'rgba(200,110,50,0.38)'; ctx.lineWidth = 1.2; ctx.stroke();
-  if (w > 110 && h > 50) {
-    ctx.fillStyle = 'rgba(160,90,50,0.6)';
-    for (const [px, py] of [[x + 6, y + 6], [x + w - 6, y + 6], [x + 6, y + h - 6], [x + w - 6, y + h - 6]]) { ctx.beginPath(); ctx.arc(px, py, 1.8, 0, TAU); ctx.fill(); }
-  }
+  const al = a || 0.78, g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, 'rgba(32,35,44,' + al + ')'); g.addColorStop(1, 'rgba(14,16,22,' + Math.min(1, al + 0.06) + ')');
+  ctx.fillStyle = g; rr(x, y, w, h, Math.min(10, h / 2)); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + Math.min(10, h / 2), y + 1, w - 2 * Math.min(10, h / 2), 1);
 }
+// Balken mit runden Enden (HP, XP, Reaktor, Zeit)
+function bar(x, y, w, h, f, c, bg) {
+  ctx.fillStyle = bg || 'rgba(0,0,0,0.45)'; rr(x, y, w, h, h / 2); ctx.fill();
+  if (f > 0) { ctx.fillStyle = c; rr(x, y, Math.max(h, w * clamp(f, 0, 1)), h, h / 2); ctx.fill(); }
+}
+const fmtNum = n => { n = Math.floor(n); return n >= 100000 ? Math.round(n / 1000) + 'k' : n >= 10000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n); };
 function titleText(s, x, y, size, color, align) {
   ctx.font = size + 'px ' + FONT_T; ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillText(s, x + 3, y + 4);
@@ -5386,7 +5394,7 @@ function drawHUD() {
     const k = clamp(Math.floor((p.x / TS - DUN.x0) / DUN.w), 0, DUN.n - 1), n = (S.dunSw[k] || []).filter(Boolean).length;
     const t = n >= 3 ? '🔓 Tresor offen' : '🔒 Tresor: ' + n + ' / 3 Schalter';
     ctx.font = 'bold 13px ' + FONT; const tw = ctx.measureText(t).width + 24;
-    panel(VW / 2 - tw / 2, 62, tw, 26, 0.8); text(t, VW / 2, 75, 13, n >= 3 ? '#8fe08f' : '#ffcf6a', 'center', '700');
+    panel(VW / 2 - tw / 2, 68, tw, 26, 0.8); text(t, VW / 2, 81, 13, n >= 3 ? '#8fe08f' : '#ffcf6a', 'center', '700');
   }
   // Hinweis für Interaktion (Bunker)
   if (mode === 'play' && p.dead <= 0) {
@@ -5394,61 +5402,58 @@ function drawHUD() {
     const msg = sw ? (sw.on ? '⚡ Schalter ist umgelegt' : '⚡ ' + (isTouch ? 'Schalter – Knopf rechts' : 'F = Sicherungsschalter umlegen')) : h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
     if (msg) { ctx.font = 'bold 15px ' + FONT; const w = ctx.measureText(msg).width + 30; panel(VW / 2 - w / 2, VH * 0.62, w, 34, 0.85); text(msg, VW / 2, VH * 0.62 + 17, 15, '#ffe27a', 'center'); }
   }
-  // Ressourcen
-  panel(12, 12, 200, 144);
-  const rows = [['w', 'Holz', S.wood, '#e0b070'], ['s', 'Stein', S.stone, '#d0d0e0'], ['g', 'Gold', S.gold, '#ffd36b'], ['i', 'Eisen', S.iron || 0, '#c8d0dc']];
+  // Oben links: Rohstoffe (Zeile 1), Gold/s, Material und Medkit/Granate/Molotow (Zeile 2)
+  const rw = 356;
+  panel(12, 12, rw, 70);
+  const rows = [['w', 'Holz', S.wood, '#e8c48a'], ['s', 'Stein', S.stone, '#d6d8e2'], ['g', 'Gold', S.gold, '#ffd36b'], ['i', 'Eisen', S.iron || 0, '#c8d0dc']];
   rows.forEach((r, i) => {
-    const y = 32 + i * 26;
-    resIcon(r[0], 32, y);
-    text(r[1], 48, y, 14, '#c8c8c8', 'left', '600');
-    text(String(Math.floor(r[2])), 196, y, 18, r[3], 'right');
+    const bx = 22 + i * 86;
+    resIcon(r[0], bx + 10, 32);
+    text(fmtNum(r[2]), bx + 26, 32, 16, r[3], 'left', '700');
+    if (!isTouch && input.sx >= bx && input.sx <= bx + 80 && input.sy >= 18 && input.sy <= 46) text(r[1], bx + 26, 52, 10, '#aaa', 'left', '600');
   });
-  text('+' + goldRate().toFixed(1) + ' Gold/s', 48, 136, 12, '#b8a060', 'left', '600');
-  text('☠ ' + S.kills, 196, 136, 12, '#ff9a9a', 'right', '600');
-  // Material & Verbrauchsgegenstände des Spielers
+  ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fillRect(22, 48, rw - 20, 1);
+  text('+' + goldRate().toFixed(1) + '/s', 22, 66, 11, '#c8a85a', 'left', '700');
   if (p.mat) {
-    const oy = S.hq && VW / 2 + 150 + 240 > VW ? 28 : 0;   // Platz für die Reaktor-Anzeige auf schmalen Bildschirmen
-    panel(12, 162 + oy, 200, 58);
-    MATS.forEach((m, i) => { text(m.icon, 26 + i * 64, 178 + oy, 13, '#fff', 'left'); text(String(p.mat[m.id] | 0), 46 + i * 64, 178 + oy, 13, m.col, 'left', '700'); });
+    MATS.forEach((m, i) => { const mx = 84 + i * 44; text(m.icon, mx, 66, 12, '#fff', 'left'); text(String(p.mat[m.id] | 0), mx + 18, 66, 12, m.col, 'left', '700'); });
     CONS.forEach((c, i) => {
-      const n = p.cons[c.id] | 0, bx = 18 + i * 64, by = 192 + oy;
-      ctx.fillStyle = n ? 'rgba(255,170,90,0.18)' : 'rgba(255,255,255,0.05)'; rr(bx, by, 58, 22, 5); ctx.fill();
-      ctx.save(); if (!n) ctx.globalAlpha = 0.4; text(c.icon + ' ' + n, bx + 6, by + 11, 12, '#fff', 'left', '700'); ctx.restore();
-      if (!isTouch) text(c.key, bx + 52, by + 11, 10, '#c89a6a', 'right', '700');
-      ui.push({ x: bx, y: by, w: 58, h: 22, fn: () => actUse(c.id) });
+      const n = p.cons[c.id] | 0, bx = 220 + i * 48, by = 55;
+      ctx.fillStyle = n ? 'rgba(255,160,80,0.2)' : 'rgba(255,255,255,0.05)'; rr(bx, by, 44, 22, 6); ctx.fill();
+      ctx.save(); if (!n) ctx.globalAlpha = 0.4; text(c.icon + n, bx + 5, by + 11, 12, '#fff', 'left', '700'); ctx.restore();
+      if (!isTouch) text(c.key, bx + 40, by + 11, 9, '#c89a6a', 'right', '700');
+      ui.push({ x: bx, y: by, w: 44, h: 22, fn: () => actUse(c.id) });
     });
   }
 
-  // Phase & Countdown
-  const pw = 300; const px = VW / 2 - pw / 2;
-  panel(px, 10, pw, 62);
+  // Oben Mitte: Tag/Nacht mit Zeitbalken, daneben das Planquadrat
+  const pw = 280, px = VW / 2 - pw / 2;
+  panel(px, 10, pw, 52);
   if (!S.started) {
-    text('Platziere deinen Reaktor', VW / 2, 32, 18, '#ffd36b', 'center');
-    text(isTouch ? 'Tippe auf eine freie Fläche' : 'Taste 9 · Linksklick zum Bauen', VW / 2, 55, 13, '#aaa', 'center', '600');
-  } else if (S.phase === 'day') {
-    text('☀ TAG ' + S.night, VW / 2, 30, 20, '#ffe27a', 'center');
-    const urgent = S.phaseT < 15;
-    text('Nacht ' + S.night + ' beginnt in ' + fmtTime(S.phaseT), VW / 2, 54, 14, urgent ? (Math.sin(animT * 8) > 0 ? '#ff7b6b' : '#ffb0a0') : '#cfcfcf', 'center', '600');
+    text('Platziere deinen Reaktor', VW / 2, 28, 16, '#ffd36b', 'center');
+    text(isTouch ? 'Tippe auf eine freie Fläche' : 'Taste 9 · Linksklick zum Bauen', VW / 2, 48, 12, '#aaa', 'center', '600');
   } else {
-    text(S.bloodMoon ? '🩸 BLUTMOND · NACHT ' + S.night : '☾ NACHT ' + S.night, VW / 2, 30, 20, S.bloodMoon ? '#ff3a3a' : '#ff6b6b', 'center');
-    const left = S.zombies.length + (S.isClient ? S.qLen : S.spawnQueue.length);
-    text('Morgengrauen in ' + fmtTime(S.phaseT) + '  ·  Zombies: ' + left, VW / 2, 54, 14, '#cfcfcf', 'center', '600');
+    const day = S.phase === 'day', urgent = day && S.phaseT < 15;
+    const head = day ? '☀ TAG ' + S.night : S.bloodMoon ? '🩸 BLUTMOND ' + S.night : '☾ NACHT ' + S.night;
+    text(head, px + 16, 28, 16, day ? '#ffe27a' : S.bloodMoon ? '#ff3a3a' : '#ff7b6b', 'left', '700');
+    text(fmtTime(S.phaseT), px + pw - 16, 28, 16, urgent ? (Math.sin(animT * 8) > 0 ? '#ff7b6b' : '#ffd0c0') : '#eee', 'right', '700');
+    const sub = day ? (urgent ? 'Die Nacht kommt gleich!' : 'bis zur Nacht') : (S.zombies.length + (S.isClient ? S.qLen : S.spawnQueue.length)) + ' Zombies · bis zum Morgen';
+    text(sub, VW / 2, 28, 11, '#aaa', 'center', '600');
+    bar(px + 16, 44, pw - 32, 6, day ? 1 - S.phaseT / DAY_LEN : 1 - S.phaseT / NIGHT_LEN, day ? '#ffd36b' : '#ff6b6b');
   }
-  // Phasen-Fortschritt
   if (S.started) {
-    const f = S.phase === 'day' ? 1 - S.phaseT / DAY_LEN : 1 - S.phaseT / NIGHT_LEN;
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(px + 10, 66, pw - 20, 3);
-    ctx.fillStyle = S.phase === 'day' ? '#ffe27a' : '#ff6b6b'; ctx.fillRect(px + 10, 66, (pw - 20) * f, 3);
+    const sec = sectorOf(p.x, p.y), sw = sec.length > 3 ? 120 : 62;
+    panel(px + pw + 6, 10, sw, 28);
+    text('📍 ' + sec, px + pw + 6 + sw / 2, 24, 13, '#cfe8ff', 'center', '700');
   }
   // Reaktor-HP
   if (S.hq) {
-    const narrow = VW / 2 + pw / 2 + 240 > VW;
-    const hx = narrow ? 12 : VW - 232, hy = narrow ? 138 : 12, hw = narrow ? 200 : 220;
-    panel(hx, hy, hw, 46);
-    text('Reaktor  Stufe ' + S.hq.lvl, hx + 10, hy + 15, 13, '#ffd36b', 'left');
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(hx + 10, hy + 26, hw - 20, 10);
-    const f = S.hq.hp / S.hq.maxHp;
-    ctx.fillStyle = f > 0.5 ? '#f2c94c' : f > 0.25 ? '#ff9a3a' : '#ff4a3a'; ctx.fillRect(hx + 10, hy + 26, (hw - 20) * f, 10);
+    const narrow = VW / 2 + pw / 2 + 200 + 140 > VW;
+    const hw = 220, hx = narrow ? 12 : VW - hw - 12, hy = narrow ? 88 : 12;
+    panel(hx, hy, hw, 44);
+    const f = S.hq.hp / S.hq.maxHp, low = f < 0.35 && Math.sin(animT * 8) > 0;
+    text('⚛ Reaktor ' + S.hq.lvl, hx + 12, hy + 15, 13, '#ffd36b', 'left', '700');
+    text('☠ ' + S.kills, hx + hw - 12, hy + 15, 12, '#ff9a9a', 'right', '700');
+    bar(hx + 12, hy + 27, hw - 24, 8, f, low ? '#ff2a2a' : f > 0.5 ? '#f2c94c' : f > 0.25 ? '#ff9a3a' : '#ff4a3a');
   }
 
   // Werkzeug- & Bauleiste
@@ -5468,19 +5473,18 @@ function drawHUD() {
   hoverSlot = null;
   // Spieler-HP
   const hbw = 260;
-  panel(VW / 2 - hbw / 2 - 6, y - 34, hbw + 12, 26);
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(VW / 2 - hbw / 2, y - 27, hbw, 12);
+  panel(VW / 2 - hbw / 2 - 6, y - 36, hbw + 12, 30);
   if (p.dead > 0) {
-    text('Respawn in ' + p.dead.toFixed(1) + ' s', VW / 2, y - 21, 13, '#ff9a9a', 'center');
+    bar(VW / 2 - hbw / 2, y - 30, hbw, 13, 0, '#000');
+    text('Respawn in ' + p.dead.toFixed(1) + ' s', VW / 2, y - 23.5, 12, '#ff9a9a', 'center', '700');
   } else {
     const f = p.hp / p.maxHp;
-    ctx.fillStyle = f > 0.5 ? '#4fc3f7' : f > 0.25 ? '#ffb74d' : '#ef5350'; ctx.fillRect(VW / 2 - hbw / 2, y - 27, hbw * f, 12);
-    text('HP ' + Math.ceil(p.hp) + ' / ' + p.maxHp, VW / 2, y - 21, 11, '#fff', 'center');
+    bar(VW / 2 - hbw / 2, y - 30, hbw, 13, f, f > 0.5 ? '#4fc3f7' : f > 0.25 ? '#ffb74d' : '#ef5350');
+    text('❤ ' + Math.ceil(p.hp) + ' / ' + p.maxHp, VW / 2, y - 23.5, 11, '#fff', 'center', '700');
   }
   // Level & XP
   const need = xpNeed(p.lvl);
-  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(VW / 2 - hbw / 2, y - 13, hbw, 4);
-  ctx.fillStyle = '#ffd36b'; ctx.fillRect(VW / 2 - hbw / 2, y - 13, hbw * clamp(p.xp / need, 0, 1), 4);
+  bar(VW / 2 - hbw / 2, y - 14, hbw, 4, p.xp / need, '#ffd36b');
   const lx = VW / 2 - hbw / 2 - 74;
   panel(lx, y - 34, 62, 26);
   text('Lv ' + p.lvl, lx + 31, y - 21, 14, '#ffe27a', 'center');
@@ -5591,9 +5595,10 @@ function drawHUD() {
   if (S.msg) {
     ctx.globalAlpha = clamp(S.msg.t * 2, 0, 1);
     ctx.font = 'bold 16px ' + FONT;
-    const w = ctx.measureText(S.msg.text).width + 30;
-    panel(VW / 2 - w / 2, y - 76, w, 32, 0.8);
-    text(S.msg.text, VW / 2, y - 60, 16, S.msg.color, 'center');
+    const w = ctx.measureText(S.msg.text).width + 34;
+    panel(VW / 2 - w / 2, y - 80, w, 32, 0.86);
+    ctx.fillStyle = S.msg.color; rr(VW / 2 - w / 2 + 6, y - 73, 3, 18, 1.5); ctx.fill();
+    text(S.msg.text, VW / 2 + 3, y - 64, 15, S.msg.color, 'center', '700');
     ctx.globalAlpha = 1;
   }
   if (S.banner) {
@@ -5615,18 +5620,15 @@ function drawHUD() {
     ctx.restore(); ctx.globalAlpha = 1;
   }
   drawChat();
-  // Steuerungshinweis
-  if (!isTouch && VW > 1100 && VH > 600 && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) {
-    const lines = ['WASD laufen · Maus umsehen · Linksklick angreifen · Mausrad Kamera-Abstand · O Ego-Perspektive', 'Q E R C V B Waffen · H Schmiede · I Inventar · 1–0 Bauen · Y Markierung · T Chat · L Medkit · G Granate · Z Molotow', 'M Karte · K Skills · F Falle · U Upgrade · X Verkaufen · N Ton'];
-    lines.forEach((l, i) => text(l, 14, VH - 150 + i * 18, 12, 'rgba(255,255,255,0.55)', 'left', '600'));
-  }
+  // Steuerung: dezenter Hinweis, Übersicht mit F1
+  if (!isTouch && !chatIsOpen() && !chatLog.some(c => performance.now() - c.t < 12000)) text('F1 = Steuerung', 14, VH - 16, 11, 'rgba(255,255,255,0.4)', 'left', '600');
   if (skillsOpen) drawSkills();
   if (forgeOpen) drawForge();
   if (craftOpen) drawCraft();
   if (listOpen && !skillsOpen && !forgeOpen && !craftOpen) drawPlayerList();
   if (tradeOpen) drawTrade();
   if (mode === 'play' && !tradeOpen) drawTradeInbox();
-  if (S.pvp && mode === 'play') text('⚔ PvP AN · außerhalb der Basen', VW - 14, 54, 12, '#ff8a6a', 'right', '700');
+  if (S.pvp && mode === 'play') text('⚔ PvP AN · außerhalb der Basen', VW - 14, 66, 12, '#ff8a6a', 'right', '700');
   if (mapOpen) drawBigMap();
   drawTouchUI();
   drawAchPopup(1 / 60);
@@ -6139,6 +6141,36 @@ function towerStats(type, L) {
   if (type === 'heal') return 'Heilt ' + d.heal[L] + ' HP/s · Radius ' + d.radius[L];
   return 'Max. HP ' + d.hp[L];
 }
+let helpOpen = false;
+function drawHelp() {
+  const T = isTouch;
+  const cols = T ? [
+    ['Bewegen & Kämpfen', [['Linker Stick', 'laufen'], ['Rechter Stick', 'zielen & angreifen'], ['Kurz tippen', 'nächsten Zombie angreifen'], ['⤒', 'springen'], ['⚡', 'Spezialfähigkeit']]],
+    ['Bauen & Ausrüstung', [['🛠', 'Inventar & Bauen'], ['Gebäude antippen', 'Upgrade, Verkaufen, Eisen'], ['🩹 💣 🔥', 'Medkit, Granate, Molotow']]],
+    ['Mehr (☰)', [['🗺', 'Karte mit Planquadraten'], ['★ ⚒', 'Skills, Schmiede'], ['💬 📍', 'Chat, Markierung'], ['👥 🤝', 'Spieler, Handeln'], ['⚙', 'Einstellungen']]],
+  ] : [
+    ['Bewegen & Kämpfen', [['W A S D', 'laufen'], ['Maus', 'umsehen (Linksklick fängt die Maus)'], ['Linksklick', 'angreifen / abbauen'], ['Leertaste', 'springen'], ['Shift', 'Spezialfähigkeit'], ['O / F5', 'Ego ↔ Third-Person'], ['Mausrad', 'Kamera-Abstand']]],
+    ['Waffen & Bauen', [['Q E R C V B', 'Waffen'], ['L · G · Z', 'Medkit · Granate · Molotow'], ['I', 'Inventar & Bauen'], ['1 – 0', 'Gebäude wählen'], ['F', 'Falle / Aktion (Luke, Schalter)'], ['J', 'Kryoturm'], ['U · X', 'Upgrade · Verkaufen']]],
+    ['Info & Online', [['M', 'Karte (Planquadrate A–H, 1–8)'], ['K · H', 'Skills · Schmiede'], ['Tab', 'Spielerliste'], ['T / Enter', 'Chat (Mausrad = ältere)'], ['Y', 'Markierung setzen'], ['/wo', 'eigenes Planquadrat'], ['N · ESC', 'Ton · Menü']]],
+  ];
+  const cw = Math.min(300, (VW - 60) / cols.length), w = cw * cols.length + 40, h = 96 + Math.max(...cols.map(c => c[1].length)) * 30, x = VW / 2 - w / 2, y = Math.max(16, VH / 2 - h / 2 - 20);
+  ctx.fillStyle = 'rgba(5,7,10,0.5)'; ctx.fillRect(0, 0, VW, VH);
+  panel(x, y, w, h, 0.95);
+  ui.push({ x: 0, y: 0, w: VW, h: VH, fn: () => { helpOpen = false; } });
+  titleText('STEUERUNG', x + 24, y + 30, 22, '#ff8a3a', 'left');
+  text(T ? 'Tippen zum Schließen' : 'F1 oder ESC = schließen', x + w - 20, y + 30, 12, '#999', 'right', '600');
+  cols.forEach(([title, rows], ci) => {
+    const cx = x + 20 + ci * cw;
+    text(title.toUpperCase(), cx, y + 66, 12, '#ffb070', 'left', '700');
+    rows.forEach(([k, d], ri) => {
+      const ry = y + 94 + ri * 30;
+      ctx.font = '700 12px ' + FONT; const kw = Math.max(34, ctx.measureText(k).width + 16);
+      ctx.fillStyle = 'rgba(255,255,255,0.09)'; rr(cx, ry - 11, kw, 22, 6); ctx.fill();
+      text(k, cx + kw / 2, ry, 12, '#fff', 'center', '700');
+      text(d, cx + kw + 8, ry, 12, '#cfd3dc', 'left', '600');
+    });
+  });
+}
 function drawBuildMenu(b) {
   const d = BDEF[b.type], c = bCenter(b);
   const w = 270, h = 214;
@@ -6189,13 +6221,13 @@ function drawBuildMenu(b) {
 function button(label, x, y, w, h, fn, primary, small) {
   const hov = input.sx >= x && input.sx <= x + w && input.sy >= y && input.sy <= y + h;
   const g = ctx.createLinearGradient(0, y, 0, y + h);
-  if (primary) { g.addColorStop(0, hov ? '#ff8a3a' : '#d8641e'); g.addColorStop(1, hov ? '#b0381a' : '#8a2a10'); }
-  else { g.addColorStop(0, hov ? '#4a4038' : '#33302c'); g.addColorStop(1, hov ? '#2a2420' : '#1c1a18'); }
-  if (hov) { ctx.shadowColor = primary ? 'rgba(255,120,40,0.7)' : 'rgba(255,140,60,0.35)'; ctx.shadowBlur = 16; }
-  ctx.fillStyle = g; rr(x, y, w, h, 4); ctx.fill();
+  if (primary) { g.addColorStop(0, hov ? '#ffa04a' : '#f0802e'); g.addColorStop(1, hov ? '#e0581e' : '#c4461a'); }
+  else { g.addColorStop(0, hov ? 'rgba(70,74,86,0.95)' : 'rgba(44,47,58,0.92)'); g.addColorStop(1, hov ? 'rgba(46,49,60,0.95)' : 'rgba(26,28,36,0.92)'); }
+  if (hov) { ctx.shadowColor = primary ? 'rgba(255,120,40,0.6)' : 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14; }
+  ctx.fillStyle = g; rr(x, y, w, h, Math.min(9, h / 2)); ctx.fill();
   ctx.shadowBlur = 0;
-  ctx.strokeStyle = primary ? '#ffb070' : hov ? '#c86a32' : 'rgba(200,110,50,0.5)'; ctx.lineWidth = primary ? 2 : 1.5; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x + 3, y + 3, w - 6, Math.max(2, h * 0.18));
+  ctx.strokeStyle = primary ? 'rgba(255,200,140,0.7)' : hov ? 'rgba(255,170,100,0.6)' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,' + (primary ? 0.18 : 0.06) + ')'; ctx.fillRect(x + 6, y + 1, w - 12, 1);
   const fs = small ? 14 : Math.min(19, h * 0.42);
   ctx.font = fs + 'px ' + FONT_T; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillText(label, x + w / 2 + 1, y + h / 2 + 2);
@@ -6260,13 +6292,13 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['8 SPIELER ONLINE + CLANS', '/team · /w · /clan', 'RIESIGE KARTE MIT 4 BIOMEN', 'WÜSTE · SCHNEE · SUMPF', 'PORTAL INS SCHATTENREICH', 'NEUE 3D-MODELLE', 'SPRINGEN · BERGE · EISEN AUS SCHROTT', 'GEWITTER · KRYOTURM · SCHAMANEN', '7 VERSTECKTE EASTER EGGS 🥚'];
+      const news = ['NEUE WAFFEN & ANIMATIONEN', 'BEIDE HÄNDE · AUSHOLEN & ZUSCHLAGEN', 'STÄDTE · BUNKER · SCHATTENREICH', 'HOCHHAUS · TRESOR · SCHATTENFÜRST', 'LÄNGERE NÄCHTE', 'STREUNER-ZOMBIES AM TAG', 'EISEN: VERSTÄRKEN & REPARIEREN', 'KARTE MIT PLANQUADRATEN A1–H8', 'NEUES DESIGN · CHATFILTER', 'F1 = STEUERUNG · CHAT SCROLLEN'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
-      titleText('NEU IN 3.0', 40 + pw / 2, py + 24, 20, '#ff8a3a');
+      titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
       news.forEach((l, i) => { ctx.fillStyle = i % 2 ? '#a8a098' : '#e8dcd0'; ctx.fillText((i % 2 ? '   ' : '▸ ') + l, 56, py + 54 + i * 24); });
       const ctl = isTouch ? ['LINKER STICK: LAUFEN', 'RECHTER STICK: ANGREIFEN', '⚡ SPEZIALFÄHIGKEIT', '⚒ SCHMIEDE · ★ SKILLS'] :
-        ['WASD  LAUFEN', 'MAUS  UMSEHEN', 'LINKSKLICK  ANGREIFEN', 'O / F5  EGO ↔ THIRD-PERSON', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · /hilfe'];
+        ['WASD  LAUFEN', 'MAUS  UMSEHEN', 'LINKSKLICK  ANGREIFEN', 'O / F5  EGO ↔ THIRD-PERSON', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · F1 HILFE'];
       const px = VW - 40 - pw;
       panel(px, py, pw, 46 + ctl.length * 24, 0.78);
       titleText('STEUERUNG', px + pw / 2, py + 24, 20, '#ff8a3a');
@@ -6287,6 +6319,7 @@ function drawOverlays() {
     if (NET.role) text('Online-Spiel – das Spiel läuft im Hintergrund weiter!', cx, VH * 0.3 + 76, 15, '#ffb07a', 'center', '600');
     button('Fortsetzen (ESC)', cx - 120, VH * 0.48, 240, 50, () => { mode = 'play'; }, true);
     button('⚙ Einstellungen', cx - 120, VH * 0.48 + 62, 240, 44, () => { settingsOpen = true; });
+    button('❓', cx + 128, VH * 0.48 + 62, 44, 44, () => { helpOpen = true; }, false, true);
     button(NET.role ? 'Spiel verlassen' : 'Hauptmenü', cx - 120, VH * 0.48 + 116, 240, 44, leaveGame);
     if (canSave()) button('💾 Jetzt speichern', cx - 120, VH * 0.48 + 170, 240, 40, () => saveNow(), false, true);
     if (S.players.length > 1) button('🤝 Handeln', cx - 120, VH * 0.48 + (canSave() ? 220 : 170), 240, 40, () => openTrade(), false, true);
@@ -6365,6 +6398,8 @@ if (!HEADLESS) {
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
     if (mouseLocked() && ['KeyK', 'KeyH', 'KeyM', 'KeyT', 'Enter', 'Escape', 'KeyP'].includes(e.code)) document.exitPointerLock();
     if (e.repeat) return;
+    if (e.code === 'F1') { e.preventDefault(); if (mode === 'play' || mode === 'paused') helpOpen = !helpOpen; return; }
+    if (e.code === 'Escape' && helpOpen) { helpOpen = false; return; }
     if (e.code === 'KeyN') { SFX.toggle(); if (S && mode === 'play') toast(SFX.muted ? 'Ton aus' : 'Ton an'); return; }
     if (e.code === 'KeyM' && mode === 'play') { mapOpen = !mapOpen; SFX.play('click'); return; }
     if (e.code === 'Escape' && achOpen) { achOpen = false; return; }
