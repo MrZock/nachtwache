@@ -12,7 +12,7 @@ const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 512;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 90, NIGHT_LEN = 100;   // Nacht länger (Alpha 1.5.0)
-const GAME_VER = 'Alpha 1.5.0';
+const GAME_VER = 'Alpha 1.5.1';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -420,6 +420,15 @@ function genBiomes() {
 }
 const NAME_KEY = 'nachtwache.name';
 let playerName = store.get(NAME_KEY, '') || ('Spieler' + randi(10, 99));
+// feste Spieler-ID pro Gerät: die Rangliste erkennt dich daran, auch wenn du den Namen änderst
+const PID_KEY = 'nachtwache.pid', PID_OK = /^[a-z0-9]{16}$/;
+let playerId = store.get(PID_KEY, '');
+if (!PID_OK.test(playerId || '')) {
+  const r = new Uint8Array(16);
+  try { crypto.getRandomValues(r); } catch (e) { for (let i = 0; i < 16; i++) r[i] = Math.random() * 256; }
+  playerId = Array.from(r, v => 'abcdefghijklmnopqrstuvwxyz0123456789'[v % 36]).join('');
+  store.set(PID_KEY, playerId);
+}
 const chatLog = [];   // { name, text, color, t }
 let chatScroll = 0, chatKeepT = 0;   // Zeilen nach oben gescrollt (Chat-Verlauf)
 // Chatfilter: Wörter werden vereinfacht (Groß/klein, 3→e, 0→o, doppelte Buchstaben …) und mit der Liste verglichen.
@@ -3713,6 +3722,7 @@ function hostHandleClient(m, p) {
     p.inp.down = !!m.d; p.lastInput = S.t;
   } else if (m.t === 'name') {
     if (m.skin && /^[0-9.]{1,40}$/.test(m.skin)) p.skin = skinStr(skinParse(m.skin));
+    if (PID_OK.test(m.pid || '')) p.pid = m.pid;
     const nn = cleanText(m.name, 16), old = p.name;
     p.name = nn && chatFilter(nn) === nn ? nn : p.name;
     if (old && old !== p.name) { addChat('', old + ' heißt jetzt ' + p.name, '#aaa'); hostEv(['c', '', old + ' heißt jetzt ' + p.name, 101]); }
@@ -3808,7 +3818,7 @@ async function clientInitMap(m) {
   SFX.init();
   banner('Verbunden!', 'Ihr baut gemeinsam – Ressourcen werden geteilt', '#7fd8ff');
   tut = null; if (SET.tut) tutStart();
-  netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin) });
+  netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin), pid: playerId });
   addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit Y.', '#8fe08f');
 }
 function clientBuildings(list) {
@@ -5297,14 +5307,14 @@ function recordRun() {
   store.set(RUNS_KEY, list.slice(0, 10));
   const url = scoreUrl();
   if (!url || S.isClient || !e.nights || HEADLESS) return;
-  const all = S.players.filter(q => q.name).map(q => ({ run: S.runId + '-' + q.name.toLowerCase(), name: q.name, nights: S.survived, kills: solo ? S.kills : (q.kills | 0), lvl: q.lvl, online: !!NET.role }));
+  const all = S.players.filter(q => q.name).map(q => ({ run: S.runId + '-' + q.name.toLowerCase(), pid: q === me ? playerId : q.pid || '', name: q.name, nights: S.survived, kills: solo ? S.kills : (q.kills | 0), lvl: q.lvl, online: !!NET.role }));
   try { fetch(url, { method: 'POST', body: JSON.stringify({ list: all }), headers: { 'Content-Type': 'text/plain' } }).catch(() => {}); } catch (err) {}
 }
 function loadRanks() {
   const url = scoreUrl();
   if (!url) { rankMsg = 'Kein Online-Server eingestellt.'; return; }
   rankData = null; rankMsg = 'Lade … (der Server braucht beim ersten Mal bis zu einer Minute zum Aufwachen)';
-  fetch(url, { cache: 'no-store' }).then(r => r.json()).then(d => { rankData = Array.isArray(d) ? d : []; rankMsg = ''; })
+  fetch(url + '?me=' + playerId, { cache: 'no-store' }).then(r => r.json()).then(d => { rankData = Array.isArray(d) ? d : []; rankMsg = ''; })
     .catch(() => { rankMsg = 'Server nicht erreichbar – versuch es gleich nochmal.'; });
 }
 function openRanks() { rankOpen = true; if (rankTab === 'web') loadRanks(); SFX.play('click'); }
@@ -5325,7 +5335,7 @@ function drawRanks() {
   const cols = [[x + 18, '#', 'left'], [x + 52, 'Name', 'left'], [x + w - 250, 'Nächte', 'right'], [x + w - 170, 'Kills', 'right'], [x + w - 105, 'Level', 'right'], [x + w - 18, 'Datum', 'right']];
   for (const [cx, l, al] of cols) text(l, cx, hy, 11, '#999', al, '700');
   list.forEach((r, i) => {
-    const ry = hy + 24 + i * rowH, me = rankTab === 'me' ? r.run === (S && S.runId) : r.name === playerName;
+    const ry = hy + 24 + i * rowH, me = rankTab === 'me' ? r.run === (S && S.runId) : 'me' in r ? r.me : r.name === playerName;
     if (me) { ctx.fillStyle = 'rgba(255,190,110,0.12)'; rr(x + 10, ry - 12, w - 20, rowH - 2, 5); ctx.fill(); }
     text(i < 3 ? ['🥇', '🥈', '🥉'][i] : String(i + 1), x + 18, ry, 13, '#fff', 'left', '700');
     text(String(r.name || '?').slice(0, 16) + (r.online ? ' 🌐' : ''), x + 52, ry, 13, '#eee', 'left', '600');
@@ -6292,7 +6302,7 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['NEUE WAFFEN & ANIMATIONEN', 'BEIDE HÄNDE · AUSHOLEN & ZUSCHLAGEN', 'STÄDTE · BUNKER · SCHATTENREICH', 'HOCHHAUS · TRESOR · SCHATTENFÜRST', 'LÄNGERE NÄCHTE', 'STREUNER-ZOMBIES AM TAG', 'EISEN: VERSTÄRKEN & REPARIEREN', 'KARTE MIT PLANQUADRATEN A1–H8', 'NEUES DESIGN · CHATFILTER', 'F1 = STEUERUNG · CHAT SCROLLEN'];
+      const news = ['RANGLISTE MIT SPIELER-ID', 'NEUER NAME = KEIN DOPPELTER EINTRAG', 'NEUE WAFFEN & ANIMATIONEN', 'BEIDE HÄNDE · AUSHOLEN & ZUSCHLAGEN', 'STÄDTE · BUNKER · SCHATTENREICH', 'HOCHHAUS · TRESOR · SCHATTENFÜRST', 'LÄNGERE NÄCHTE', 'STREUNER-ZOMBIES AM TAG', 'EISEN: VERSTÄRKEN & REPARIEREN', 'KARTE MIT PLANQUADRATEN A1–H8', 'NEUES DESIGN · CHATFILTER', 'F1 = STEUERUNG · CHAT SCROLLEN'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
       titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
