@@ -88,7 +88,7 @@
   }
 
   // ---------------------------------------------------------------- Setup
-  let fpView = null, fpTools = null, fpMetal = null, lastFp = null;
+  let fpView = null, fpTools = null, fpMetal = null, fpHand = null, lastFp = null;
   let ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
@@ -751,7 +751,7 @@
         for (let i = 0; i < 3; i++) k.lit(CY(0.034, 0.034, 0.04, 6), '#2a2a2a', 0.04 + i * 0.06, 0, 0, 0, 0, Math.PI / 2);
         k.lit(BX(0.12, 0.08, 0.08), '#3a3a3a', 0.72, 0, 0)
           .add('metal', CY(0.23, 0.23, 0.03, 16), '#ffffff', 0.7, 0, 0.16, 0, 0, 0, 0.75, 1, 1).lit(CY(0.05, 0.05, 0.035, 8), '#3a3a3a', 0.7, 0, 0.06);
-        for (let i = 0; i < 8; i++) { const an = -0.9 + i * 0.26; k.add('metal', CO(0.025, 0.06, 3), '#e8e8e8', 0.7 + Math.cos(an) * 0.18, 0, 0.16 + Math.sin(an) * 0.24 + 0.02, 0, 0, 0, 1, 1, 1); }
+        for (let i = 0; i < 9; i++) { const an = -1.0 + i * 0.26, ex = Math.cos(an) * 0.1725, ez = Math.sin(an) * 0.23, n = Math.atan2(ez / 0.0529, ex / 0.0298); k.add('metal', CO(0.022, 0.055, 3), '#e8e8e8', 0.7 + ex + Math.cos(n) * 0.018, 0, 0.16 + ez + Math.sin(n) * 0.018, 0, -n, -Math.PI / 2, 0.5, 1, 1); }
         k.add('metal', CO(0.04, 0.18, 4), '#ffffff', 0.71, 0, -0.13, -Math.PI / 2, 0, 0).lit(BX(0.06, 0.03, 0.08), '#7a1a10', 0.62, 0.01, 0.26);
         break;
       case 'spear':
@@ -770,7 +770,7 @@
           .lit(BX(0.43, 0.008, 0.008), '#e8e8e8', 0.357, 0.03, 0.147, 0, -0.75, 0).lit(BX(0.43, 0.008, 0.008), '#e8e8e8', 0.357, 0.03, -0.147, 0, 0.75, 0)
           .lit(BX(0.48, 0.014, 0.014), '#c8a070', 0.3, 0.04, 0).add('metal', CO(0.022, 0.07, 4), '#ffffff', 0.57, 0.04, 0, 0, 0, -Math.PI / 2)
           .lit(BX(0.04, 0.006, 0.03), '#d84a3a', 0.08, 0.045, 0)
-          .lit(CY(0.022, 0.022, 0.2, 8), '#2a2a2e', 0.18, 0.08, 0, 0, 0, Math.PI / 2).lit(BX(0.03, 0.04, 0.02), '#2a2a2e', 0.18, 0.05, 0);
+          .lit(CY(0.022, 0.022, 0.2, 8), '#2a2a2e', 0.18, 0.075, 0, 0, 0, Math.PI / 2).lit(BX(0.05, 0.05, 0.03), '#2a2a2e', 0.18, 0.04, 0);
         k.glow(CY(0.016, 0.016, 0.005, 8), '#ff5a3a', 0.281, 0.08, 0, 0, 0, Math.PI / 2);
         break;
       case 'staff':
@@ -779,7 +779,7 @@
           .lit(BX(0.26, 0.1, 0.09), '#4a4e56', 0.08, -0.02, 0).lit(BX(0.07, 0.16, 0.06), '#2a2a2e', 0.02, -0.12, 0, 0, 0, 0.25)
           .lit(BX(0.05, 0.06, 0.04), '#2a2a2e', 0.12, -0.08, 0);
         for (let i = 0; i < 4; i++) k.add('metal', CY(0.065, 0.065, 0.025, 10), '#ffffff', 0.32 + i * 0.07, 0, 0, 0, 0, Math.PI / 2);
-        k.lit(CY(0.05, 0.05, 0.2, 8), '#2a2a2e', 0.12, 0.09, 0, 0, 0, Math.PI / 2).glow(CY(0.035, 0.035, 0.17, 8), '#ffb347', 0.12, 0.09, 0, 0, 0, Math.PI / 2)
+        k.lit(CY(0.05, 0.05, 0.2, 8), '#2a2a2e', 0.12, 0.075, 0, 0, 0, Math.PI / 2).glow(CY(0.035, 0.035, 0.17, 8), '#ffb347', 0.12, 0.075, 0, 0, 0, Math.PI / 2)
           .lit(CY(0.065, 0.05, 0.08, 8), '#4a4e56', 0.76, 0, 0, 0, 0, Math.PI / 2);
         for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; k.add('metal', CO(0.02, 0.12, 4), '#ffffff', 0.84, Math.cos(a) * 0.05, Math.sin(a) * 0.05, a, 0, -Math.PI / 2 + 0.3); }
         k.glow(IC(0.05, 1), '#ffb347', 0.86, 0, 0).glow(CY(0.047, 0.047, 0.02, 8), '#ff8a2a', 0.58, 0, 0, 0, 0, Math.PI / 2);
@@ -903,11 +903,24 @@
     return grp;
   }
   function makePlayer(p) { const grp = buildPlayer(p); scene.add(grp); return grp; }
+  // Waffe in der Hand: der Arm führt die Bewegung, der Griff sitzt immer genau in der Hand (auch mitten im Schlag)
+  const HAND = new T.Vector3();
+  function poseTool(u, tool, swp) {
+    for (const k in u.tools) u.tools[k].visible = k === tool;
+    const arm = u.arms[1], ranged = tool === 'bow' || tool === 'staff';
+    arm.rotation.set(ranged ? -0.15 : -0.35, 0, (ranged ? 1.15 : 0.75) + swp * (tool === 'spear' ? 0.85 : tool === 'pick' ? 0.9 : 0.4));
+    arm.updateMatrix();
+    HAND.set(0.005, -0.31, 0).applyMatrix4(arm.matrix);
+    u.tool.position.copy(HAND);
+    u.tool.rotation.set(0, ranged ? 0.12 : tool === 'spear' ? 0.25 : tool === 'axe' ? 1.6 - swp * 3.6 : tool === 'pick' ? 0.9 - swp * 0.6 : 0.9 - swp * 2.2, tool === 'pick' ? 0.35 - swp * 1.1 : ranged ? 0.1 : 0);
+    u.body.rotation.y = tool === 'axe' ? -swp * 0.5 : 0;
+  }
   // Aussehen = Skin + Rüstungsstufen; nur wenn sich das ändert, wird das Modell neu gebaut
   function lookKey(p) { const e = p.eq; return (p.skin || '') + '|' + (e ? e.h + '' + e.v + e.g + e.b : ''); }
 
   // Vorschau für den Skin-Editor im Hauptmenü (eigener kleiner Renderer)
   let pvR = null, pvScene = null, pvCam = null, pvObj = null, pvKey = '';
+  R3._dbg = { toolKit, buildPlayer, poseTool };   // für Modell-Vorschauen in Tests
   R3.skinPreview = function (skin, ang) {
     if (!R3.ready) return null;
     if (!pvR) {
@@ -936,14 +949,23 @@
 
   // Waffe in der Hand (Ego-Perspektive)
   function updateFpView(p, at) {
+    // Hand in den Farben des eigenen Skins: Ärmel, Armschiene, Handschuh (Faust um den Griff, Daumen oben)
+    const hk = lookKey(p);
+    if (fpHand && fpHand.userData.key !== hk) { fpView.remove(fpHand); fpHand.geometry.dispose(); fpHand = null; }
+    if (!fpHand) {
+      const sk = G.skinParse(p.skin || ''), O = G.SKIN_OPTS, pick = id => { const d = O.find(o => o.id === id); return (d.colors || d.list)[sk[id]]; };
+      const J = pick('c'), GL = p.eq && p.eq.g ? (G.ARMOR_COL || [])[p.eq.g] : '#3a2a1a';
+      fpHand = new T.Mesh(new Kit().lit(BX(0.13, 0.12, 0.13), GL, 0, -0.005, 0.03).lit(BX(0.05, 0.04, 0.07), GL, 0.04, 0.07, 0.02)
+        .lit(BX(0.135, 0.125, 0.06), '#6a5e52', 0, -0.01, 0.12).lit(BX(0.138, 0.02, 0.062), '#8a4a2a', 0, -0.01, 0.15)
+        .lit(BX(0.15, 0.15, 0.26), J, 0, -0.02, 0.27).build().lit, matLit);
+      fpHand.userData.key = hk; fpHand.renderOrder = 10; fpView.add(fpHand);
+    }
     if (!fpTools) {
       fpTools = {}; fpMetal = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: '#dfe6ee', emissive: '#1a1a1a' });
-      const hand = new T.Mesh(new Kit().lit(BX(0.12, 0.12, 0.2), '#f0c9a0', 0, 0, 0.05).lit(BX(0.14, 0.14, 0.3), '#3a6ea8', 0, -0.02, 0.28).build().lit, matLit);
-      fpView.add(hand);
       for (const id of ['pick', 'sword', 'bow', 'spear', 'axe', 'staff']) {
         const tg = new T.Group(), k = toolKit(id);
         if (k.lit) tg.add(new T.Mesh(k.lit, matLit)); if (k.metal) tg.add(new T.Mesh(k.metal, fpMetal)); if (k.glow) tg.add(new T.Mesh(k.glow, matGlow));
-        tg.rotation.set(0, Math.PI / 2, id === 'bow' ? 0 : 0.5); tg.position.set(0, 0, 0);
+        tg.rotation.set(0, Math.PI / 2, id === 'bow' || id === 'staff' ? 0.04 : 0.5); tg.position.set(0, 0, 0);
         fpView.add(tg); fpTools[id] = tg;
       }
       fpView.traverse(o => { o.renderOrder = 10; if (o.material) { o.material = o.material; } });
@@ -951,8 +973,9 @@
     for (const k in fpTools) fpTools[k].visible = k === p.tool;
     const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
     const w = walkPh.get('p' + p.id) || { ph: 0, mv: 0 };
-    fpView.position.set(0.3 + Math.sin(w.ph) * 0.015 * w.mv, -0.32 + Math.abs(Math.cos(w.ph)) * 0.015 * w.mv, -0.5 - (p.tool === 'spear' ? swp * 0.35 : 0));
-    fpView.rotation.set(p.tool === 'spear' || p.tool === 'bow' || p.tool === 'staff' ? 0 : -swp * 1.3, p.tool === 'axe' ? swp * 1.2 : 0, p.tool === 'pick' ? swp * 0.4 : 0);
+    const aim = p.tool === 'bow' || p.tool === 'staff';   // Fernwaffen zeigen auf das Fadenkreuz
+    fpView.position.set((aim ? 0.2 : 0.3) + Math.sin(w.ph) * 0.015 * w.mv, (aim ? -0.25 : -0.32) + Math.abs(Math.cos(w.ph)) * 0.015 * w.mv, -0.5 - (p.tool === 'spear' ? swp * 0.35 : 0));
+    fpView.rotation.set(aim ? 0.05 + swp * 0.12 : p.tool === 'spear' ? 0 : -swp * 1.3, aim ? 0.1 : p.tool === 'axe' ? swp * 1.2 : 0, p.tool === 'pick' ? swp * 0.4 : 0);
     const lv = (p.tl && p.tl[p.tool]) || 1;
     fpMetal.color.set(G.TMET[Math.min(4, lv - 1)]);
   }
@@ -1602,13 +1625,7 @@
       if (p.rageT > 0) glowAt(px, 0.6, pz, 1.6, '#ff5a2a', 0.5 + 0.2 * Math.sin(at * 10));
       u.legs[0].rotation.z = Math.sin(wp.ph) * 0.7 * mv; u.legs[1].rotation.z = -Math.sin(wp.ph) * 0.7 * mv;
       u.arms[0].rotation.z = -Math.sin(wp.ph) * 0.6 * mv;
-      for (const k in u.tools) u.tools[k].visible = k === p.tool;
-      const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0;
-      u.tool.rotation.y = p.tool === 'bow' || p.tool === 'staff' ? 0.9 : p.tool === 'spear' ? 0.25 : p.tool === 'axe' ? 1.6 - swp * 3.6 : 0.9 - swp * 2.2;
-      u.tool.position.x = 0.28 + (p.tool === 'spear' ? swp * 0.45 : 0);
-      u.tool.rotation.z = p.tool === 'pick' ? swp * 0.6 : 0;
-      u.arms[1].rotation.z = 0.75 + swp * 0.4; u.arms[1].rotation.x = -0.35;
-      u.body.rotation.y = p.tool === 'axe' ? -swp * 0.5 : 0;
+      poseTool(u, p.tool, p.swing > 0 ? Math.sin((1 - p.swing / 0.22) * Math.PI) : 0);
       u.head.rotation.y = Math.sin(at * 0.7 + p.id) * 0.1;
       const lv = (p.tl && p.tl[p.tool]) || 1;
       if (u.lv !== lv) { u.lv = lv; u.metal.color.set(G.TMET[Math.min(4, lv - 1)]); }
