@@ -33,7 +33,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 // Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
-const NET_VER = 34;
+const NET_VER = 35;
 const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -311,7 +311,7 @@ const MUSIC = (() => {
 })();
 function musicMood() {
   if (mode === 'menu' || mode === 'over' || !S || !S.player) return 'menu';
-  if (S.zombies.some(z => z.type === 'boss' && !z.dead)) return 'boss';
+  if (S.zombies.some(z => z.type === 'boss' && !z.dead && Math.hypot(z.x - S.player.x, z.y - S.player.y) < 30 * TS)) return 'boss';
   if (S.phase === 'night') return 'night';
   const b = S.biome ? S.biome[tileAt(S.player.x, S.player.y)] : 0;
   return b === 5 || b === 7 ? 'night' : 'day';
@@ -347,6 +347,27 @@ const DUN_NAME = ['Bunker Alpha', 'Fabrik Beta', 'Labor Gamma'];
 const CITY_R = 34;
 const isStreet = (x, y) => ((x + 1500) % 15) < 3 || ((y + 1500) % 15) < 3;
 const sRand = (n) => { let h = Math.imul((n | 0) ^ 0x5bd1e995, 2654435761) >>> 0; h ^= h >>> 15; h = Math.imul(h, 2246822519) >>> 0; h ^= h >>> 13; return (h >>> 0) / 4294967296; };
+// Grundstück im Straßenraster (gx, gy): Park, Haus oder Hochhaus – alles aus dem Seed berechnet
+const lotCache = new Map();
+function lotAt(gx, gy) {
+  const key = (S ? S.seed : 0) + ':' + gx + ':' + gy;
+  if (lotCache.has(key)) return lotCache.get(key);
+  if (lotCache.size > 4000) lotCache.clear();
+  const lx = gx * 15 + 3, ly = gy * 15 + 3, h = n => sRand((S.seed | 0) * 31 + gx * 977 + gy * 131 + n * 7919);
+  let lot = null;
+  if (inMap(lx + 6, ly + 6) && S.biome && S.biome[(ly + 6) * MAP + lx + 6] === 6) {
+    const tower = cityCenters().some(c => Math.floor((c.x - 3) / 15) === gx && Math.floor((c.y - 3) / 15) === gy);
+    if (!tower && h(1) < 0.12) lot = { gx, gy, kind: 'park', lx, ly };
+    else {
+      const w = tower ? 9 : 6 + Math.floor(h(2) * 6), hh = tower ? 9 : 6 + Math.floor(h(3) * 6);
+      lot = { gx, gy, lx, ly, kind: tower ? 'tower' : 'house', w, h: hh, x0: lx + (tower ? 1 : Math.floor(h(4) * (12 - w))), y0: ly + (tower ? 1 : Math.floor(h(5) * (12 - hh))),
+        door: Math.floor(h(6) * 4), floors: tower ? 9 + Math.floor(h(7) * 3) : 2 + Math.floor(h(7) * 4), style: tower ? 4 : Math.floor(h(8) * 4),
+        roof: tower || h(9) < 0.5, divider: !tower && w >= 8 && h(10) < 0.5, tank: h(11) < 0.45, sign: h(12) < 0.35, signCol: Math.floor(h(13) * 4) };
+    }
+  }
+  lotCache.set(key, lot);
+  return lot;
+}
 function cityCenters() {
   const sd = (S && S.seed) || 1, out = [];
   for (let k = 0; k < 2; k++) for (let t = 0; t < 30; t++) {
@@ -833,22 +854,21 @@ function genCities() {
   for (const cc of cityCenters()) {
     for (let gy = Math.floor((cc.y - CITY_R) / 15); gy <= Math.ceil((cc.y + CITY_R) / 15); gy++)
       for (let gx = Math.floor((cc.x - CITY_R) / 15); gx <= Math.ceil((cc.x + CITY_R) / 15); gx++) {
-        const lx = gx * 15 + 3, ly = gy * 15 + 3;   // Grundstück 12×12 zwischen den Straßen
-        if (!inMap(lx + 6, ly + 6) || S.biome[(ly + 6) * MAP + lx + 6] !== 6) continue;
-        const r = Math.random();
-        if (r < 0.12) { for (let k = 0; k < 6; k++) { const x = lx + randi(1, 10), y = ly + randi(1, 10); if (S.biome[y * MAP + x] === 6) R[y * MAP + x] = Math.random() < 0.5 ? 1 : 7; } continue; }   // verwilderter Park / Schrottplatz
-        const w = randi(6, 11), h = randi(6, 11), x0 = lx + randi(0, 11 - w), y0 = ly + randi(0, 11 - h);
-        const door = randi(0, 3);
+        const lot = lotAt(gx, gy);   // Grundstück 12×12 zwischen den Straßen
+        if (!lot) continue;
+        const lx = lot.lx, ly = lot.ly;
+        if (lot.kind === 'park') { for (let k = 0; k < 6; k++) { const x = lx + randi(1, 10), y = ly + randi(1, 10); if (S.biome[y * MAP + x] === 6) R[y * MAP + x] = Math.random() < 0.5 ? 1 : 7; } continue; }   // verwilderter Park / Schrottplatz
+        const { w, h, x0, y0, door } = lot, holes = lot.kind === 'tower' ? 0.03 : lot.roof ? 0.06 : 0.14;
         for (let y = y0; y <= y0 + h; y++) for (let x = x0; x <= x0 + w; x++) {
           if (S.biome[y * MAP + x] !== 6) continue;
           const edge = x === x0 || y === y0 || x === x0 + w || y === y0 + h;
           if (!edge) continue;
           const mx = x0 + (w >> 1), my = y0 + (h >> 1);
           const isDoor = (door === 0 && y === y0 && Math.abs(x - mx) <= 1) || (door === 1 && y === y0 + h && Math.abs(x - mx) <= 1) || (door === 2 && x === x0 && Math.abs(y - my) <= 1) || (door === 3 && x === x0 + w && Math.abs(y - my) <= 1);
-          if (isDoor || Math.random() < 0.12) continue;   // Tür und eingestürzte Stellen
+          if (isDoor || Math.random() < holes) continue;   // Tür und eingestürzte Stellen
           R[y * MAP + x] = 8;
         }
-        if (w >= 8 && Math.random() < 0.5) { const px = x0 + (w >> 1); for (let y = y0 + 1; y < y0 + h; y++) if (Math.random() < 0.8 && y !== y0 + (h >> 1)) R[y * MAP + px] = 8; }
+        if (lot.divider) { const px = x0 + (w >> 1); for (let y = y0 + 1; y < y0 + h; y++) if (Math.random() < 0.8 && y !== y0 + (h >> 1)) R[y * MAP + px] = 8; }
         for (let k = 0; k < 2; k++) { const x = x0 + randi(1, w - 1), y = y0 + randi(1, h - 1); if (!R[y * MAP + x] && Math.random() < 0.4) R[y * MAP + x] = 7; }
       }
     // Autowracks auf den Straßen
@@ -885,8 +905,53 @@ function genDungeons() {
       if (i === 1 && j === 2) continue;
       for (let n = 0; n < 3; n++) { const x = r.x + randi(1, r.w - 2), y = r.y + randi(1, r.h - 2); if (Math.random() < 0.6) R[y * MAP + x] = Math.random() < 0.6 ? 7 : 2; }
     }
-    S.dunRooms[k] = { rooms, loot: rooms.filter(r => r.j === 0)[randi(0, 2)] };
+    S.dunRooms[k] = dunRoomsOf(k);
+    // Schalter-Plätze frei räumen
+    for (const sw of dunSwitches(k)) R[sw.ty * MAP + sw.tx] = 0;
   }
+  for (let k = 0; k < DUN.n; k++) vaultClose(k);
+}
+// Drei Sicherungsschalter je Bunker (feste Räume, an der Rückwand) und die Türen des Tresors
+const SW_ROOMS = [[[0, 0], [2, 1], [0, 2]], [[2, 0], [0, 1], [2, 2]], [[0, 1], [2, 0], [0, 2]]];
+function dunSwitches(k) {
+  return SW_ROOMS[k % 3].map(([i, j], n) => { const r = dunRoom(k, i, j); return { n, tx: r.x + 1 + ((n * 3 + k) % (r.w - 2)), ty: r.y }; });
+}
+// Türfelder: der Ring direkt um den Tresor-Raum, wo von außen ein Gang ankommt
+function vaultDoors(k) {
+  const r = dunRoom(k, 1, 0), out = [], wall = (x, y) => !inMap(x, y) || S.res[y * MAP + x] === 8 && !vaultCand(k, x, y);
+  for (let x = r.x; x < r.x + r.w; x++) { if (!wall(x, r.y + r.h + 1)) out.push((r.y + r.h) * MAP + x); if (!wall(x, r.y - 2)) out.push((r.y - 1) * MAP + x); }
+  for (let y = r.y; y < r.y + r.h; y++) { if (!wall(r.x + r.w + 1, y)) out.push(y * MAP + r.x + r.w); if (!wall(r.x - 2, y)) out.push(y * MAP + r.x - 1); }
+  return out;
+}
+function vaultCand(k, x, y) { const r = dunRoom(k, 1, 0); return (y === r.y + r.h || y === r.y - 1) && x >= r.x && x < r.x + r.w || (x === r.x + r.w || x === r.x - 1) && y >= r.y && y < r.y + r.h; }
+function vaultClose(k) {
+  if (!S.dunSw) S.dunSw = [];
+  S.dunSw[k] = [false, false, false];
+  for (const i of vaultDoors(k)) if (S.res[i] !== 8) setRes(i, 8, 255);
+}
+function vaultOpen(k) {
+  for (const i of vaultDoors(k)) if (S.res[i] === 8) setRes(i, 0, 0);
+  const r = dunRoom(k, 1, 0), cx = (r.x + r.w / 2) * TS, cy = (r.y + r.h + 0.5) * TS;
+  burst(cx, cy, '#ffcf6a', 30, 200, 0.8, 4); addShake(6, cx, cy); SFX.play('boom', cx, cy);
+}
+function nearSwitch(p) {
+  const tx = p.x / TS, ty = p.y / TS;
+  if (!inDun(Math.floor(tx), Math.floor(ty))) return null;
+  const k = clamp(Math.floor((tx - DUN.x0) / DUN.w), 0, DUN.n - 1);
+  for (const sw of dunSwitches(k)) if (Math.hypot(sw.tx + 0.5 - tx, sw.ty + 0.5 - ty) < 1.7) return { k, n: sw.n, on: !!(S.dunSw && S.dunSw[k] && S.dunSw[k][sw.n]) };
+  return null;
+}
+function useSwitch(p) {
+  const s0 = nearSwitch(p);
+  if (!s0 || s0.on) return false;
+  if (!S.dunSw) S.dunSw = [];
+  if (!S.dunSw[s0.k]) S.dunSw[s0.k] = [false, false, false];
+  S.dunSw[s0.k][s0.n] = true;
+  const n = S.dunSw[s0.k].filter(Boolean).length;
+  sfxFor(p, 'click'); SFX.play('zap', p.x, p.y);
+  if (n >= 3) { vaultOpen(s0.k); toastAll('🔓 ' + DUN_NAME[s0.k] + ': Der Tresor ist offen – der Wärter wartet!', '#ffcf6a'); }
+  else toastFor(p, '⚡ Schalter umgelegt (' + n + ' / 3) – such die anderen im Bunker', '#ffcf6a');
+  return true;
 }
 // Berghöhe = Abstand zum Bergrand (für hohe Gipfel in der Mitte von Gebirgen)
 function calcMountains() {
@@ -1838,7 +1903,7 @@ function useHatch(p) {
   if (h.out) {
     const e = dunExit(h.k); p.x = e.x; p.y = e.y - 2.4 * TS;
     dunFill(h.k);
-    toastFor(p, '🔦 ' + DUN_NAME[h.k] + ' – der goldene Wärter oben trägt die große Beute. Vorsicht, Wächter!', '#ffcf8a');
+    toastFor(p, '🔦 ' + DUN_NAME[h.k] + ' – leg die 3 Sicherungsschalter um, dann öffnet sich der Tresor mit dem goldenen Wärter.', '#ffcf8a');
   } else { const o = hatchPos(h.k); p.x = o.x; p.y = o.y + 1.6 * TS; toastFor(p, 'Zurück an der Oberfläche.', '#cfe8ff'); }
   p.tp++; sfxFor(p, 'zap'); burst(p.x, p.y, '#ffcf8a', 20, 160, 0.6, 3);
   return true;
@@ -1849,6 +1914,7 @@ function dunFill(k) {
   if (!S.dunRooms || !S.dunRooms[k] || S.t < d.readyAt) return;
   if (S.zombies.some(z => z.guard === k && !z.dead)) return;
   d.readyAt = S.t + 240;
+  vaultClose(k);
   const N = Math.max(1, S.night), types = ['normal', 'normal', 'runner', 'armored', 'spitter', ...(N >= 3 ? ['brute'] : []), ...(N >= 5 ? ['shaman'] : [])];
   for (const r of S.dunRooms[k].rooms) {
     if (r.i === 1 && r.j === 2) continue;
@@ -1861,10 +1927,23 @@ function dunFill(k) {
   const L = S.dunRooms[k].loot, w = spawnZombie('brute', { tx: Math.floor(L.x / TS), ty: Math.floor(L.y / TS) - 1 });
   w.guard = k; w.warden = true; w.hp *= 3 + 0.3 * N; w.maxHp = w.hp; w.golden = true;
 }
+// Der Schattenriss liegt im Norden des Schattenreichs; dort wacht der Schattenfürst
+const riftPos = () => ({ x: (((DIM.x0 + DIM.x1) >> 1) + 0.5) * TS, y: (DIM.y0 + 14.5) * TS });
+function lordTick(inside) {
+  const lord = S.zombies.find(z => z.lord && !z.dead);
+  if (lord || !inside.length) return;
+  if (S.t < (S.lordAt || 0)) return;
+  const r = riftPos(), z = spawnZombie('boss', { tx: Math.floor(r.x / TS), ty: Math.floor(r.y / TS) });
+  z.lord = true; z.hp = z.maxHp = z.maxHp * 0.7; z.hx = r.x; z.hy = r.y;
+  S.lordAt = S.t + 1e9;
+  burst(r.x, r.y, '#b06aff', 40, 260, 1, 4); ring(r.x, r.y, 120, 0.6, '#b06aff');
+  for (const q of inside) toastFor(q, '👁 Der Schattenfürst erwacht am Schattenriss im Norden!', '#d8b4ff');
+}
 function dimTick(dt) {
   if (!S.portal) { const h0 = allHQs()[0]; if (h0) withTeam(S.teams.get(h0.team), makePortal); }
   if (!S.portal) return;
   const inside = S.players.filter(q => q.dead <= 0 && !q.afk && S.biome[tileAt(q.x, q.y)] === 5);
+  lordTick(inside);
   S.shadeT = (S.shadeT || 2) - dt;
   if (inside.length && S.shadeT <= 0) {
     S.shadeT = rand(1.4, 2.8);
@@ -1895,12 +1974,12 @@ function dimTick(dt) {
 // Schattenwesen jagen nur Spieler im Schattenreich, ohne Wegsuche
 // Zombies, die nur Spieler jagen: Schatten (Schattenreich), Wächter (Bunker) und Streuner (tagsüber)
 function shadeTick(z, dt) {
-  const D = ZDEF[z.type], guard = typeof z.guard === 'number', stray = !!z.stray;
+  const D = ZDEF[z.type], guard = typeof z.guard === 'number' || !!z.lord, stray = !!z.stray;
   let best = null, bd = guard ? 520 : stray ? 9 * TS : 700;
   for (const q of S.players) {
     if (q.dead > 0 || q.afk) continue;
     const qb = S.biome[tileAt(q.x, q.y)];
-    if (guard ? (qb !== 7 || dunOf(q.x / TS) !== z.guard) : stray ? (qb === 5 || qb === 7) : qb !== 5) continue;
+    if (z.lord ? qb !== 5 || Math.hypot(q.x - z.hx, q.y - z.hy) > 16 * TS : guard ? (qb !== 7 || dunOf(q.x / TS) !== z.guard) : stray ? (qb === 5 || qb === 7) : qb !== 5) continue;
     const d = Math.hypot(q.x - z.x, q.y - z.y); if (d < bd) { bd = d; best = q; } }
   let tx, ty, sp = D.speed * z.spMul * (z.frostT > 0 ? 0.6 : 1);
   if (best) {
@@ -1911,7 +1990,7 @@ function shadeTick(z, dt) {
     tx = z.wx; ty = z.wy; sp *= 0.35;
     if (guard) { if (!z.hx) { z.hx = z.x; z.hy = z.y; } if (Math.hypot(z.wx - z.hx, z.wy - z.hy) > 150) { z.wx = z.hx; z.wy = z.hy; } }
     z.idleT = (z.idleT || 0) + dt;
-    if (z.idleT > (guard ? 120 : stray ? 50 : 40)) { z.dead = true; return; }   // verschwindet, wenn lange niemand da ist
+    if (z.idleT > (z.lord ? 1e9 : guard ? 120 : stray ? 50 : 40)) { z.dead = true; return; }   // verschwindet, wenn lange niemand da ist
   }
   if (best) z.idleT = 0;
   const dx = tx - z.x, dy = ty - z.y, d = Math.hypot(dx, dy);
@@ -2028,8 +2107,9 @@ function killZombie(z) {
       if (Math.random() < (z.type === 'boss' ? 1 : z.type === 'armored' ? 0.45 : 0.03)) giveMat(k, 'e', z.type === 'boss' ? 4 : 1);
     }
   }
+  if (z.lord) { dropLoot(z.x, z.y, 0); S.lordAt = S.t + 300; toastAll('👁 Der Schattenfürst ist besiegt! In 5 Minuten erwacht ein neuer.', '#d8b4ff'); }
   if (z.warden) dropLoot(z.x, z.y, z.guard);
-  else if (Math.random() < (z.type === 'boss' ? 1 : z.guard !== undefined ? 0.22 : z.type === 'brute' || z.type === 'armored' ? 0.12 : 0.05)) dropLoot(z.x, z.y);
+  else if (!z.lord && Math.random() < (z.type === 'boss' ? 1 : z.guard !== undefined ? 0.22 : z.type === 'brute' || z.type === 'armored' ? 0.12 : 0.05)) dropLoot(z.x, z.y);
   if (z.golden && !z.warden) {
     S.gold += 75; S.goldEarned += 75;
     burst(z.x, z.y, '#ffd36b', 40, 260, 1.0, 4); ring(z.x, z.y, 90, 0.5, '#ffd36b');
@@ -2191,7 +2271,7 @@ function nearestPlayer(x, y) {
 function updZombie(z, dt) {
   const D = ZDEF[z.type];
   z.flash -= dt; z.atkCd -= dt; z.lunge = Math.max(0, z.lunge - dt); z.slowT = (z.slowT || 0) - dt; z.frostT = (z.frostT || 0) - dt;
-  if (D.shade || typeof z.guard === 'number' || z.stray) { shadeTick(z, dt); return; }
+  if (D.shade || typeof z.guard === 'number' || z.stray || z.lord) { shadeTick(z, dt); return; }
   if (z.type === 'shaman') {
     z.healT = (z.healT === undefined ? 2 : z.healT) - dt;
     if (z.healT <= 0) {
@@ -2434,6 +2514,7 @@ function actCraftEq(kind, id) {
 // Eine Taste für alles in der Nähe (zurzeit: Bunker-Luke)
 function interact(p) {
   if (!p || p.dead > 0) return;
+  if (useSwitch(p)) return;
   useHatch(p);
 }
 function actInteract() {
@@ -2651,7 +2732,7 @@ function playerAttack(p) {
       if (kind === 1) { S.wood += amt; SFX.play('chop', cx, cy); burst(cx, cy, '#a0763f', 6, 120, 0.45, 2.5); burst(cx, cy, '#4f8a3a', 4, 90, 0.6, 3); floatText(cx, cy - 18, '+' + amt + ' Holz', '#e0b070', 13); }
       else if (kind === 2) { S.stone += amt; SFX.play('mine', cx, cy); burst(cx, cy, '#a8a8b0', 7, 140, 0.4, 2.5); floatText(cx, cy - 18, '+' + amt + ' Stein', '#d0d0e0', 13); }
       else if (kind === 7) { if (Math.random() < 0.25) giveMat(p, 'e', 1); if (Math.random() < 0.15) giveMat(p, 'h', 1); if (Math.random() < 0.2) giveMat(p, 'c', 1); S.iron += amt; SFX.play('mine', cx, cy); burst(cx, cy, '#a8582a', 8, 140, 0.45, 2.5); burst(cx, cy, '#8a8a92', 5, 120, 0.4, 2.5); floatText(cx, cy - 18, '+' + amt + ' Eisen', '#c8d0dc', 13); }
-      else if (kind === 5) { S.gold += amt * 6; S.goldEarned += amt * 6; S.crystals = (S.crystals || 0) + amt; SFX.play('zap', cx, cy); burst(cx, cy, '#c890ff', 10, 160, 0.5, 2.5); floatText(cx, cy - 18, '+' + amt * 6 + ' Gold ✦', '#d8b4ff', 14); }
+      else if (kind === 5) { S.gold += amt * 6; S.goldEarned += amt * 6; S.crystals = (S.crystals || 0) + amt; if (Math.random() < 0.3) giveMat(p, 'e', 1); SFX.play('zap', cx, cy); burst(cx, cy, '#c890ff', 10, 160, 0.5, 2.5); floatText(cx, cy - 18, '+' + amt * 6 + ' Gold ✦', '#d8b4ff', 14); }
       else { S.gold += amt * 2; S.goldEarned += amt * 2; SFX.play('goldore', cx, cy); burst(cx, cy, '#f2c94c', 8, 150, 0.45, 2.5); floatText(cx, cy - 18, '+' + amt * 2 + ' Gold', '#ffd36b', 13); }
       return;
     }
@@ -2862,7 +2943,7 @@ function worldState() {
     v: SAVE_VER, map: MAP, seed: S.seed, tgt: S.resTarget.slice(),
     g: { t: S.t, phase: S.phase, phaseT: S.phaseT, night: S.night, survived: S.survived, nightT: S.nightT, started: S.started, kills: S.kills,
       weather: S.weather || 0, stormSurvived: S.stormSurvived || 0, bossKills: S.bossKills || 0, chestsOpened: S.chestsOpened || 0, bloodMoon: !!S.bloodMoon,
-      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {}, runId: S.runId || '' },
+      bloodSurvived: S.bloodSurvived || 0, bomberKills: S.bomberKills || 0, animalKills: S.animalKills || 0, lordAt: S.zombies.some(z => z.lord && !z.dead) ? 0 : S.lordAt || 0, dunSw: S.dunSw || [], nextId: S.nextId, nextZid: S.nextZid, nextChest: S.nextChest, eggUsed: S.eggUsed || {}, runId: S.runId || '' },
     po: S.portal ? [S.portal.x, S.portal.y, S.portal2.x, S.portal2.y] : null,
     teams: [...S.teams.values()].map(t => ({ id: t.id, name: t.name, wood: Math.floor(t.wood), stone: Math.floor(t.stone), gold: Math.floor(t.gold), iron: Math.floor(t.iron || 0), goldEarned: Math.floor(t.goldEarned || 0) })),
     bld: S.buildings.filter(b => !b.dead).map(b => [b.id, b.type, b.tx, b.ty, b.lvl, Math.round(b.hp), b.spent.w | 0, b.spent.s | 0, b.spent.g | 0, b.team, b.plated ? 1 : 0]),
@@ -2906,7 +2987,7 @@ async function decodeSave(str) {
 function dunRoomsOf(k) {
   const rooms = [];
   for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) { const r = dunRoom(k, i, j); rooms.push({ x: (r.x + r.w / 2) * TS, y: (r.y + r.h / 2) * TS, i, j }); }
-  return { rooms, loot: rooms.filter(r => r.j === 0)[randi(0, 2)] };
+  return { rooms, loot: rooms.find(r => r.i === 1 && r.j === 0) };
 }
 // Welt aus einem entpackten Spielstand aufbauen (synchron)
 function applySave(w) {
@@ -2919,7 +3000,7 @@ function applySave(w) {
   S.dunRooms = []; for (let k = 0; k < DUN.n; k++) S.dunRooms[k] = dunRoomsOf(k);
   const g = w.g || {};
   for (const k of ['t', 'phase', 'phaseT', 'night', 'survived', 'nightT', 'started', 'kills', 'weather', 'stormSurvived', 'bossKills', 'chestsOpened', 'bloodMoon',
-    'bloodSurvived', 'bomberKills', 'animalKills', 'nextId', 'nextZid', 'nextChest', 'eggUsed', 'runId']) if (g[k] !== undefined) S[k] = g[k];
+    'bloodSurvived', 'bomberKills', 'animalKills', 'nextId', 'nextZid', 'nextChest', 'eggUsed', 'runId', 'lordAt', 'dunSw']) if (g[k] !== undefined) S[k] = g[k];
   if (w.po) { S.portal = { x: w.po[0], y: w.po[1] }; S.portal2 = { x: w.po[2], y: w.po[3] }; }
   // Basen abwesender Mitspieler heißen „s:<name>“, bis sie zurückkommen
   const away = new Map();
@@ -3609,7 +3690,7 @@ function netHostTick(dt) {
     t: 'S',
     g: [r2(S.t), S.phase === 'night' ? 1 : 0, r2(S.phaseT), S.night, S.survived, r2(S.nightT), S.kills, r2(S.wood), r2(S.stone), r2(S.gold),
         S.started ? 1 : 0, r2(S.ending), S.spawnQueue.length, S.hq ? S.hq.id : 0, Math.floor(S.goldEarned),
-        S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0), S.pvp ? 1 : 0],
+        S.bossKills || 0, S.chestsOpened || 0, S.bloodMoon ? 1 : 0, S.bloodSurvived || 0, S.bomberKills || 0, S.animalKills || 0, S.weather || 0, S.stormSurvived || 0, r2(S.iron || 0), S.pvp ? 1 : 0, (S.dunSw || []).map(a => a.map(v => v ? 1 : 0).join('')).join(','), S.lordAt || 0],
     p: S.players.map(p => [p.id, p.x | 0, p.y | 0, r2(p.face), TOOLIDS.indexOf(p.tool), Math.ceil(p.hp), p.maxHp, r2(p.dead), r2(p.swing), p.flash > 0 ? 1 : 0, p.tp, p.name || '', p.lvl, Math.floor(p.xp), p.sp, SKILLS.map(s => p.sk[s.id]), p.afk ? 1 : 0, TOOL_ORDER.map(k => p.tl[k]), p.clan || '', ABIL.findIndex(a => a.id === p.ab), r2(Math.max(0, p.abCd || 0)), r2(Math.max(0, p.rageT || 0)), p.danceT > 0 ? 1 : 0, p.z | 0, p.skin || '', [p.eq.h, p.eq.v, p.eq.g, p.eq.b, p.mat.c, p.mat.e, p.mat.h, p.cons.med, p.cons.gren, p.cons.molo], [p.kills | 0, p.pvpKills | 0]]),
     ch: S.chests.filter(c => !c.open).map(c => [c.id, c.x | 0, c.y | 0, c.dun !== undefined ? 1 : 0]),
     po: S.portal ? [S.portal.x | 0, S.portal.y | 0, S.portal2.x | 0, S.portal2.y | 0] : 0,
@@ -3754,6 +3835,7 @@ function clientSnapshot(m) {
   S.phase = g[1] ? 'night' : 'day'; S.phaseT = g[2]; S.night = g[3]; S.survived = g[4]; S.nightT = g[5]; S.kills = g[6];
   S.started = !!g[10]; S.ending = g[11]; S.qLen = g[12];
   S.bossKills = g[15] || 0; S.chestsOpened = g[16] || 0; S.bloodMoon = !!g[17]; S.bloodSurvived = g[18] || 0; S.bomberKills = g[19] || 0; S.animalKills = g[20] || 0; S.weather = g[21] || 0; S.stormSurvived = g[22] || 0; S.pvp = !!g[24];
+  if (typeof g[25] === 'string') S.dunSw = g[25].split(',').map(t => t.split('').map(c => c === '1'));
   if (S.survived > (S.lastRec | 0)) { S.lastRec = S.survived; recordRun(); }
   if (m.tm) for (const a of m.tm) { const t = ensureTeam(a[0], a[6]); t.wood = a[1]; t.stone = a[2]; t.gold = a[3]; t.iron = a[4]; t.goldEarned = a[5]; t.name = a[6]; }
   const ids = new Set();
@@ -4821,7 +4903,7 @@ function drawTouchUI() {
     ['⤒', 'Springen', () => jump()],
     ['🛠', 'Bauen', () => toggleCraft()],
     ['☰', 'Mehr', () => { touch.more = !touch.more; }],
-    ...(nearHatch(S.player) ? [['🔦', 'Aktion', () => actInteract()]] : []),
+    ...(nearHatch(S.player) || nearSwitch(S.player) ? [[nearSwitch(S.player) ? '⚡' : '🔦', 'Aktion', () => actInteract()]] : []),
     ...CONS.filter(c => S.player.cons && S.player.cons[c.id] > 0).map(c => [c.icon, c.name, () => actUse(c.id)]),
   ];
   if (S.place && S.hq) btns.push(['✖', 'Bauen aus', () => { S.place = null; }]);
@@ -5299,10 +5381,17 @@ function drawHUD() {
     ctx.fillStyle = c; circle(cx, cy, 1.5); ctx.fill();
     if (!isTouch && !mouseLocked()) text('Linksklick = Maus fangen · oder rechte Maustaste halten und bewegen = umsehen', cx, cy + 34, 13, '#ffe27a', 'center', '600');
   }
+  // Tresor-Fortschritt im Bunker
+  if (mode === 'play' && S.biome[tileAt(p.x, p.y)] === 7 && S.dunSw) {
+    const k = clamp(Math.floor((p.x / TS - DUN.x0) / DUN.w), 0, DUN.n - 1), n = (S.dunSw[k] || []).filter(Boolean).length;
+    const t = n >= 3 ? '🔓 Tresor offen' : '🔒 Tresor: ' + n + ' / 3 Schalter';
+    ctx.font = 'bold 13px ' + FONT; const tw = ctx.measureText(t).width + 24;
+    panel(VW / 2 - tw / 2, 62, tw, 26, 0.8); text(t, VW / 2, 75, 13, n >= 3 ? '#8fe08f' : '#ffcf6a', 'center', '700');
+  }
   // Hinweis für Interaktion (Bunker)
   if (mode === 'play' && p.dead <= 0) {
-    const h = nearHatch(p);
-    const msg = h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
+    const h = nearHatch(p), sw = !h && nearSwitch(p);
+    const msg = sw ? (sw.on ? '⚡ Schalter ist umgelegt' : '⚡ ' + (isTouch ? 'Schalter – Knopf rechts' : 'F = Sicherungsschalter umlegen')) : h ? (h.out ? '🔦 ' + DUN_NAME[h.k] + (isTouch ? ' – Knopf rechts' : ' – F = Betreten') : '⬆ ' + (isTouch ? 'Ausgang – Knopf rechts' : 'F = Zurück an die Oberfläche')) : '';
     if (msg) { ctx.font = 'bold 15px ' + FONT; const w = ctx.measureText(msg).width + 30; panel(VW / 2 - w / 2, VH * 0.62, w, 34, 0.85); text(msg, VW / 2, VH * 0.62 + 17, 15, '#ffe27a', 'center'); }
   }
   // Ressourcen
@@ -6303,7 +6392,7 @@ if (!HEADLESS) {
     if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
     if (e.code === 'KeyI') { toggleCraft(); return; }
-    if (e.code === 'KeyF') { if (nearHatch(S.player)) actInteract(); else selectBuild('trap'); return; }
+    if (e.code === 'KeyF') { if (nearHatch(S.player) || nearSwitch(S.player)) actInteract(); else selectBuild('trap'); return; }
     if (e.code === 'KeyJ') { selectBuild('frost'); return; }
     if (e.code === 'Space') { jump(); return; }
     if (e.code === 'KeyO' || e.code === 'F5') { e.preventDefault(); toggleView(); return; }
@@ -6481,7 +6570,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { lotAt, dunSwitches, vaultDoors, nearSwitch, useSwitch, riftPos, get dunSw() { return S.dunSw; }, chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,

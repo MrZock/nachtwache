@@ -20,6 +20,9 @@
   const frus = new T.Frustum(), projM = new T.Matrix4(), sph = new T.Sphere(), vC = new T.Vector3();
   const inView = (x, y, z, r) => frus.intersectsSphere(sph.set(vC.set(x, y, z), r));
   const FH = 1.9;                   // Stockwerkhöhe der Stadtruinen
+  // Fassaden: Backstein, Putz, Beton, Blaugrau, Glas-Hochhaus
+  const FACADE = [[0.62, 0.36, 0.28], [0.74, 0.68, 0.56], [0.58, 0.58, 0.56], [0.44, 0.5, 0.58], [0.4, 0.5, 0.62]];
+  const NEON = ['#ff3aa8', '#3ae8ff', '#7dff5a', '#ffcf3a'];
   const hash = n => { const s = Math.sin(n * 12.9898 + 78.233) * 43758.5453; return s - Math.floor(s); };
 
   const R3 = window.NW3D = {
@@ -94,7 +97,7 @@
 
   // ---------------------------------------------------------------- Setup
   let fpView = null, fpTools = null, fpMetal = null, fpHand = null, lastFp = null;
-  let ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
+  let roofSlab, roofTank, roofAC, antenna, signBox, trafficLight, blastDoor, swConsole, floatRock, riftObj = null, ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
   let projArrow, projBall, parts, glows, rain;
@@ -205,6 +208,26 @@
       ruinTop = inst(k.build().lit, matInst, 9000, true); }
     bunkerWall = inst(new Kit().lit(BX(1, 2.2, 1), '#ffffff', 0, 1.1, 0).lit(BX(1.02, 0.18, 1.02), '#d8a82a', 0, 0.09, 0).lit(BX(1.02, 0.06, 1.02), '#1a1a1a', 0, 0.2, 0)
       .lit(BX(1.04, 0.08, 1.04), '#6a6e76', 0, 2.2, 0).build().lit, matInst, 6000, true);
+    // Stadt: Flachdach mit Brüstung, Wassertank, Klimakasten, Antenne, Leuchtreklame, Ampel
+    roofSlab = inst(new Kit().lit(BX(1, 0.2, 1), '#ffffff', 0, 0.1, 0).build().lit, matInst, 400, true);
+    roofTank = inst(new Kit().lit(CY(0.55, 0.55, 1.1, 10), '#8a6a4a', 0, 1.25, 0).lit(CY(0.58, 0.58, 0.08, 10), '#5a4a3a', 0, 1.82, 0).lit(CO(0.6, 0.3, 10), '#5a4a3a', 0, 2.0, 0)
+      .lit(BX(0.08, 0.72, 0.08), '#3a3a3e', 0.38, 0.36, 0.38).lit(BX(0.08, 0.72, 0.08), '#3a3a3e', -0.38, 0.36, 0.38).lit(BX(0.08, 0.72, 0.08), '#3a3a3e', 0.38, 0.36, -0.38).lit(BX(0.08, 0.72, 0.08), '#3a3a3e', -0.38, 0.36, -0.38)
+      .lit(BX(0.84, 0.06, 0.84), '#3a3a3e', 0, 0.7, 0).build().lit, matInst, 200, true);
+    roofAC = inst(new Kit().lit(BX(0.9, 0.55, 0.6), '#9a9c9e', 0, 0.28, 0).lit(CY(0.2, 0.2, 0.04, 10), '#3a3a3e', 0, 0.57, 0).lit(BX(0.92, 0.04, 0.62), '#6a6c6e', 0, 0.02, 0).build().lit, matInst, 300, true);
+    antenna = inst(new Kit().lit(CY(0.05, 0.08, 4.2, 6), '#5a5e66', 0, 2.1, 0).lit(BX(1.2, 0.05, 0.05), '#5a5e66', 0, 3.0, 0).lit(BX(0.8, 0.05, 0.05), '#5a5e66', 0, 3.6, 0)
+      .lit(BX(0.5, 0.5, 0.5), '#3a3e46', 0, 0.25, 0).lit(SP(0.09, 6, 4), '#c82a2a', 0, 4.25, 0).build().lit, matInst, 20, true);
+    signBox = inst(new Kit().lit(BX(0.08, 0.55, 1.5), '#1a1a1e', 0, 0, 0).lit(BX(0.1, 0.06, 0.06), '#3a3a3e', -0.12, 0.2, 0.5).lit(BX(0.1, 0.06, 0.06), '#3a3a3e', -0.12, 0.2, -0.5).build().lit, matInst, 100, false);
+    trafficLight = inst(new Kit().lit(CY(0.05, 0.06, 2.6, 6), '#3a3e46', 0, 1.3, 0).lit(BX(0.9, 0.06, 0.06), '#3a3e46', 0.42, 2.5, 0).lit(BX(0.2, 0.5, 0.2), '#22252a', 0.82, 2.25, 0)
+      .lit(BX(0.24, 0.06, 0.24), '#22252a', 0.82, 2.52, 0).build().lit, matInst, 120, true);
+    // Bunker: Panzertür des Tresors (Warnstreifen, Handrad) und Sicherungsschalter
+    { const k = new Kit().lit(BX(1.02, 2.3, 0.5), '#5a6068', 0, 1.15, 0).lit(BX(1.04, 0.14, 0.52), '#d8a82a', 0, 0.35, 0).lit(BX(1.04, 0.14, 0.52), '#1a1a1a', 0, 0.55, 0).lit(BX(1.04, 0.14, 0.52), '#d8a82a', 0, 0.75, 0)
+        .lit(TO(0.26, 0.04, 5, 14), '#c8a040', 0, 1.45, 0.27).lit(TO(0.26, 0.04, 5, 14), '#c8a040', 0, 1.45, -0.27).lit(BX(0.5, 0.06, 0.6), '#8a8e96', 0, 1.45, 0).lit(BX(0.06, 0.5, 0.6), '#8a8e96', 0, 1.45, 0)
+        .lit(BX(1.04, 0.1, 0.54), '#3a3e46', 0, 2.3, 0);
+      blastDoor = inst(k.build().lit, matInst, 40, true); }
+    swConsole = inst(new Kit().lit(BX(0.7, 1.0, 0.35), '#4a4e56', 0, 0.5, 0).lit(BX(0.72, 0.08, 0.4), '#d8a82a', 0, 1.02, 0).lit(BX(0.5, 0.3, 0.04), '#1a2a22', 0, 0.72, 0.18)
+      .lit(BX(0.08, 0.35, 0.08), '#8a8e96', 0.22, 1.2, 0.05).lit(SP(0.06, 6, 4), '#c82a2a', 0.22, 1.38, 0.05).build().lit, matInst, 12, true);
+    // Schattenreich: schwebende Felsbrocken
+    floatRock = inst(new Kit().lit(IC(0.5, 0), '#ffffff', 0, 0, 0, 0, 0, 0, 1, 0.7, 1).lit(IC(0.25, 0), '#d8c8ff', 0.3, 0.15, 0.1).lit(CO(0.25, 0.6, 5), '#ffffff', 0, -0.45, 0, Math.PI).build().lit, matInst, 300, true);
     // Rohre laufen durchgehend an den Wänden entlang (ein Stück pro Wandfeld, immer gleich ausgerichtet)
     bPipe = inst(new Kit().lit(CY(0.06, 0.06, 1.0, 6), '#7a7e86', 0, 2.0, 0, 0, 0, Math.PI / 2).lit(CY(0.04, 0.04, 1.0, 6), '#8a4a2a', 0, 1.82, 0, 0, 0, Math.PI / 2)
       .lit(BX(0.04, 0.3, 0.06), '#4a4e56', 0, 1.9, -0.04).build().lit, matInst, 6000, false);
@@ -430,6 +453,12 @@
     // 1) grobe Farbflecken pro Feld, weich hochskaliert
     const small = document.createElement('canvas'); small.width = small.height = MAP;
     const sg = small.getContext('2d'), img = sg.createImageData(MAP, MAP);
+    // Warnstreifen: vor den Tresortüren und unter den Sicherungsschaltern
+    const hazard = new Set();
+    if (G.vaultDoors) for (let k = 0; k < G.DUN.n; k++) {
+      for (const i of G.vaultDoors(k)) for (const d of [1, -1, MAP, -MAP]) if (S.res[i + d] !== 8) { hazard.add(i + d); if (S.res[i + 2 * d] !== 8) hazard.add(i + 2 * d); }
+      for (const sw of G.dunSwitches(k)) { hazard.add((sw.ty + 1) * MAP + sw.tx); hazard.add(sw.ty * MAP + sw.tx); }
+    }
     for (let y = 0; y < MAP; y++) for (let x = 0; x < MAP; x++) {
       const v = S.variant[y * MAP + x], n = Math.sin(x * 0.11) * Math.cos(y * 0.13) + Math.sin((x + y) * 0.05) * 0.6;
       const bi = S.biome ? S.biome[y * MAP + x] : 0;
@@ -439,13 +468,18 @@
       if (bi === 2) { r = 196 + n * 6 + (v % 9); g = 166 + n * 5 + (v % 7); b = 108 + n * 3; }
       else if (bi === 3) { r = 222 + n * 3 + (v % 7); g = 230 + n * 3 + (v % 5); b = 238 + (v % 5); if (v < 20) { r = 160; g = 176; b = 190; } }
       else if (bi === 4) { r = 58 + n * 5 + (v % 7); g = 72 + n * 6; b = 44 + n * 3; if (v % 9 === 0) { r = 38; g = 60; b = 66; } }
-      else if (bi === 5) { r = 30 + (v % 9); g = 18 + (v % 5); b = 44 + (v % 11); if (v % 7 === 0) { r = 120; g = 50; b = 200; } }
+      else if (bi === 5) {
+        r = 24 + (v % 7); g = 14 + (v % 5); b = 36 + (v % 9);
+        const vein = Math.abs(Math.sin(x * 0.31 + Math.cos(y * 0.17) * 2.2)) < 0.07 || Math.abs(Math.sin(y * 0.27 + Math.sin(x * 0.13) * 2.6)) < 0.06;
+        if (vein) { r = 150; g = 70; b = 230; } else if (v % 11 === 0) { r = 80; g = 36; b = 120; }
+      }
       if (bi === 6) {
         if (G.isStreet(x, y)) { const m = (x + 1500) % 15 === 1 || (y + 1500) % 15 === 1; r = 58 + (v % 6); g = 58 + (v % 6); b = 62 + (v % 5); if (m && (x + y) % 3 === 0 && !((x + 1500) % 15 < 3 && (y + 1500) % 15 < 3)) { r = 170; g = 150; b = 70; } }
         else { r = 112 + (v % 11); g = 108 + (v % 9); b = 100 + (v % 7); if (v < 30) { r = 82; g = 92; b = 62; } }
       } else if (bi === 7) {
         const bk = Math.floor((x - G.DUN.x0) / G.DUN.w), tone = [[50, 50, 54], [58, 50, 42], [52, 60, 64]][G.clamp(bk, 0, 2)];
         r = tone[0] + (v % 6); g = tone[1] + (v % 5); b = tone[2] + (v % 6); if ((x + y) % 2 === 0) { r -= 5; g -= 5; b -= 5; }
+        if (hazard.has(y * MAP + x)) { const st = (x + y) % 2 === 0; r = st ? 200 : 30; g = st ? 160 : 28; b = st ? 30 : 24; }
       }
       if (S.res[y * MAP + x] === 6) { r = 92 + (v % 9); g = 86 + (v % 7); b = 80 + (v % 5); }
       const i = (y * MAP + x) * 4; img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
@@ -1234,6 +1268,7 @@
       for (const o of chestObjs.values()) scene.remove(o); chestObjs.clear();
       for (const o of animalObjs.values()) scene.remove(o); animalObjs.clear();
       if (hatchObjs) { for (const hb of hatchObjs) { scene.remove(hb.o1); scene.remove(hb.o2); } hatchObjs = null; }
+      if (riftObj) { scene.remove(riftObj); riftObj = null; }
     }
 
     // Kamera: schräg von oben, folgt dem Spieler
@@ -1366,10 +1401,12 @@
     }
 
     // Natur in Sichtweite
+    let vaultSet = null;
+    if (bunkerV && G.vaultDoors) { const k = G.clamp(Math.floor((cx - G.DUN.x0) / G.DUN.w), 0, G.DUN.n - 1); vaultSet = new Set(G.vaultDoors(k)); }
     // nur so weit, wie man durch den Nebel sieht
     const R = Math.min(30, Math.ceil(scene.fog.far) + 5), R2 = R * R, x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(MAP - 1, Math.ceil(cx + R));
     const z0 = Math.max(0, Math.floor(cz - R - 4)), z1 = Math.min(MAP - 1, Math.ceil(cz + R + 4));
-    let nbp = 0, nbl = 0, nbc = 0, nbm = 0, nbt = 0, nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
+    let nbd = 0, nfr = 0, nbp = 0, nbl = 0, nbc = 0, nbm = 0, nbt = 0, nbw = 0, nrf = 0, nrt = 0, npk = 0, nps = 0, nt = 0, np = 0, no = 0, nr = 0, ng = 0, ngr = 0, nfl = 0, nbu = 0, nca = 0, nsc = 0, nvo = 0, ncr = 0, ncar = 0, nbar2 = 0, nrub = 0, nlamp = 0;
     const BI = S.biome || null;
     const sway = (wet === 2 ? 0.16 : wet ? 0.09 : 0.05);
     for (let ty = z0; ty <= z1; ty++) for (let tx = x0; tx <= x1; tx++) {
@@ -1457,6 +1494,11 @@
       if (k === 8) {
         // Mauer: in der Stadt je Grundstück 1–4 Stockwerke, im Bunker niedrig und dunkel
         if (bi === 7) {
+          if (vaultSet && vaultSet.has(i)) {   // Tresortür: Warnstreifen, Handrad – quer zum Gang ausgerichtet
+            const ns = S.res[i - MAP] === 8 && S.res[i + MAP] === 8;
+            if (nbd < 40) { setInst(blastDoor, nbd, px, 0, pz, 1, 1, 1, ns ? Math.PI / 2 : 0); blastDoor.setColorAt(nbd, WHITE); nbd++; }
+            continue;
+          }
           if (nbw < 6000) { setInst(bunkerWall, nbw, px, 0, pz, 1, 1, 1, (v % 4) * Math.PI / 2); bunkerWall.setColorAt(nbw, col.setRGB(0.12 + (v % 5) * 0.006, 0.125, 0.14)); nbw++; }
           for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
             const j = i + dz * MAP + dx;
@@ -1470,15 +1512,20 @@
           }
           continue;
         }
-        const lot = Math.floor(tx / 15) * 977 + Math.floor(ty / 15) * 131 + (S.seed | 0);
-        let fl = 2 + Math.floor(hash(lot) * 4);
-        if (v % 5 === 0) fl--;                       // abgebrochene Kanten
-        if (v % 11 === 0) fl = 1;
-        const c0 = 0.58 + hash(lot + 3) * 0.22, tint = hash(lot + 7);
-        col.setRGB(c0 * (tint > 0.66 ? 1.05 : 1), c0 * 0.97, c0 * (tint < 0.33 ? 0.82 : 0.92));
+        const lot = G.lotAt(Math.floor(tx / 15), Math.floor(ty / 15));
+        let fl = lot && lot.floors ? lot.floors : 3;
+        const roofed = lot && lot.roof;
+        if (!roofed) { if (v % 5 === 0) fl--; if (v % 11 === 0) fl = 1; }   // abgebrochene Kanten nur bei Ruinen ohne Dach
+        const st = lot && lot.style !== undefined ? FACADE[lot.style] : FACADE[0], sh = 0.92 + (v % 7) * 0.02;
+        col.setRGB(st[0] * sh, st[1] * sh, st[2] * sh);
         for (let f = 0; f < fl && nrf < 9000; f++) { setInst(ruinFloor, nrf, px, f * FH, pz, 1, 1, 1, 0); ruinFloor.setColorAt(nrf, col); nrf++; }
-        if (nrt < 9000) { setInst(ruinTop, nrt, px, fl * FH, pz, 1, 0.6 + (v % 4) * 0.25, 1, (v % 4) * Math.PI / 2); ruinTop.setColorAt(nrt, col); nrt++; }
+        if (!roofed && nrt < 9000) { setInst(ruinTop, nrt, px, fl * FH, pz, 1, 0.6 + (v % 4) * 0.25, 1, (v % 4) * Math.PI / 2); ruinTop.setColorAt(nrt, col); nrt++; }
         continue;
+      }
+      if (k === 4 && bi === 5 && v % 6 === 0 && nfr < 300) {
+        const fy = 1.6 + (v % 5) * 0.35 + Math.sin(at * 0.8 + v) * 0.25, s0 = 0.5 + (v % 4) * 0.18;
+        setInst(floatRock, nfr, px + Math.sin(v) * 0.3, fy, pz, s0, s0, s0, at * 0.15 + v, Math.sin(at * 0.3 + v) * 0.2, 0); floatRock.setColorAt(nfr, col.setRGB(0.2, 0.14, 0.3)); nfr++;
+        if (v % 4 === 0) glowAt(px, fy - 0.5, pz, 0.6, '#b06aff', 0.35);
       }
       if (k === 4) { if (nvo < MAXRES) { setInst(voids, nvo, px, 0, pz, 1, 0.8 + (v % 5) * 0.12, 1, (v % 4) * Math.PI / 2); voids.setColorAt(nvo, col.setRGB(0.09, 0.06, 0.14)); nvo++; if (v % 11 === 0) glowAt(px, 1.4 + (v % 5) * 0.12, pz, 0.6, '#9a5aff', 0.4); } continue; }
       if (k === 5) { if (ncr < MAXRES) { setInst(crystals, ncr, px + ox, 0, pz + oz, sc * 1.1, sc * (1 + (v % 3) * 0.15), sc * 1.1, v); ncr++; glowAt(px, 0.5, pz, 1.4 * sc, '#b47aff', 0.45 + 0.2 * Math.sin(at * 3 + v)); } continue; }
@@ -1511,6 +1558,7 @@
         else if (bi === 3) col.setRGB(0.72, 0.84, 0.92);
         else if (bi === 5) col.setRGB(0.16, 0.12, 0.22);
         else if (bi === 4) col.setRGB(0.36, 0.36, 0.3);
+        else if (bi === 7) col.setRGB(0.26, 0.26, 0.28);
         else col.setRGB(0.5 + (v % 3) * 0.03, 0.5 + (v % 3) * 0.03, 0.54);
         rocks.setColorAt(nr, col);
         nr++;
@@ -1524,10 +1572,79 @@
     trunks.count = nt; pine1.count = pine2.count = pine3.count = np; oaks.count = no; rocks.count = nr; ores.count = ng;
     peaks.count = npk; peakSnow.count = nps; done(peaks, peakSnow);
     ruinFloor.count = nrf; ruinTop.count = nrt; bunkerWall.count = nbw; done(ruinFloor, ruinTop, bunkerWall);
+    blastDoor.count = nbd; floatRock.count = nfr; done(blastDoor, floatRock);
     bPipe.count = nbp; bLamp.count = bLampG.count = nbl; bCrate.count = nbc; bMachine.count = nbm; bTank.count = bTankG.count = nbt; done(bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG);
     grass.count = ngr; flowers.count = nfl; bushes.count = nbu; cacti.count = nca; snowcap.count = nsc; voids.count = nvo; crystals.count = ncr;
     cars.count = ncar; barrels.count = nbar2; rubble.count = nrub; lamps.count = nlamp;
     done(trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, snowcap, voids, crystals, cars, barrels, rubble, lamps);
+
+    // Stadt: Dächer, Dachaufbauten, Leuchtreklamen und Ampeln je Grundstück
+    let nrs = 0, ntk = 0, nac = 0, nan = 0, nsg = 0, ntl = 0;
+    if (S.biome && G.lotAt) {
+      for (let gy = Math.floor((cz - R) / 15); gy <= Math.floor((cz + R) / 15); gy++) for (let gx = Math.floor((cx - R) / 15); gx <= Math.floor((cx + R) / 15); gx++) {
+        const lot = G.lotAt(gx, gy);
+        if (!lot) continue;
+        // Ampel an der Kreuzung vor dem Grundstück
+        const ax = gx * 15 + 2, az = gy * 15 + 2, ai = az * MAP + ax;
+        if (ntl < 120 && ax > 0 && az > 0 && BI[ai] === 6 && !S.res[ai] && (ax + 0.5 - cx) ** 2 + (az + 0.5 - cz) ** 2 < R2 && inView(ax + 0.5, 1.4, az + 0.5, 2)) {
+          setInst(trafficLight, ntl, ax + 0.6, 0, az + 0.6, 1, 1, 1, Math.PI * 0.75); trafficLight.setColorAt(ntl, WHITE); ntl++;
+          const ph = Math.floor((at + gx * 3 + gy * 7) / 4) % 3, lc = ['#ff3a2a', '#ffcf3a', '#5aff7a'][ph];
+          glowAt(ax + 0.6 - 0.58, 2.25 + (1 - ph) * 0.14, az + 0.6 + 0.58, 0.45, lc, 0.5 + 0.5 * night);
+        }
+        if (lot.kind === 'park') continue;
+        const lcx = lot.x0 + (lot.w + 1) / 2, lcz = lot.y0 + (lot.h + 1) / 2, top = lot.floors * FH;
+        if ((lcx - cx) ** 2 + (lcz - cz) ** 2 > R2 || !inView(lcx, top / 2, lcz, Math.max(lot.w, lot.h) * 0.75 + top / 2)) continue;
+        const st = FACADE[lot.style];
+        if (lot.roof && nrs < 400) {
+          setInst(roofSlab, nrs, lcx, top, lcz, lot.w + 1.02, 1, lot.h + 1.02, 0); roofSlab.setColorAt(nrs, col.setRGB(st[0] * 0.55, st[1] * 0.55, st[2] * 0.55)); nrs++;
+          if (lot.tank && ntk < 200) { setInst(roofTank, ntk, lot.x0 + 2, top + 0.2, lot.y0 + 2, 1, 1, 1, 0); roofTank.setColorAt(ntk, WHITE); ntk++; }
+          if (nac < 300) { setInst(roofAC, nac, lot.x0 + lot.w - 1.2, top + 0.2, lot.y0 + lot.h - 1.5, 1, 1, 1, lot.door * 0.8); roofAC.setColorAt(nac, WHITE); nac++; }
+          if (lot.kind === 'tower' && nan < 20) {
+            setInst(antenna, nan, lcx, top + 0.2, lcz, 1, 1, 1, 0); antenna.setColorAt(nan, WHITE); nan++;
+            glowAt(lcx, top + 4.45, lcz, 1.2, '#ff2a2a', Math.sin(at * 3) > 0 ? 0.9 : 0.15);
+          }
+        }
+        // Leuchtreklame neben der Tür (nachts hell, flackert manchmal)
+        if (lot.sign && nsg < 100) {
+          const d = lot.door, mx = lot.x0 + lot.w / 2 + 0.5, my = lot.y0 + lot.h / 2 + 0.5;
+          const [sx, sz, nx, nz] = d === 0 ? [mx + 2.2, lot.y0, 0, -1] : d === 1 ? [mx + 2.2, lot.y0 + lot.h + 1, 0, 1] : d === 2 ? [lot.x0, my + 2.2, -1, 0] : [lot.x0 + lot.w + 1, my + 2.2, 1, 0];
+          setInst(signBox, nsg, sx + nx * 0.06, 2.7, sz + nz * 0.06, 1, 1, 1, Math.atan2(-nz, nx)); signBox.setColorAt(nsg, WHITE); nsg++;
+          const fl = Math.sin(at * 13 + lot.gx * 5 + lot.gy) > -0.85 ? 1 : 0.15;
+          glowAt(sx + nx * 0.14, 2.7, sz + nz * 0.14, 1.6, NEON[lot.signCol], (0.2 + 0.8 * night) * fl);
+        }
+      }
+    }
+    roofSlab.count = nrs; roofTank.count = ntk; roofAC.count = nac; antenna.count = nan; signBox.count = nsg; trafficLight.count = ntl;
+    done(roofSlab, roofTank, roofAC, antenna, signBox, trafficLight);
+    // Bunker: Sicherungsschalter (rot = aus, grün = umgelegt)
+    let nsw = 0;
+    if (bunkerV && G.dunSwitches) {
+      const k = G.clamp(Math.floor((cx - G.DUN.x0) / G.DUN.w), 0, G.DUN.n - 1), on = (S.dunSw && S.dunSw[k]) || [];
+      for (const sw of G.dunSwitches(k)) {
+        setInst(swConsole, nsw, sw.tx + 0.5, 0, sw.ty + 0.3, 1, 1, 1, 0, on[sw.n] ? -0.6 : 0, 0); swConsole.setColorAt(nsw, on[sw.n] ? col.set('#9affb0') : WHITE); nsw++;
+        glowAt(sw.tx + 0.5, 0.75, sw.ty + 0.52, 0.8, on[sw.n] ? '#5aff7a' : '#ff3a2a', 0.6 + 0.3 * Math.sin(at * 4 + sw.n));
+      }
+    }
+    swConsole.count = nsw; done(swConsole);
+    // Schattenriss mit schwebendem Ring (einmal gebaut)
+    if (G.riftPos) {
+      const r = G.riftPos(), rx = r.x / TS, rz = r.y / TS, d2 = (rx - cx) ** 2 + (rz - cz) ** 2;
+      if (!riftObj) {
+        riftObj = new T.Group();
+        const k = new Kit().lit(TO(2.2, 0.28, 6, 24), '#3a2a5a', 0, 0, 0).lit(TO(2.2, 0.1, 4, 24), '#b06aff', 0, 0, 0.18);
+        for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; k.lit(OC(0.35), '#c890ff', Math.cos(a) * 2.2, Math.sin(a) * 2.2, 0, 0, 0, a, 0.6, 1.6, 0.6); }
+        const ring = new T.Mesh(k.build().lit, matLit); ring.position.y = 3.2; riftObj.add(ring); riftObj.userData.ring = ring;
+        const base = new T.Mesh(new Kit().lit(CY(2.6, 3.0, 0.4, 12), '#2a1e3a', 0, 0.2, 0).lit(CY(2.0, 2.2, 0.15, 12), '#4a2a6a', 0, 0.45, 0).build().lit, matLit); riftObj.add(base);
+        for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + 0.4, sp = new T.Mesh(new Kit().lit(CO(0.35, 3.2, 5), '#5a3a8a', 0, 1.6, 0).lit(OC(0.3), '#c890ff', 0, 3.3, 0, 0, 0, 0, 1, 1.6, 1).build().lit, matLit); sp.position.set(Math.cos(a) * 3.6, 0, Math.sin(a) * 3.6); riftObj.add(sp); }
+        riftObj.position.set(rx, 0, rz); scene.add(riftObj);
+      }
+      riftObj.visible = d2 < (R + 6) ** 2;
+      if (riftObj.visible) {
+        riftObj.userData.ring.rotation.y = at * 0.4; riftObj.userData.ring.rotation.z = Math.sin(at * 0.5) * 0.15;
+        glowAt(rx, 3.2, rz, 4.2 + Math.sin(at * 2) * 0.3, '#9a4aff', 0.55);
+        glowAt(rx, 3.2, rz, 1.8, '#ffffff', 0.35 + 0.15 * Math.sin(at * 5));
+      }
+    }
 
     // Gebäude
     const seen = new Set();

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-14T08:59:59.956Z",
+  "updated": "2026-10-14T09:07:32.771Z",
   "games": [
     {
       "id": "blackout",
@@ -29,13 +29,13 @@
         },
         {
           "path": "game.js",
-          "size": 388867,
-          "sha256": "a92a429cefdab8f72a0f33957c41b0170a41302518b23b2eb6e6cd3525070d3d"
+          "size": 395038,
+          "sha256": "bbbd80a69f098fdde7ea8919760887d02da83b5874f5d47dd2c20753c667d6ff"
         },
         {
           "path": "render3d.js",
-          "size": 146929,
-          "sha256": "07f1a2d2b463f80d771bef6e57ce8a2c51e5dbee833515554a7809c639d3cfc7"
+          "size": 157504,
+          "sha256": "b8b6a516ce1b7e9d6b39cb04885a89ae27529547e8dda529584f5735797fb80e"
         },
         {
           "path": "three.min.js",
@@ -48,7 +48,7 @@
           "sha256": "7f63181fa2aec4e4581d5e29f9231faff8fab9906bec8c16e94daa4e18c1248b"
         }
       ],
-      "size": 1191094
+      "size": 1207840
     }
   ]
 }
