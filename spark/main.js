@@ -2,7 +2,9 @@
 // Lädt den Spiele-Katalog, installiert und aktualisiert Spiele (nur geänderte Dateien, mit Prüfsumme)
 // und startet sie in eigenen Fenstern. Installierte Spiele laufen auch ohne Internet.
 const { app, BrowserWindow, Menu, shell, ipcMain, net } = require('electron');
-const path = require('path'), fs = require('fs'), crypto = require('crypto'), { pathToFileURL } = require('url');
+const path = require('path'), fs = require('fs'), os = require('os'), crypto = require('crypto'), { spawn } = require('child_process'), { pathToFileURL } = require('url');
+const SPARK_REPO = 'MrZock/spark', SITE = 'https://mrzock.github.io/spark/';
+const verName = v => 'Alpha ' + v;   // gleiches Schema wie die Spiele: Alpha 1.X.Y
 
 const CATALOG_URL = process.env.SPARK_CATALOG || 'https://mrzock.github.io/nachtwache/spark/catalog/games.json';
 Menu.setApplicationMenu(null);
@@ -15,6 +17,10 @@ const gamesDir = () => process.env.SPARK_GAMES || path.join(dataDir(), 'Spiele')
 const stateFile = () => path.join(dataDir(), 'installiert.json');
 const cacheFile = () => path.join(dataDir(), 'katalog.json');
 const coverDir = () => path.join(dataDir(), 'Cover');
+const setFile = () => path.join(dataDir(), 'einstellungen.json');
+const SET_DEF = { autoUpdate: true, hideOnPlay: true, gameFullscreen: true, effects: true };
+let settings = null;
+const set = () => settings || (settings = Object.assign({}, SET_DEF, readJson(setFile(), {})));
 function readJson(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return d; } }
 function writeJson(f, o) { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f + '.neu', JSON.stringify(o, null, 1)); fs.renameSync(f + '.neu', f); }
 let state = null;
@@ -129,7 +135,7 @@ function play(id) {
   if (!fs.existsSync(entry)) return { ok: false, error: 'Spieldateien fehlen – bitte neu installieren' };
   const saveName = String(g.saveDir || g.name).replace(/[^\w \-]/g, '').slice(0, 40) || id;
   const w = new BrowserWindow({
-    width: 1280, height: 800, minWidth: 800, minHeight: 500, fullscreen: !process.env.SPARK_SELFTEST, show: !process.env.SPARK_SELFTEST,
+    width: 1280, height: 800, minWidth: 800, minHeight: 500, fullscreen: !process.env.SPARK_SELFTEST && set().gameFullscreen, show: !process.env.SPARK_SELFTEST,
     backgroundColor: '#000000', title: g.name, icon: path.join(__dirname, 'build', 'icon.png'), autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'game-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
       additionalArguments: ['--spark-save=' + saveName] },
@@ -151,7 +157,7 @@ function play(id) {
     if (launcher && !launcher.isDestroyed()) { launcher.show(); launcher.focus(); }
     changed();
   });
-  if (launcher && !process.env.SPARK_SELFTEST) launcher.hide();
+  if (launcher && !process.env.SPARK_SELFTEST && set().hideOnPlay) launcher.hide();
   changed();
   return { ok: true, window: w };
 }
@@ -169,10 +175,73 @@ ipcMain.on('game-save', (e, name, op, k, data) => {
   } catch (err) { e.returnValue = op === 'write' ? false : null; }
 });
 
+// ---------- Launcher-Updates: neueste Version aus den GitHub-Releases von MrZock/spark
+const vnum = v => String(v).replace(/^[^\d]*/, '').split('.').map(n => parseInt(n, 10) || 0);
+const newer = (a, b) => { const x = vnum(a), y = vnum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+const curVer = () => process.env.SPARK_TEST_VERSION || app.getVersion();   // Testmodus: ältere Version vortäuschen
+const portableExe = () => process.env.PORTABLE_EXECUTABLE_FILE || '';
+let upd = { checked: 0, latest: null, asset: null, error: '', busy: false, p: 0, notes: '' };
+async function checkUpdate() {
+  upd.error = '';
+  try {
+    const r = await timeout(net.fetch('https://api.github.com/repos/' + SPARK_REPO + '/releases?per_page=15', { cache: 'no-store', headers: { 'User-Agent': 'SPARK-Launcher', Accept: 'application/vnd.github+json' } }), 30000, 'GitHub');
+    if (!r.ok) throw new Error('GitHub antwortet nicht (' + r.status + ')');
+    const list = await r.json();
+    const rel = (Array.isArray(list) ? list : []).filter(x => !x.draft && !x.prerelease && /^v?\d/.test(x.tag_name)).sort((a, b) => newer(a.tag_name, b.tag_name) ? -1 : 1)[0];
+    upd.checked = Date.now();
+    if (!rel) { upd.latest = null; return publicUpd(); }
+    const want = portableExe() ? /portable.*\.exe$/i : /setup.*\.exe$/i;
+    upd.latest = rel.tag_name.replace(/^v/, ''); upd.notes = String(rel.body || '').slice(0, 600);
+    upd.asset = rel.assets.find(a => want.test(a.name)) || null;
+  } catch (e) { upd.error = e.message; }
+  return publicUpd();
+}
+function publicUpd() {
+  const cur = curVer(), avail = !!upd.latest && newer(upd.latest, cur);
+  return { current: verName(cur), latest: upd.latest ? verName(upd.latest) : '', available: avail && !!upd.asset, checked: upd.checked, error: upd.error, busy: upd.busy, p: upd.p, portable: !!portableExe(), notes: upd.notes };
+}
+// Herunterladen (mit Fortschritt), Größe prüfen, dann Installer still ausführen bzw. neue portable Version starten
+async function runUpdate() {
+  if (upd.busy) return { ok: false, error: 'Läuft schon' };
+  if (!upd.asset || !newer(upd.latest, curVer())) { await checkUpdate(); if (!upd.asset || !newer(upd.latest, curVer())) return { ok: false, error: 'Du hast schon die neueste Version' }; }
+  if (running.size || busy.size) return { ok: false, error: 'Bitte zuerst alle Spiele schließen und Downloads abwarten' };
+  upd.busy = true; upd.p = 0;
+  const a = upd.asset, dir = portableExe() ? path.dirname(portableExe()) : path.join(os.tmpdir(), 'SPARK-Update'), file = path.join(dir, a.name);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const r = await timeout(net.fetch(a.browser_download_url, { headers: { 'User-Agent': 'SPARK-Launcher' } }), 60000, 'Download');
+    if (!r.ok || !r.body) throw new Error('Download fehlgeschlagen (' + r.status + ')');
+    const out = fs.openSync(file + '.part', 'w'), rd = r.body.getReader();
+    let got = 0, last = 0;
+    for (;;) {
+      const { done, value } = await rd.read(); if (done) break;
+      fs.writeSync(out, Buffer.from(value)); got += value.length; upd.p = Math.min(1, got / (a.size || got));
+      if (Date.now() - last > 120) { last = Date.now(); send('uprogress', publicUpd()); }
+    }
+    fs.closeSync(out);
+    if (a.size && got !== a.size) throw new Error('Download unvollständig – bitte nochmal versuchen');
+    fs.rmSync(file, { force: true }); fs.renameSync(file + '.part', file);
+    upd.p = 1; send('uprogress', publicUpd());
+    // Installer: still installieren (/S) und danach SPARK neu starten; Portable: neue Datei direkt starten
+    if (process.env.SPARK_SELFTEST) { upd.busy = false; return { ok: true, file, size: got }; }   // Test: nicht installieren
+    spawn(file, portableExe() ? [] : ['/S', '--force-run'], { detached: true, stdio: 'ignore' }).unref();
+    setTimeout(() => app.quit(), 600);
+    return { ok: true };
+  } catch (e) {
+    try { fs.rmSync(file + '.part', { force: true }); } catch (e2) {}
+    upd.busy = false; send('uprogress', publicUpd());
+    return { ok: false, error: e.message };
+  }
+}
+
 // ---------- Verbindung zur Oberfläche
 function send(ch, data) { if (launcher && !launcher.isDestroyed()) launcher.webContents.send(ch, data); }
 function changed() { send('changed'); }
-ipcMain.handle('state', () => ({ games: catalog.games.map(view), offline, loading, version: app.getVersion(), gamesDir: gamesDir() }));
+ipcMain.handle('state', () => ({ games: catalog.games.map(view), offline, loading, version: verName(app.getVersion()), gamesDir: gamesDir(), settings: set(), update: publicUpd(), site: SITE }));
+ipcMain.handle('set', (e, k, v) => { if (k in SET_DEF && typeof v === 'boolean') { set()[k] = v; writeJson(setFile(), set()); } return set(); });
+ipcMain.handle('update-check', () => checkUpdate());
+ipcMain.handle('update-run', () => runUpdate());
+ipcMain.handle('open-web', (e, which) => shell.openExternal(which === 'github' ? 'https://github.com/' + SPARK_REPO + '/releases' : SITE));
 ipcMain.handle('refresh', async () => { await loadCatalog(); return true; });
 ipcMain.handle('install', (e, id) => install(String(id)));
 ipcMain.handle('uninstall', (e, id) => uninstall(String(id)));
@@ -209,6 +278,9 @@ async function selftest() {
     await new Promise(res => setTimeout(res, 2500));
     out.game = await p.window.webContents.executeJavaScript('JSON.stringify({ nw: !!window.NW, mode: window.NW && NW.mode, desktop: !!window.BLACKOUT_DESKTOP, save: !!window.BLACKOUT_SAVE && window.BLACKOUT_SAVE.dir, r3: !!window.NW3D })');
     out.ui = await launcher.webContents.executeJavaScript('document.querySelectorAll(".game").length + " Spiel(e) in der Liste"');
+    out.updateCheck = await checkUpdate();
+    if (process.env.SPARK_TEST_UPDATE) { for (const w of running.values()) w.close(); await new Promise(r => setTimeout(r, 1000)); out.updateRun = await runUpdate(); }
+    out.settingsUi = await launcher.webContents.executeJavaScript('(document.getElementById("gear") ? "Zahnrad da" : "kein Zahnrad")');
   } catch (e) { out.error = e.message; }
   console.log('SPARK-SELBSTTEST', JSON.stringify(out));
   app.exit(0);
@@ -218,5 +290,6 @@ app.whenReady().then(async () => {
   catalog = readJson(cacheFile(), { games: [] });   // sofort die bekannten Spiele zeigen, dann aktualisieren
   createLauncher();
   await loadCatalog(); changed();
+  if (set().autoUpdate) { await checkUpdate(); send('update', publicUpd()); }
 });
 app.on('window-all-closed', () => app.quit());

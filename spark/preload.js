@@ -10,4 +10,9 @@ contextBridge.exposeInMainWorld('spark', {
   saves: id => ipcRenderer.invoke('saves', id),
   onProgress: fn => ipcRenderer.on('progress', (e, d) => fn(d)),
   onChanged: fn => ipcRenderer.on('changed', () => fn()),
+  set: (k, v) => ipcRenderer.invoke('set', k, v),
+  checkUpdate: () => ipcRenderer.invoke('update-check'),
+  runUpdate: () => ipcRenderer.invoke('update-run'),
+  openWeb: which => ipcRenderer.invoke('open-web', which),
+  onUpdate: fn => { ipcRenderer.on('update', (e, d) => fn(d)); ipcRenderer.on('uprogress', (e, d) => fn(d)); },
 });
