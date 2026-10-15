@@ -102,6 +102,22 @@
   .toast.show { opacity: 1; transform: translateX(-50%); }
   .toast.ok { background: rgba(10, 34, 22, .95); box-shadow: inset 0 0 0 1px rgba(79, 240, 160, .5); color: #c8ffe0; }
   @media (max-width: 1000px) { .body { grid-template-columns: 1fr; } .title { font-size: 44px; } }
+  /* Changelog */
+  .news { margin: 0 0 22px; padding: 16px 20px; clip-path: var(--cut-s); background: linear-gradient(135deg, rgba(255, 201, 60, .12), rgba(14, 17, 28, .6) 60%); box-shadow: inset 0 0 0 1px var(--line-hot); }
+  .news .label { color: var(--amber); display: block; margin-bottom: 8px; }
+  .cl-v { display: flex; align-items: baseline; gap: 12px; margin: 14px 0 4px; font: 700 16px var(--f-head); letter-spacing: 1.5px; }
+  .cl-v:first-child { margin-top: 0; }
+  .cl-v small { font: 500 11px var(--f-mono); color: var(--faint); letter-spacing: 1px; }
+  .cl-v .now { font: 500 10px var(--f-mono); color: #04140a; background: var(--ok); padding: 1px 6px; letter-spacing: 1px; }
+  .cl ul { margin: 0; padding: 0; list-style: none; }
+  .cl li { position: relative; padding-left: 18px; margin: 3px 0; color: #d6dae6; }
+  .cl li::before { content: ""; position: absolute; left: 2px; top: 9px; width: 7px; height: 7px; background: linear-gradient(135deg, var(--amber), var(--orange)); transform: rotate(45deg); }
+  .cl p { margin: 4px 0; color: #d6dae6; }
+  .cl code { font: 500 13px var(--f-mono); color: var(--amber); }
+  .cl b { color: var(--text); }
+  .unews { margin-top: 12px; padding: 14px 16px; max-height: 240px; overflow: auto; background: rgba(0, 0, 0, .25); box-shadow: inset 0 0 0 1px var(--line-hot); clip-path: var(--cut-s); display: none; }
+  .unews.on { display: block; }
+  .unews > .label { color: var(--amber); display: block; margin-bottom: 8px; }
   /* Einstellungen */
   .gear { position: relative; }
   .gear .badge { position: absolute; right: 3px; top: 3px; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 10px var(--amber); display: none; }
@@ -149,11 +165,17 @@
   <main id="main"><div class="empty" id="empty">Lade Spiele …</div></main>
 </div>
 <div class="toast" id="toast"></div>
+<div class="modal" id="clmodal"><div class="sheet hud">
+  <button class="x" id="clclose" title="Schließen">×</button>
+  <span class="label" id="cllabel">// Changelog</span><h2 id="cltitle">NEUIGKEITEN</h2>
+  <div class="cl" id="cllist"></div>
+</div></div>
 <div class="modal" id="modal"><div class="sheet hud">
   <button class="x" id="close" title="Schließen">×</button>
   <span class="label">// System</span><h2><span>EIN</span>STELLUNGEN</h2>
   <div class="grp"><span class="label">// Launcher-Update</span>
     <div class="row"><div><div class="uver" id="uver">SPARK</div><div class="ustat" id="ustat">Noch nicht geprüft</div></div><button class="play" id="ubtn" style="min-width:200px;height:48px;font-size:13px">NACH UPDATES SUCHEN</button></div>
+    <div class="unews cl" id="unews"><span class="label">// Was ist neu</span><div id="unewslist"></div></div>
     <div class="uprog prog" id="uprog" style="max-width:none"><div class="barbg"><div class="fill" id="ufill"></div></div><div class="lbl" id="ulbl"></div></div>
     <div class="row"><div><b>Automatisch nach Updates suchen</b><small>Beim Start prüft SPARK, ob es eine neue Version gibt.</small></div><button class="sw" data-k="autoUpdate"></button></div>
   </div>
@@ -175,6 +197,25 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let S = { games: [] }, sel = localStorage.getItem('spark.sel') || '', progress = {}, confirmDel = false;
 let U = null, SET = {};
+const vnum = v => String(v || '').replace(/^[^\d]*/, '').split('.').map(n => parseInt(n, 10) || 0);
+const vNewer = (a, b) => { const x = vnum(a), y = vnum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+const fdate = t => t ? new Date(t).toLocaleDateString('de-DE') : '';
+function md(text) {   // nur **fett**, `code`, *kursiv*, Listen mit „- “ – alles andere wird als Text angezeigt
+  const inl = s => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*([^*]+)\*/g, '<i>$1</i>');
+  let html = '', inList = false;
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = /^\s*[-*•]\s+(.*)$/.exec(line);
+    if (m) { if (!inList) { html += '<ul>'; inList = true; } html += '<li>' + inl(m[1]) + '</li>'; continue; }
+    if (inList) { html += '</ul>'; inList = false; }
+    if (line.trim() && !/^https?:\/\//.test(line.trim()) && !/^(webseite|datenschutz):/i.test(line.trim())) html += '<p>' + inl(line) + '</p>';
+  }
+  return html + (inList ? '</ul>' : '');
+}
+function clHtml(entries, cur) {
+  return entries.map(e => '<div class="cl-v">' + esc(e.version) + (cur && e.version === cur ? ' <span class="now">INSTALLIERT</span>' : '') + ' <small>' + fdate(e.date) + '</small></div>' +
+    (e.items ? '<ul>' + e.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>' : md(e.body))).join('');
+}
+function showChangelog(title, label, html) { $('cltitle').textContent = title; $('cllabel').textContent = label; $('cllist').innerHTML = html || '<p>Noch keine Einträge.</p>'; $('clmodal').classList.add('open'); }
 function effects(on) { for (const el of document.querySelectorAll('.horizon, #fx, .scan')) el.style.display = on ? '' : 'none'; }
 function renderSettings() {
   for (const b of document.querySelectorAll('.sw')) b.classList.toggle('on', !!SET[b.dataset.k]);
@@ -187,6 +228,9 @@ function renderSettings() {
   else if (u.checked) { st.className = 'ustat ok'; st.textContent = '✓ Du hast die neueste Version · geprüft ' + new Date(u.checked).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); btn.disabled = false; btn.textContent = 'NACH UPDATES SUCHEN'; }
   else { st.className = 'ustat'; st.textContent = 'Noch nicht geprüft'; btn.disabled = false; btn.textContent = 'NACH UPDATES SUCHEN'; }
   $('uprog').classList.toggle('on', !!u.busy);
+  const ch = (u.changes || []);
+  $('unews').classList.toggle('on', !!u.available && ch.length > 0);
+  $('unewslist').innerHTML = clHtml(ch);
   $('ufill').style.width = Math.round((u.p || 0) * 100) + '%'; $('ulbl').textContent = u.busy ? Math.round((u.p || 0) * 100) + ' %' + (u.portable ? ' · neue portable Datei landet neben der alten' : ' · danach wird automatisch installiert') : '';
   $('gear').classList.toggle('has', !!u.available);
 }
@@ -221,6 +265,16 @@ function renderList() {
   }).join('');
   for (const b of document.querySelectorAll('.game')) b.onclick = () => { sel = b.dataset.id; localStorage.setItem('spark.sel', sel); confirmDel = false; renderList(); renderMain(); };
 }
+// Was bringt das Update? Bei Update: alle Versionen nach der installierten; sonst die neueste
+function newsHtml(g) {
+  const cl = g.changelog || [];
+  if (!cl.length) return '';
+  const fresh = g.installed && g.update ? cl.filter(e => vNewer(e.version, g.installedVersion)) : cl.slice(0, 1);
+  if (!fresh.length) return '';
+  const title = g.installed && g.update ? '// Neu im Update – das kommt dazu' : '// Neu in ' + fresh[0].version;
+  return '<div class="news cl"><span class="label">' + title + '</span>' + clHtml(fresh.slice(0, 4)) +
+    (cl.length > fresh.length ? '<button class="sec" id="clnew" style="height:34px;margin-top:10px;font-size:13px">Ganzen Changelog anzeigen</button>' : '') + '</div>';
+}
 function renderMain() {
   const g = S.games.find(x => x.id === sel), main = $('main');
   if (!g) { main.innerHTML = '<div class="empty">' + (S.loading ? 'Lade Spiele …' : S.offline ? 'Keine Verbindung und noch keine Spiele installiert.<br>Prüf dein Internet und klick oben auf ⟳.' : 'Noch keine Spiele im Katalog.') + '</div>'; return; }
@@ -233,7 +287,7 @@ function renderMain() {
   else primary = '<button class="play green" id="act" data-a="play">▶ SPIELEN</button>';
   const extra = g.installed && !g.busy && !g.playing
     ? (g.update && !S.offline ? '<button class="sec" id="playold">Ohne Update spielen</button>' : '')
-      + '<button class="sec" id="saves">💾 Spielstände</button><button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
+      + '<button class="sec" id="cl">📜 Changelog</button><button class="sec" id="saves">💾 Spielstände</button><button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
   main.innerHTML =
     '<div class="hero"><div class="bgimg" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="img" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="shade"></div>' +
     '<div class="info"><span class="label">' + (g.update && g.installed ? '// Update verfügbar' : g.installed ? '// Bereit zum Spielen' : '// Neu in der Bibliothek') + '</span><h1 class="title" style="color:' + esc(g.color || '#fff') + '">' + esc(g.name) + '</h1><div class="tagline">' + esc(g.tagline || '') + '</div>' +
@@ -243,12 +297,14 @@ function renderMain() {
     '<div class="chip"><b>GRÖSSE</b>' + size(g.size || 0) + '</div>' +
     '<div class="chip"><b>GESPIELT</b>' + time(g.playMs) + '</div>' +
     '<div class="chip"><b>ZULETZT</b>' + date(g.lastPlayed) + '</div></div>' +
-    '<div class="desc">' + esc(g.description || '') + '</div></div>' +
+    newsHtml(g) + '<div class="desc">' + esc(g.description || '') + '</div></div>' +
     (g.features && g.features.length ? '<div class="feat hud"><span class="label">// Das erwartet dich</span><ul style="margin:0;padding:0">' + g.features.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>' : '') + '</div>';
   const act = $('act');
   if (act) act.onclick = () => act.dataset.a === 'play' ? play(g) : installThen(g, true);
   if ($('playold')) $('playold').onclick = () => play(g);
   if ($('saves')) $('saves').onclick = () => window.spark.saves(g.id);
+  if ($('cl')) $('cl').onclick = () => showChangelog(g.name, '// Changelog', clHtml(g.changelog || [], g.installed ? g.installedVersion : ''));
+  if ($('clnew')) $('clnew').onclick = () => showChangelog(g.name, '// Changelog', clHtml(g.changelog || [], g.installed ? g.installedVersion : ''));
   if ($('del')) $('del').onclick = async () => {
     if (!confirmDel) { confirmDel = true; renderMain(); setTimeout(() => { if (confirmDel) { confirmDel = false; renderMain(); } }, 4000); return; }
     confirmDel = false;
@@ -275,6 +331,8 @@ $('refresh').onclick = async () => { $('net').textContent = 'Verbinde …'; awai
 $('folder').onclick = () => window.spark.folder('');
 $('gear').onclick = () => { $('modal').classList.add('open'); renderSettings(); if (!U || !U.checked) $('ubtn').click(); };
 $('close').onclick = () => $('modal').classList.remove('open');
+$('clclose').onclick = () => $('clmodal').classList.remove('open');
+$('clmodal').onclick = e => { if (e.target === $('clmodal')) $('clmodal').classList.remove('open'); };
 $('modal').onclick = e => { if (e.target === $('modal')) $('modal').classList.remove('open'); };
 $('ubtn').onclick = async () => {
   if (U && U.available) { const r = await window.spark.runUpdate(); if (!r.ok) { toast(r.error); renderSettings(); } return; }
@@ -287,7 +345,7 @@ $('lweb').onclick = () => window.spark.openWeb('site');
 $('lgit').onclick = () => window.spark.openWeb('github');
 $('lpriv').onclick = () => window.spark.openWeb('privacy');
 window.spark.onUpdate(onUpdate);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').classList.remove('open'); else if (e.key === 'Enter' && $('act') && !$('modal').classList.contains('open')) $('act').click(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('modal').classList.remove('open'); $('clmodal').classList.remove('open'); } else if (e.key === 'Enter' && $('act') && !document.querySelector('.modal.open')) $('act').click(); });
 load();
 // Funken im Hintergrund (sparsam, pausiert wenn das Fenster nicht sichtbar ist)
 (() => {

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-15T07:22:16.289Z",
+  "updated": "2026-10-15T09:02:18.512Z",
   "games": [
     {
       "id": "blackout",
@@ -13,7 +13,7 @@
         "Online mit bis zu 16 Spielern – Clans, Handel, PvP",
         "3 Spielstände, Musik, Tutorial"
       ],
-      "version": "Alpha 1.7.1",
+      "version": "Alpha 1.7.2",
       "color": "#ff6a2a",
       "cover": "blackout.jpg",
       "icon": "blackout-icon.png",
@@ -29,8 +29,8 @@
         },
         {
           "path": "game.js",
-          "size": 388717,
-          "sha256": "22ac394da523bc9d4121fca42fc3a7271504c0dbc21b24fd68795d592440de17"
+          "size": 391825,
+          "sha256": "ec96e91374ca327df0655463d949b68d32965f2c64928d837ddba058d502ce37"
         },
         {
           "path": "render3d.js",
@@ -48,7 +48,77 @@
           "sha256": "4352a5168dcae48a442ff1895f104e8c880927adeac8b9334d31be4fc91b5331"
         }
       ],
-      "size": 1231994
+      "changelog": [
+        {
+          "version": "Alpha 1.7.2",
+          "date": "2026-10-15",
+          "items": [
+            "Changelog: im Hauptmenü unter „📜 Neuigkeiten“ siehst du, was in jedem Update dazukommt",
+            "Im SPARK-Launcher steht vor jedem Update, was neu ist"
+          ]
+        },
+        {
+          "version": "Alpha 1.7.1",
+          "date": "2026-10-15",
+          "items": [
+            "Datenschutz: keine Schriften und Server von Google mehr – das Spiel nutzt Systemschriften",
+            "Neue Einstellung „Online-Rangliste“: aus = dein Ergebnis wird nicht gesendet",
+            "Link zur Datenschutzerklärung im Hauptmenü"
+          ]
+        },
+        {
+          "version": "Alpha 1.7.0",
+          "date": "2026-10-15",
+          "items": [
+            "11 Tierarten, jedes Biom hat eigene: Kamele und Skorpione in der Wüste, Wolfsrudel und Bären im Schnee, Frösche im Sumpf, Ratten in der Stadt, Hühner in Dörfern",
+            "Wölfe, Bären und Skorpione greifen an",
+            "Tastenbelegung frei einstellbar (⚙ Einstellungen → ⌨ Tasten)",
+            "Hauptmenü: ein „Online“-Knopf, danach Hosten oder Beitreten wählen",
+            "/handel Name – Handel per Chat-Befehl",
+            "Ego-Ansicht: der Arm bleibt beim Schlagen an der Schulter",
+            "Lose Modellteile verbunden (Hütten, Brunnen, Reaktor-Fackeln, Mine, Türme, Zombies)",
+            "Die alte 2D-Version wurde entfernt"
+          ]
+        },
+        {
+          "version": "Alpha 1.6.0",
+          "date": "2026-10-14",
+          "items": [
+            "Viel größere Welt mit 4 Städten und 8 Dörfern",
+            "Verlassene Hütten mit Truhen – nicht auf der Karte, du musst sie finden (F öffnet)",
+            "Neue Bodentexturen für Gras, Sand, Schnee und Asphalt",
+            "Städte mit Bürgersteigen, Laternen, Zebrastreifen, Bänken und größeren Autos",
+            "Längere Tage (150 s) und Nächte (140 s)"
+          ]
+        },
+        {
+          "version": "Alpha 1.5.2",
+          "date": "2026-10-14",
+          "items": [
+            "Namen ändern funktioniert jetzt auch in der Desktop-Version"
+          ]
+        },
+        {
+          "version": "Alpha 1.5.1",
+          "date": "2026-10-14",
+          "items": [
+            "Feste Spieler-ID: die Rangliste zeigt dich nur einmal, auch nach einem Namenswechsel"
+          ]
+        },
+        {
+          "version": "Alpha 1.5.0",
+          "date": "2026-10-14",
+          "items": [
+            "Alle Waffen neu modelliert, zweihändige Waffen mit beiden Händen gehalten",
+            "Neue Animationen für Spieler und Zombies",
+            "Längere Nächte, Streuner-Zombies am Tag (in Städten mehr)",
+            "Städte mit Hochhäusern, Bunker-Tresor mit 3 Schaltern, Schattenfürst im Schattenreich",
+            "Eisen: Gebäude verstärken und reparieren",
+            "Karte mit Planquadraten A1–H8, Chatfilter, Chat-Verlauf, neues Design"
+          ]
+        }
+      ],
+      "size": 1235102
     }
   ]
 }

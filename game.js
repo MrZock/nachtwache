@@ -12,7 +12,7 @@ const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 768;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 150, NIGHT_LEN = 140;   // längere Tage und Nächte (Alpha 1.6.0)
-const GAME_VER = 'Alpha 1.7.1';
+const GAME_VER = 'Alpha 1.7.2';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -616,6 +616,50 @@ function settingsApply() {
   if (typeof calcUiScale === 'function') calcUiScale();
 }
 function settingSet(id, v) { SET[id] = v; store.set(SET_KEY, SET); settingsApply(); }
+// ---------- Changelog („Neuigkeiten“): was in jedem Update dazukommt – aus dem SPARK-Katalog
+let clOpen = false, clData = null, clMsg = '', clScroll = 0;
+function openChangelog() {
+  clOpen = true; clScroll = 0; SFX.play('click');
+  if (clData) return;
+  clMsg = 'Lade Neuigkeiten …';
+  fetch(WEB_URL + 'spark/catalog/games.json', { cache: 'no-store' }).then(r => r.json()).then(c => {
+    const g = (c.games || []).find(x => x.id === 'blackout');
+    clData = (g && g.changelog) || []; clMsg = clData.length ? '' : 'Noch keine Einträge.';
+  }).catch(() => { clMsg = 'Keine Verbindung – die Neuigkeiten brauchen Internet.'; });
+}
+function drawChangelog() {
+  const w = Math.min(720, VW - 24), h = Math.min(VH - 24, 620), x = VW / 2 - w / 2, y = VH / 2 - h / 2;
+  panel(x, y, w, h, 0.98); ui.push({ x, y, w, h, fn: () => {} });
+  titleText('📜 NEUIGKEITEN', x + 24, y + 30, 22, '#ff8a3a', 'left');
+  text('Du spielst ' + GAME_VER, x + 26, y + 56, 12, '#999', 'left', '600');
+  text('×', x + w - 22, y + 28, 22, '#aaa', 'center'); ui.push({ x: x + w - 40, y: y + 8, w: 34, h: 34, fn: () => { clOpen = false; } });
+  const top = y + 76, bot = y + h - 16;
+  ctx.save(); ctx.beginPath(); ctx.rect(x + 8, top, w - 16, bot - top); ctx.clip();
+  if (clMsg) text(clMsg, x + w / 2, top + 40, 15, '#ccc', 'center', '600');
+  let cy = top + 14 - clScroll;
+  for (const e of clData || []) {
+    const cur = e.version === GAME_VER;
+    text(e.version, x + 26, cy + 8, 17, cur ? '#8fe08f' : '#ffd36b', 'left', '700');
+    ctx.font = '700 17px ' + FONT; const vw = ctx.measureText(e.version).width;
+    text((cur ? '● INSTALLIERT · ' : '') + (e.date ? new Date(e.date).toLocaleDateString('de-DE') : ''), x + 36 + vw, cy + 9, 11, cur ? '#8fe08f' : '#888', 'left', '600');
+    cy += 26;
+    for (const it of e.items || []) {
+      const lines = wrapLines(it, w - 80, '14px ' + FONT);
+      lines.forEach((l, k) => { if (!k) { ctx.fillStyle = '#ff8a3a'; ctx.fillRect(x + 32, cy - 3, 6, 6); } text(l, x + 48, cy, 14, '#e8dcd0', 'left', '500'); cy += 19; });
+      cy += 3;
+    }
+    cy += 14;
+  }
+  const total = cy + clScroll - top;
+  ctx.restore();
+  clScroll = Math.min(clScroll, Math.max(0, total - (bot - top)));
+  if (total > bot - top) {   // Bildlaufleiste + Knöpfe für Handy
+    const bh = (bot - top) * (bot - top) / total, by = top + (bot - top - bh) * (clScroll / Math.max(1, total - (bot - top)));
+    ctx.fillStyle = 'rgba(255,160,90,0.4)'; rr(x + w - 12, by, 4, bh, 2); ctx.fill();
+    button('▲', x + w - 56, y + 14, 34, 30, () => { clScroll = Math.max(0, clScroll - 120); }, false, true);
+    button('▼', x + w - 96, y + 14, 34, 30, () => { clScroll += 120; }, false, true);
+  }
+}
 // Hauptmenü → Online: erst auswählen, ob man selbst hostet oder einem Spiel beitritt
 let onlinePick = false;
 function drawOnlinePick() {
@@ -6016,6 +6060,7 @@ function drawOverlays() {
       button('⚙ EINSTELL.', cx + bw + 17, y, bw / 2 - 7, 34, () => { settingsOpen = true; }, false, true);
       y += 46;
       button('📊 RANGLISTE', cx - bw * 1.5 - 10, y, bw, 34, openRanks, false, true);
+      button('📜 NEUIGKEITEN', cx + bw / 2 + 10, y, bw, 34, openChangelog, false, true);
       if (DESKTOP) button('✖ BEENDEN', cx - bw / 2, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true);
       y += 44;
     } else {
@@ -6026,7 +6071,8 @@ function drawOverlays() {
       button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
       button('🎨 SKIN ANPASSEN', bx, y, bw / 2 - 5, 34, () => { skinOpen = true; }, false, true);
       button('⚙ EINSTELLUNGEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { settingsOpen = true; }, false, true); y += 44;
-      button('📊 RANGLISTE', bx, y, bw, 34, openRanks, false, true); y += 44;
+      button('📊 RANGLISTE', bx, y, bw / 2 - 5, 34, openRanks, false, true);
+      button('📜 NEUIGKEITEN', bx + bw / 2 + 5, y, bw / 2 - 5, 34, openChangelog, false, true); y += 44;
       if (DESKTOP) { button('✖ BEENDEN', bx, y, bw, 34, () => { saveNowSync(); window.close(); }, false, true); y += 44; }
       y += 4;
     }
@@ -6039,7 +6085,7 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['11 TIERARTEN – JE BIOM ANDERE', 'WOLFSRUDEL · BÄREN · SKORPIONE · KAMELE', 'TASTEN SELBST BELEGEN', '⚙ EINSTELLUNGEN → ⌨ TASTEN', 'ONLINE: HOSTEN ODER BEITRETEN', 'ALLES HINTER EINEM KNOPF', '/HANDEL NAME', 'HANDELN PER CHAT-BEFEHL', 'SAUBERERE MODELLE', 'ARM BLEIBT BEIM SCHLAGEN DRAN'];
+      const news = ['📜 NEUIGKEITEN IM MENÜ', 'ALLE UPDATES AUF EINEN BLICK', '11 TIERARTEN – JE BIOM ANDERE', 'WOLFSRUDEL · BÄREN · SKORPIONE · KAMELE', 'TASTEN SELBST BELEGEN', '⚙ EINSTELLUNGEN → ⌨ TASTEN', 'ONLINE: HOSTEN ODER BEITRETEN', 'ALLES HINTER EINEM KNOPF', '/HANDEL NAME', 'HANDELN PER CHAT-BEFEHL'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
       titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
@@ -6061,6 +6107,7 @@ function drawOverlays() {
     if (keysOpen) drawKeys();
     if (slotPick) drawSlotPicker();
     if (rankOpen) drawRanks();
+    if (clOpen) drawChangelog();
     if (onlinePick && !slotPick) drawOnlinePick();
   } else if (mode === 'paused') {
     titleText(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 60, '#e8dcd0');
@@ -6162,8 +6209,9 @@ if (!HEADLESS) {
     if (e.code === 'Escape' && skinOpen) { skinOpen = false; return; }
     if (e.code === 'Escape' && slotPick) { slotPick = null; return; }
     if (e.code === 'Escape' && rankOpen) { rankOpen = false; return; }
+    if (e.code === 'Escape' && clOpen) { clOpen = false; return; }
     if (e.code === 'Escape' && onlinePick) { onlinePick = false; return; }
-    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick && !rankOpen && !keysOpen && !onlinePick) startSingle(); return; }
+    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick && !rankOpen && !keysOpen && !onlinePick && !clOpen) startSingle(); return; }
     if (mode === 'over') { if ((e.code === 'Enter' || e.code === 'Space') && modeT > 1 && NET.role !== 'client') startGame(); return; }
     if (e.code === 'Escape' && settingsOpen) { settingsOpen = false; return; }
     if (mode === 'paused') { if (e.code === 'Escape' || keyIs(e, 'pause')) mode = 'play'; return; }
@@ -6306,6 +6354,7 @@ if (!HEADLESS) {
   canvas.addEventListener('touchcancel', e => { for (const t of e.changedTouches) onTouchEnd(t); });
   canvas.addEventListener('wheel', e => {
     if (chatIsOpen()) { chatScroll = Math.max(0, chatScroll + (e.deltaY < 0 ? 2 : -2)); return; }
+    if (clOpen) { clScroll = Math.max(0, clScroll + (e.deltaY > 0 ? 60 : -60)); return; }
     if (R3) { R3.zoom(e.deltaY); return; }
     if (mode !== 'play') return;
     const order = TOOL_ORDER.filter(k => S.player.tl[k] > 0), n = order.length;

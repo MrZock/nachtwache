@@ -180,14 +180,16 @@ const vnum = v => String(v).replace(/^[^\d]*/, '').split('.').map(n => parseInt(
 const newer = (a, b) => { const x = vnum(a), y = vnum(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
 const curVer = () => process.env.SPARK_TEST_VERSION || app.getVersion();   // Testmodus: ältere Version vortäuschen
 const portableExe = () => process.env.PORTABLE_EXECUTABLE_FILE || '';
-let upd = { checked: 0, latest: null, asset: null, error: '', busy: false, p: 0, notes: '' };
+let upd = { checked: 0, latest: null, asset: null, error: '', busy: false, p: 0, notes: '', changes: [] };
 async function checkUpdate() {
   upd.error = '';
   try {
     const r = await timeout(net.fetch('https://api.github.com/repos/' + SPARK_REPO + '/releases?per_page=15', { cache: 'no-store', headers: { 'User-Agent': 'SPARK-Launcher', Accept: 'application/vnd.github+json' } }), 30000, 'GitHub');
     if (!r.ok) throw new Error('GitHub antwortet nicht (' + r.status + ')');
     const list = await r.json();
-    const rel = (Array.isArray(list) ? list : []).filter(x => !x.draft && !x.prerelease && /^v?\d/.test(x.tag_name)).sort((a, b) => newer(a.tag_name, b.tag_name) ? -1 : 1)[0];
+    const rels = (Array.isArray(list) ? list : []).filter(x => !x.draft && !x.prerelease && /^v?\d/.test(x.tag_name)).sort((a, b) => newer(a.tag_name, b.tag_name) ? -1 : 1), rel = rels[0];
+    // Changelog: alle Versionen, die neuer sind als die installierte (neueste zuerst)
+    upd.changes = rels.filter(x => newer(x.tag_name, curVer())).slice(0, 10).map(x => ({ version: verName(x.tag_name.replace(/^v/, '')), date: x.published_at, body: String(x.body || '').slice(0, 3000) }));
     upd.checked = Date.now();
     if (!rel) { upd.latest = null; return publicUpd(); }
     const want = portableExe() ? /portable.*\.exe$/i : /setup.*\.exe$/i;
@@ -198,7 +200,7 @@ async function checkUpdate() {
 }
 function publicUpd() {
   const cur = curVer(), avail = !!upd.latest && newer(upd.latest, cur);
-  return { current: verName(cur), latest: upd.latest ? verName(upd.latest) : '', available: avail && !!upd.asset, checked: upd.checked, error: upd.error, busy: upd.busy, p: upd.p, portable: !!portableExe(), notes: upd.notes };
+  return { current: verName(cur), latest: upd.latest ? verName(upd.latest) : '', available: avail && !!upd.asset, checked: upd.checked, error: upd.error, busy: upd.busy, p: upd.p, portable: !!portableExe(), notes: upd.notes, changes: upd.changes };
 }
 // Herunterladen (mit Fortschritt), Größe prüfen, dann Installer still ausführen bzw. neue portable Version starten
 async function runUpdate() {
