@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-15T09:02:18.512Z",
+  "updated": "2026-10-15T10:05:23.422Z",
   "games": [
     {
       "id": "blackout",
@@ -13,7 +13,7 @@
         "Online mit bis zu 16 Spielern – Clans, Handel, PvP",
         "3 Spielstände, Musik, Tutorial"
       ],
-      "version": "Alpha 1.7.2",
+      "version": "Alpha 1.7.3",
       "color": "#ff6a2a",
       "cover": "blackout.jpg",
       "icon": "blackout-icon.png",
@@ -29,8 +29,8 @@
         },
         {
           "path": "game.js",
-          "size": 391825,
-          "sha256": "ec96e91374ca327df0655463d949b68d32965f2c64928d837ddba058d502ce37"
+          "size": 392157,
+          "sha256": "6b30080db814fa1cd9ef89c94df851543924cfbdb176d5b596862bc3e3ae5205"
         },
         {
           "path": "render3d.js",
@@ -49,6 +49,15 @@
         }
       ],
       "changelog": [
+        {
+          "version": "Alpha 1.7.3",
+          "date": "2026-10-15",
+          "items": [
+            "Neu im SPARK-Launcher: SPARK Chat – lade Freunde direkt aus dem Chat in dein Online-Spiel ein",
+            "Wenn du hostest, erkennt SPARK Chat deinen Raum-Code automatisch",
+            "Klick auf „Beitreten“ in einer Einladung startet BLACKOUT und tritt dem Raum bei"
+          ]
+        },
         {
           "version": "Alpha 1.7.2",
           "date": "2026-10-15",
@@ -118,7 +127,72 @@
           ]
         }
       ],
-      "size": 1235102
+      "size": 1235434
+    },
+    {
+      "id": "spark-chat",
+      "type": "app",
+      "name": "SPARK CHAT",
+      "tagline": "Freunde · Chat · Sprachanrufe – Ende-zu-Ende-verschlüsselt",
+      "description": "Dein eigener Chat im SPARK-Launcher: Erstelle ein Konto, füge Freunde über ihren Benutzernamen hinzu, schreib Nachrichten und telefoniere. Lade Freunde mit einem Klick in dein BLACKOUT-Online-Spiel ein. Alle Nachrichten und Anrufe sind Ende-zu-Ende-verschlüsselt – der Server kann nichts mitlesen, und dein Passwort verlässt nie deinen PC.",
+      "features": [
+        "Konto mit Benutzername und Passwort",
+        "Freunde hinzufügen, annehmen, blockieren",
+        "Privatchats mit Online-Status und „spielt BLACKOUT“",
+        "Bilder senden und Profilbilder",
+        "Sprachanrufe (auch im Schul-WLAN)",
+        "BLACKOUT-Einladungen: ein Klick und du bist im Spiel",
+        "Auch im Browser und auf dem Handy: mrzock.github.io/nachtwache/chat",
+        "Ende-zu-Ende-verschlüsselt, Verlauf nur auf deinem Gerät"
+      ],
+      "version": "Alpha 1.0.0",
+      "color": "#2ee6ff",
+      "cover": "spark-chat.jpg",
+      "icon": "spark-chat-icon.png",
+      "base": "https://mrzock.github.io/nachtwache/chat/",
+      "entry": "index.html",
+      "saveDir": "SPARK Chat",
+      "files": [
+        {
+          "path": "index.html",
+          "size": 6507,
+          "sha256": "5ef33b71cc58bbbbdc6ee89708286303c185126be55eec82b4668ec28945bf3c"
+        },
+        {
+          "path": "chat.js",
+          "size": 64431,
+          "sha256": "1785398086b08234789652bca5d90b5aaf68f575f1a2c8367410eb579414ad87"
+        },
+        {
+          "path": "chat.css",
+          "size": 18711,
+          "sha256": "6abdfc4b1047e89bef01453ae07d8f2bf90cb9f98572d6246d3a3229d461bb62"
+        },
+        {
+          "path": "icon.png",
+          "size": 41266,
+          "sha256": "d5fb629b7f834f25e7873b1a8d913750f01a3949112340a0c34df79b48767516"
+        },
+        {
+          "path": "manifest.json",
+          "size": 377,
+          "sha256": "46d0f953fa373892d3aa0b88704ff6d6ac2171ffa2ae38adfd98a43b595681ac"
+        }
+      ],
+      "changelog": [
+        {
+          "version": "Alpha 1.0.0",
+          "date": "2026-10-15",
+          "items": [
+            "Erste Version von SPARK Chat",
+            "Konten, Freunde, Privatchats und Sprachanrufe",
+            "Bilder senden (Ende-zu-Ende-verschlüsselt) und Profilbilder",
+            "Einladungen in BLACKOUT-Online-Spiele",
+            "Läuft auch im Browser und auf dem Handy – zum Startbildschirm hinzufügbar"
+          ]
+        }
+      ],
+      "size": 131292
     }
   ]
 }

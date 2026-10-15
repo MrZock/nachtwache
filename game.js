@@ -12,7 +12,7 @@ const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 768;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 150, NIGHT_LEN = 140;   // längere Tage und Nächte (Alpha 1.6.0)
-const GAME_VER = 'Alpha 1.7.2';
+const GAME_VER = 'Alpha 1.7.3';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -3470,6 +3470,8 @@ function serverWsUrl() {
   return RELAY_URL ? norm(RELAY_URL) : null;
 }
 const ONLINE_URL = serverWsUrl();
+// Im SPARK-Launcher: Raum-Code melden, damit SPARK Chat Freunde direkt einladen kann
+function sparkRoom(code, role) { try { if (window.SPARK && SPARK.presence) SPARK.presence(code ? { room: code, role } : null); } catch (e) {} }
 const INVITE = (() => { try { return (new URLSearchParams(location.search).get('join') || '').toUpperCase(); } catch (e) { return ''; } })();
 function inviteLink(code) {
   // Aus der Windows-App (oder lokalen Datei) immer auf die Web-Version verlinken, damit Freunde direkt im Browser beitreten können
@@ -3504,6 +3506,7 @@ function lanConnect(want, room, tries) {
     let m; try { m = JSON.parse(raw); } catch (err) { return; }
     if (m.t === '_role') {
       NET.room = m.code || '';
+      sparkRoom(NET.room, m.role);
       if (m.role === 'host') {
         NET.role = 'host'; NET.peer = false; NET.peers.clear(); NET.urls = m.urls || [];
         lobbyHide(); startGame();
@@ -3908,6 +3911,7 @@ function startSingle() { openSlots('single'); }
 function netClose(reason) {
   const was = NET.role;
   NET.role = null; NET.ev = []; NET.lastRecv = 0; NET.peer = false; NET.peers.clear();
+  sparkRoom(null);
   const pc = NET.pc, a = NET.chR, b = NET.chU, ws = NET.ws;
   NET.pc = NET.chR = NET.chU = NET.ws = null;
   try { if (a) a.close(); if (b) b.close(); if (pc) pc.close(); if (ws) ws.close(); } catch (e) {}
@@ -6085,7 +6089,7 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['📜 NEUIGKEITEN IM MENÜ', 'ALLE UPDATES AUF EINEN BLICK', '11 TIERARTEN – JE BIOM ANDERE', 'WOLFSRUDEL · BÄREN · SKORPIONE · KAMELE', 'TASTEN SELBST BELEGEN', '⚙ EINSTELLUNGEN → ⌨ TASTEN', 'ONLINE: HOSTEN ODER BEITRETEN', 'ALLES HINTER EINEM KNOPF', '/HANDEL NAME', 'HANDELN PER CHAT-BEFEHL'];
+      const news = ['💬 SPARK CHAT', 'FREUNDE PER CHAT EINLADEN', '📜 NEUIGKEITEN IM MENÜ', 'ALLE UPDATES AUF EINEN BLICK', '11 TIERARTEN – JE BIOM ANDERE', 'WOLFSRUDEL · BÄREN · SKORPIONE · KAMELE', 'TASTEN SELBST BELEGEN', '⚙ EINSTELLUNGEN → ⌨ TASTEN', 'ONLINE: HOSTEN ODER BEITRETEN', 'ALLES HINTER EINEM KNOPF', '/HANDEL NAME', 'HANDELN PER CHAT-BEFEHL'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
       titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';

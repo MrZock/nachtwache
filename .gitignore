@@ -4,3 +4,6 @@ Thumbs.db
 *.log
 .claude/
 scores.json
+chat-data.json
+chat-reports.json
+chat-avatars.json

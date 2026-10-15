@@ -12,7 +12,7 @@
         "Online mit bis zu 16 Spielern – Clans, Handel, PvP",
         "3 Spielstände, Musik, Tutorial"
       ],
-      "version": "Alpha 1.7.2",
+      "version": "Alpha 1.7.3",
       "color": "#ff6a2a",
       "cover": "blackout.jpg",
       "icon": "blackout-icon.png",
@@ -29,6 +29,15 @@
         "style.css"
       ],
       "changelog": [
+        {
+          "version": "Alpha 1.7.3",
+          "date": "2026-10-15",
+          "items": [
+            "Neu im SPARK-Launcher: SPARK Chat – lade Freunde direkt aus dem Chat in dein Online-Spiel ein",
+            "Wenn du hostest, erkennt SPARK Chat deinen Raum-Code automatisch",
+            "Klick auf „Beitreten“ in einer Einladung startet BLACKOUT und tritt dem Raum bei"
+          ]
+        },
         {
           "version": "Alpha 1.7.2",
           "date": "2026-10-15",
@@ -95,6 +104,51 @@
             "Städte mit Hochhäusern, Bunker-Tresor mit 3 Schaltern, Schattenfürst im Schattenreich",
             "Eisen: Gebäude verstärken und reparieren",
             "Karte mit Planquadraten A1–H8, Chatfilter, Chat-Verlauf, neues Design"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "spark-chat",
+      "type": "app",
+      "name": "SPARK CHAT",
+      "tagline": "Freunde · Chat · Sprachanrufe – Ende-zu-Ende-verschlüsselt",
+      "description": "Dein eigener Chat im SPARK-Launcher: Erstelle ein Konto, füge Freunde über ihren Benutzernamen hinzu, schreib Nachrichten und telefoniere. Lade Freunde mit einem Klick in dein BLACKOUT-Online-Spiel ein. Alle Nachrichten und Anrufe sind Ende-zu-Ende-verschlüsselt – der Server kann nichts mitlesen, und dein Passwort verlässt nie deinen PC.",
+      "features": [
+        "Konto mit Benutzername und Passwort",
+        "Freunde hinzufügen, annehmen, blockieren",
+        "Privatchats mit Online-Status und „spielt BLACKOUT“",
+        "Bilder senden und Profilbilder",
+        "Sprachanrufe (auch im Schul-WLAN)",
+        "BLACKOUT-Einladungen: ein Klick und du bist im Spiel",
+        "Auch im Browser und auf dem Handy: mrzock.github.io/nachtwache/chat",
+        "Ende-zu-Ende-verschlüsselt, Verlauf nur auf deinem Gerät"
+      ],
+      "version": "Alpha 1.0.0",
+      "color": "#2ee6ff",
+      "cover": "spark-chat.jpg",
+      "icon": "spark-chat-icon.png",
+      "base": "https://mrzock.github.io/nachtwache/chat/",
+      "local": "../../chat",
+      "entry": "index.html",
+      "saveDir": "SPARK Chat",
+      "files": [
+        "index.html",
+        "chat.js",
+        "chat.css",
+        "icon.png",
+        "manifest.json"
+      ],
+      "changelog": [
+        {
+          "version": "Alpha 1.0.0",
+          "date": "2026-10-15",
+          "items": [
+            "Erste Version von SPARK Chat",
+            "Konten, Freunde, Privatchats und Sprachanrufe",
+            "Bilder senden (Ende-zu-Ende-verschlüsselt) und Profilbilder",
+            "Einladungen in BLACKOUT-Online-Spiele",
+            "Läuft auch im Browser und auf dem Handy – zum Startbildschirm hinzufügbar"
           ]
         }
       ]

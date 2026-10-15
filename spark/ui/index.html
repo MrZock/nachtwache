@@ -243,7 +243,7 @@ const size = b => b > 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' M
 const time = ms => { const m = Math.round(ms / 60000); return m < 60 ? m + ' Min.' : Math.floor(m / 60) + ' Std. ' + (m % 60) + ' Min.'; };
 const date = t => { if (!t) return '–'; const d = new Date(t), now = new Date(); if (d.toDateString() === now.toDateString()) return 'heute'; return d.toLocaleDateString('de-DE'); };
 function status(g) {
-  if (g.playing) return ['Läuft gerade', 'run'];
+  if (g.playing) return [g.type === 'app' ? 'Geöffnet' : 'Läuft gerade', 'run'];
   if (g.busy) return ['Wird geladen …', 'up'];
   if (g.update) return ['Update verfügbar', 'up'];
   if (g.installed) return ['Installiert', ''];
@@ -278,24 +278,24 @@ function newsHtml(g) {
 function renderMain() {
   const g = S.games.find(x => x.id === sel), main = $('main');
   if (!g) { main.innerHTML = '<div class="empty">' + (S.loading ? 'Lade Spiele …' : S.offline ? 'Keine Verbindung und noch keine Spiele installiert.<br>Prüf dein Internet und klick oben auf ⟳.' : 'Noch keine Spiele im Katalog.') + '</div>'; return; }
-  const p = progress[g.id];
+  const p = progress[g.id], isApp = g.type === 'app', verb = isApp ? 'ÖFFNEN' : 'SPIELEN';
   let primary;
-  if (g.playing) primary = '<button class="play green" disabled>LÄUFT …</button>';
+  if (g.playing) primary = isApp ? '<button class="play green" id="act" data-a="play">IN DEN VORDERGRUND</button>' : '<button class="play green" disabled>LÄUFT …</button>';
   else if (g.busy) primary = '<button class="play" disabled>LÄDT …</button>';
   else if (!g.installed) primary = '<button class="play" id="act" data-a="install">INSTALLIEREN</button>';
-  else if (g.update && !S.offline) primary = '<button class="play" id="act" data-a="update">UPDATE & SPIELEN</button>';
-  else primary = '<button class="play green" id="act" data-a="play">▶ SPIELEN</button>';
+  else if (g.update && !S.offline) primary = '<button class="play" id="act" data-a="update">UPDATE & ' + verb + '</button>';
+  else primary = '<button class="play green" id="act" data-a="play">▶ ' + verb + '</button>';
   const extra = g.installed && !g.busy && !g.playing
-    ? (g.update && !S.offline ? '<button class="sec" id="playold">Ohne Update spielen</button>' : '')
-      + '<button class="sec" id="cl">📜 Changelog</button><button class="sec" id="saves">💾 Spielstände</button><button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
+    ? (g.update && !S.offline ? '<button class="sec" id="playold">Ohne Update ' + verb.toLowerCase() + '</button>' : '')
+      + '<button class="sec" id="cl">📜 Changelog</button>' + (isApp ? '' : '<button class="sec" id="saves">💾 Spielstände</button>') + '<button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
   main.innerHTML =
     '<div class="hero"><div class="bgimg" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="img" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="shade"></div>' +
-    '<div class="info"><span class="label">' + (g.update && g.installed ? '// Update verfügbar' : g.installed ? '// Bereit zum Spielen' : '// Neu in der Bibliothek') + '</span><h1 class="title" style="color:' + esc(g.color || '#fff') + '">' + esc(g.name) + '</h1><div class="tagline">' + esc(g.tagline || '') + '</div>' +
+    '<div class="info"><span class="label">' + (g.update && g.installed ? '// Update verfügbar' : g.installed ? (isApp ? '// Bereit' : '// Bereit zum Spielen') : '// Neu in der Bibliothek') + '</span><h1 class="title" style="color:' + esc(g.color || '#fff') + '">' + esc(g.name) + '</h1><div class="tagline">' + esc(g.tagline || '') + '</div>' +
     '<div class="actions">' + primary + (g.busy ? '<div class="prog"><div class="barbg"><div class="fill" id="fill" style="width:' + Math.round((p ? p.p : 0) * 100) + '%"></div></div><div class="lbl" id="plbl">' + (p ? Math.round(p.p * 100) + ' % · ' + esc(p.file) : 'Starte …') + '</div></div>' : '') + extra + '</div></div></div>' +
     '<div class="body"><div><div class="chips">' +
     '<div class="chip"><b>VERSION</b>' + esc(g.installed && g.installedVersion && g.installedVersion !== g.version ? g.installedVersion + ' → ' + g.version : g.version) + '</div>' +
     '<div class="chip"><b>GRÖSSE</b>' + size(g.size || 0) + '</div>' +
-    '<div class="chip"><b>GESPIELT</b>' + time(g.playMs) + '</div>' +
+    '<div class="chip"><b>' + (isApp ? 'GENUTZT' : 'GESPIELT') + '</b>' + time(g.playMs) + '</div>' +
     '<div class="chip"><b>ZULETZT</b>' + date(g.lastPlayed) + '</div></div>' +
     newsHtml(g) + '<div class="desc">' + esc(g.description || '') + '</div></div>' +
     (g.features && g.features.length ? '<div class="feat hud"><span class="label">// Das erwartet dich</span><ul style="margin:0;padding:0">' + g.features.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>' : '') + '</div>';
@@ -309,7 +309,7 @@ function renderMain() {
     if (!confirmDel) { confirmDel = true; renderMain(); setTimeout(() => { if (confirmDel) { confirmDel = false; renderMain(); } }, 4000); return; }
     confirmDel = false;
     const r = await window.spark.uninstall(g.id);
-    r.ok ? toast(g.name + ' wurde deinstalliert – deine Spielstände bleiben erhalten.', true) : toast(r.error);
+    r.ok ? toast(g.name + ' wurde deinstalliert' + (g.type === 'app' ? '.' : ' – deine Spielstände bleiben erhalten.'), true) : toast(r.error);
   };
 }
 async function installThen(g, start) {
