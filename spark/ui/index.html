@@ -2,8 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>SPARK</title>
 <style>
   /* SPARK Design – gleiche Farben, Schriften und Formen wie die Webseite mrzock.github.io/spark */
@@ -11,7 +10,7 @@
     --bg: #05060b; --bg2: #0a0c14; --glass: rgba(14, 17, 28, .7); --line: rgba(120, 200, 255, .13); --line-hot: rgba(255, 150, 60, .45);
     --text: #eef2fb; --dim: #9aa3ba; --faint: #586078;
     --amber: #ffc93c; --orange: #ff6a1f; --cyan: #2ee6ff; --violet: #8a5cff; --ok: #4ff0a0; --bad: #ff6b6b;
-    --f-head: "Orbitron", "Segoe UI", system-ui, sans-serif; --f-body: "Rajdhani", "Segoe UI", system-ui, sans-serif; --f-mono: "JetBrains Mono", Consolas, monospace;
+    --f-head: Bahnschrift, "DIN Alternate", "Arial Narrow", "Segoe UI", system-ui, sans-serif; --f-body: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; --f-mono: "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
     --cut: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
     --cut-s: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   }
@@ -65,7 +64,7 @@
   @keyframes zoom { to { transform: scale(1.06); } }
   .hero .shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(5, 6, 11, .95) 0%, rgba(5, 6, 11, .55) 45%, rgba(5, 6, 11, 0) 78%), linear-gradient(0deg, var(--bg) 0%, rgba(5, 6, 11, 0) 45%); }
   .hero .info { position: absolute; left: 40px; bottom: 28px; right: 40px; }
-  .title { position: relative; font: 900 58px/1 var(--f-head); letter-spacing: 9px; margin: 8px 0 10px; text-shadow: 0 0 34px currentColor; }
+  .title { position: relative; font: 700 62px/1 var(--f-head); letter-spacing: 10px; margin: 8px 0 10px; text-shadow: 0 0 34px currentColor; }
   .tagline { color: #d6dbe8; font-size: 18px; margin-bottom: 24px; }
   .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .play { position: relative; overflow: hidden; min-width: 230px; height: 56px; padding: 0 32px; font: 700 16px var(--f-head); letter-spacing: 3px; color: #160900;
@@ -167,7 +166,7 @@
     <div class="row"><div><b>Hintergrund-Effekte</b><small>Raster und Funken – aus spart Leistung auf schwachen PCs.</small></div><button class="sw" data-k="effects"></button></div>
   </div>
   <div class="grp"><span class="label">// Info</span>
-    <div class="row"><div><b id="iver">SPARK</b><small>Der Game-Launcher von MrZock</small></div><div class="links"><button class="sec" id="lweb">🌐 Webseite</button><button class="sec" id="lgit">Alle Versionen</button></div></div>
+    <div class="row"><div><b id="iver">SPARK</b><small>Der Game-Launcher von MrZock</small></div><div class="links"><button class="sec" id="lweb">🌐 Webseite</button><button class="sec" id="lgit">Alle Versionen</button><button class="sec" id="lpriv">Datenschutz</button></div></div>
   </div>
 </div></div>
 <script>
@@ -286,6 +285,7 @@ for (const b of document.querySelectorAll('.sw')) b.onclick = async () => { SET 
 $('sfolder').onclick = () => window.spark.folder('');
 $('lweb').onclick = () => window.spark.openWeb('site');
 $('lgit').onclick = () => window.spark.openWeb('github');
+$('lpriv').onclick = () => window.spark.openWeb('privacy');
 window.spark.onUpdate(onUpdate);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') $('modal').classList.remove('open'); else if (e.key === 'Enter' && $('act') && !$('modal').classList.contains('open')) $('act').click(); });
 load();

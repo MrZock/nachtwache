@@ -241,7 +241,7 @@ ipcMain.handle('state', () => ({ games: catalog.games.map(view), offline, loadin
 ipcMain.handle('set', (e, k, v) => { if (k in SET_DEF && typeof v === 'boolean') { set()[k] = v; writeJson(setFile(), set()); } return set(); });
 ipcMain.handle('update-check', () => checkUpdate());
 ipcMain.handle('update-run', () => runUpdate());
-ipcMain.handle('open-web', (e, which) => shell.openExternal(which === 'github' ? 'https://github.com/' + SPARK_REPO + '/releases' : SITE));
+ipcMain.handle('open-web', (e, which) => shell.openExternal(which === 'github' ? 'https://github.com/' + SPARK_REPO + '/releases' : which === 'privacy' ? SITE + 'datenschutz.html' : SITE));
 ipcMain.handle('refresh', async () => { await loadCatalog(); return true; });
 ipcMain.handle('install', (e, id) => install(String(id)));
 ipcMain.handle('uninstall', (e, id) => uninstall(String(id)));

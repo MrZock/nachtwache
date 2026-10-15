@@ -12,14 +12,14 @@ const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 768;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 150, NIGHT_LEN = 140;   // längere Tage und Nächte (Alpha 1.6.0)
-const GAME_VER = 'Alpha 1.7.0';
+const GAME_VER = 'Alpha 1.7.1';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
 const TAU = Math.PI * 2;
 const FONT = '"Segoe UI", "Trebuchet MS", Roboto, sans-serif';
-const FONT_T = '"Black Ops One", Impact, "Arial Black", sans-serif';   // Titel im Rost-Look
-const FONT_P = 'Silkscreen, "Courier New", monospace';                  // Pixel-Schrift
+const FONT_T = 'Impact, Haettenschweiler, "Arial Black", sans-serif';   // Titel im Rost-Look (Systemschrift, keine Verbindung zu Google)
+const FONT_P = '"Cascadia Mono", Consolas, "Courier New", monospace';   // Technik-Schrift (Systemschrift)
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => (a + Math.random() * (b - a + 1)) | 0;
@@ -603,8 +603,11 @@ const SET_OPTS = [
   { id: 'joy', name: 'Joystick-Größe (Handy)', list: ['Klein', 'Normal', 'Groß'], val: [0.8, 1, 1.25] },
   { id: 'tut', name: 'Tutorial im nächsten neuen Spiel', list: ['Aus', 'An'] },
   { id: 'pvp', name: 'PvP (wenn du online hostest)', list: ['Aus', 'An'], hint: 'Spieler können sich außerhalb ihrer Basis angreifen' },
+  { id: 'rank', name: 'Online-Rangliste', list: ['Aus', 'An'], hint: 'Name & Ergebnis nach jeder Nacht an die Rangliste senden' },
 ];
-const SET = Object.assign({ vol: 3, mus: 2, tut: 1, pvp: 0, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
+const PRIVACY_URL = 'https://mrzock.github.io/spark/datenschutz.html#blackout';
+function openPrivacy() { try { window.open(PRIVACY_URL, '_blank', 'noopener'); } catch (e) {} }
+const SET = Object.assign({ vol: 3, mus: 2, tut: 1, pvp: 0, rank: 1, q: (!HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches) ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }, store.get(SET_KEY, {}) || {});
 let settingsOpen = false, fpsAvg = 60;
 const setVal = id => { const d = SET_OPTS.find(o => o.id === id); return d.val ? d.val[SET[id]] : SET[id]; };
 function settingsApply() {
@@ -3360,7 +3363,7 @@ function drawSlotPicker() {
 //  - Verbindungsaufbau per Copy-&-Paste-Codes (kein eigener Server nötig).
 // =====================================================================
 const ZTYPES = Object.keys(ZDEF), BTYPES = Object.keys(BDEF), PKINDS = ['arrow', 'parrow', 'ball', 'bomb', 'glob', 'fire'], TOOLIDS = TOOL_ORDER;
-const RTC_CFG = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
+const RTC_CFG = { iceServers: [] };   // keine fremden STUN-Server (Datenschutz); online läuft über den eigenen Server
 const r2 = v => Math.round(v * 100) / 100;
 
 function u8ToB64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
@@ -3691,7 +3694,7 @@ function setName() {
     if (chatFilter(n) !== n) { lobbyStatus('Dieser Name ist nicht erlaubt.', true); return; }
     playerName = n; store.set(NAME_KEY, n);
     if (S && S.player) S.player.name = n;
-    if (NET.role === 'client') netSendR({ t: 'name', name: n, pid: playerId });
+    if (NET.role === 'client') netSendR({ t: 'name', name: n, pid: playerId, rank: SET.rank ? 1 : 0 });
     lobbyHide(); SFX.play('click');
   };
   lobbyEl.querySelector('#lb-go').onclick = ok;
@@ -3977,6 +3980,7 @@ function hostHandleClient(m, p) {
   } else if (m.t === 'name') {
     if (m.skin && /^[0-9.]{1,40}$/.test(m.skin)) p.skin = skinStr(skinParse(m.skin));
     if (PID_OK.test(m.pid || '')) p.pid = m.pid;
+    if (m.rank !== undefined) p.noRank = !m.rank;
     const nn = cleanText(m.name, 16), old = p.name;
     p.name = nn && chatFilter(nn) === nn ? nn : p.name;
     if (old && old !== p.name) { addChat('', old + ' heißt jetzt ' + p.name, '#aaa'); hostEv(['c', '', old + ' heißt jetzt ' + p.name, 101]); }
@@ -4072,7 +4076,7 @@ async function clientInitMap(m) {
   SFX.init();
   banner('Verbunden!', 'Ihr baut gemeinsam – Ressourcen werden geteilt', '#7fd8ff');
   tut = null; if (SET.tut) tutStart();
-  netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin), pid: playerId });
+  netSendR({ t: 'name', name: playerName, skin: skinStr(mySkin), pid: playerId, rank: SET.rank ? 1 : 0 });
   addChat('', 'Verbunden! Chat mit T oder Enter, Markierung mit Y.', '#8fe08f');
 }
 function clientBuildings(list) {
@@ -5038,7 +5042,8 @@ function recordRun() {
   store.set(RUNS_KEY, list.slice(0, 10));
   const url = scoreUrl();
   if (!url || S.isClient || !e.nights || HEADLESS) return;
-  const all = S.players.filter(q => q.name).map(q => ({ run: S.runId + '-' + q.name.toLowerCase(), pid: q === me ? playerId : q.pid || '', name: q.name, nights: S.survived, kills: solo ? S.kills : (q.kills | 0), lvl: q.lvl, online: !!NET.role }));
+  if (!S.players.some(q => q.name && (q === me ? !!SET.rank : !q.noRank))) return;
+  const all = S.players.filter(q => q.name && (q === me ? !!SET.rank : !q.noRank)).map(q => ({ run: S.runId + '-' + q.name.toLowerCase(), pid: q === me ? playerId : q.pid || '', name: q.name, nights: S.survived, kills: solo ? S.kills : (q.kills | 0), lvl: q.lvl, online: !!NET.role }));
   try { fetch(url, { method: 'POST', body: JSON.stringify({ list: all }), headers: { 'Content-Type': 'text/plain' } }).catch(() => {}); } catch (err) {}
 }
 function loadRanks() {
@@ -6028,6 +6033,9 @@ function drawOverlays() {
     if (menuMsg) { text(menuMsg, cx, y, 15, '#ff9a8a', 'center'); y += 24; }
     const info = (highscore ? 'REKORD: ' + highscore.nights + ' NÄCHTE · ' + highscore.kills + ' KILLS   ·   ' : '') + '🥚 ' + eggsFound.size + '/' + EGGS.length;
     ctx.font = '13px ' + FONT_P; ctx.fillStyle = '#ffb070'; ctx.textAlign = 'center'; ctx.fillText(info, cx, y);
+    { ctx.font = '12px ' + FONT; const t = 'Datenschutz', tw = ctx.measureText(t).width, ly = VH - 12;
+      text(t, VW - 14 - tw / 2, ly, 12, input.sx > VW - 30 - tw && input.sy > ly - 14 ? '#ffd0a0' : '#8a8478', 'center', '600');
+      ui.push({ x: VW - 22 - tw, y: ly - 14, w: tw + 16, h: 24, fn: openPrivacy }); }
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
