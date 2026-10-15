@@ -32,6 +32,11 @@
     zoom(dy) { R3.zoomLevel = Math.min(1.8, Math.max(0.55, R3.zoomLevel * (dy > 0 ? 1.1 : 1 / 1.1))); },
     stats() { const r = renderer.info.render; return { calls: r.calls, tris: r.triangles, geos: renderer.info.memory.geometries }; },
   };
+  // ?kitcheck in der Adresse: jedes gebaute Modell auf lose Teile prüfen (Ergebnis in window.__kits)
+  if (typeof location !== 'undefined' && /kitcheck/.test(location.search)) {
+    window.__kits = [];
+    R3._kitCheck = L => { const g = kitIslands(L); if (g.length > 1) window.__kits.push({ n: g.length, sizes: g.map(x => x.length), where: (new Error().stack.split(String.fromCharCode(10))[3] || '').trim(), tag: R3._tag, parts: g.filter(x => x.length < 6).map(x => x.map(i => { const all = Object.values(L).flat(), p = all[i]; return [p.g.type.replace('Geometry', ''), +p.x.toFixed(2), +p.y.toFixed(2), +p.z.toFixed(2), p.c]; })) }); };
+  }
 
   // ---------------------------------------------------------------- Materialien
   let matLit, matGlow, matInst, glowTex;
@@ -63,9 +68,22 @@
     }
     lit(...a) { return this.add('lit', ...a); }
     glow(...a) { return this.add('glow', ...a); }
-    build() { const out = {}; for (const k in this.L) out[k] = merge(this.L[k]); return out; }
+    build() { if (R3._kitCheck) R3._kitCheck(this.L); const out = {}; for (const k in this.L) out[k] = merge(this.L[k]); return out; }
   }
   const tmpC = new T.Color();
+  // Prüfhilfe (nur für Tests): wie viele getrennte Teil-Gruppen hat ein Modell? 1 = alles verbunden
+  function kitIslands(L, tol) {
+    const boxes = [];
+    for (const k in L) for (const p of L[k]) {
+      if (!p.g.boundingBox) p.g.computeBoundingBox();
+      e3.set(p.rx, p.ry, p.rz, 'YXZ'); q4.setFromEuler(e3); m4.compose(v3.set(p.x, p.y, p.z), q4, s3.set(p.sx, p.sy, p.sz));
+      boxes.push(p.g.boundingBox.clone().applyMatrix4(m4).expandByScalar(tol || 0.004));
+    }
+    const par = boxes.map((_, i) => i), f = i => par[i] === i ? i : (par[i] = f(par[i]));
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (boxes[i].intersectsBox(boxes[j])) par[f(i)] = f(j);
+    const groups = new Map(); boxes.forEach((b, i) => { const r = f(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); });
+    return [...groups.values()];
+  }
   function merge(parts) {
     const geos = []; let n = 0;
     for (const p of parts) {
@@ -96,7 +114,9 @@
   }
 
   // ---------------------------------------------------------------- Setup
-  let fpView = null, fpTools = null, fpMetal = null, fpHand = null, lastFp = null;
+  let fpView = null, fpWrist = null, fpSleeve = null, fpTools = null, fpMetal = null, fpHand = null, lastFp = null;
+  // Ego-Ansicht: Schulter liegt unten rechts außerhalb des Bildes, der Ärmel reicht immer bis dorthin (Arm bleibt am Körper)
+  const FP_SH = new T.Vector3(0.36, -0.66, 0.12), FP_Z = new T.Vector3(0, 0, 1), fpW = new T.Vector3();
   let hutWall, hutRoof, hutGable, boxBody, boxLid, well, curb, zebra, bench, bin, roofSlab, roofTank, roofAC, antenna, signBox, trafficLight, blastDoor, swConsole, floatRock, riftObj = null, ruinFloor, ruinTop, bunkerWall, bPipe, bLamp, bLampG, bCrate, bMachine, bTank, bTankG, peaks, peakSnow, trunks, pine1, pine2, pine3, oaks, rocks, ores, grass, flowers, bushes, cacti, voids, crystals, cars, barrels, rubble, lamps, snowcap;
   const portalObjs = [];
   let zGore, zSkull, zLeg, zTorso, zHead, zArm, zEye, zHorn, zBarrel, zHelm, zPlate, zHat, zStaff, zSack;
@@ -175,7 +195,8 @@
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.03;
     scene.add(sun); scene.add(sun.target);
     scene.add(camera);
-    fpView = new T.Group(); fpView.position.set(0.3, -0.32, -0.5); fpView.scale.setScalar(0.72); fpView.visible = false; camera.add(fpView);
+    fpView = new T.Group(); fpView.position.copy(FP_SH); fpView.scale.setScalar(0.72); fpView.visible = false; camera.add(fpView);
+    fpWrist = new T.Group(); fpView.add(fpWrist);
     for (let i = 0; i < NL; i++) { const l = new T.PointLight(0xffb060, 0, 9, 1.3); scene.add(l); pointLights.push(l); }
 
     const outer = new T.Mesh(new T.PlaneGeometry(4000, 4000), lambert('#1d2a18'));
@@ -212,7 +233,7 @@
       .lit(BX(1.04, 0.08, 1.04), '#6a6e76', 0, 2.2, 0).build().lit, matInst, 6000, true);
     // Holzhütte: Wand aus waagerechten Balken mit Eckpfosten, Satteldach (Größe je Hütte), Giebel
     { const k = new Kit();
-      for (let j = 0; j < 6; j++) k.lit(CY(0.16, 0.16, 1.02, 7), j % 2 ? '#ffffff' : '#ece4dc', 0, 0.16 + j * 0.33, 0, 0, 0, Math.PI / 2, 1, 1, 1, 0.12);
+      for (let j = 0; j < 6; j++) k.lit(CY(0.175, 0.175, 1.02, 7), j % 2 ? '#ffffff' : '#ece4dc', 0, 0.17 + j * 0.33, 0, 0, 0, Math.PI / 2, 1, 1, 1, 0.12);
       k.lit(BX(1.02, 0.1, 0.36), '#bfb2a6', 0, 2.02, 0);
       hutWall = inst(k.build().lit, matInst, 3000, true); }
     { const k = new Kit();   // Dachfläche 1×1 (wird je Hütte gestreckt), Schindelreihen
@@ -228,13 +249,13 @@
     // Dorfbrunnen
     { const k = new Kit().lit(CY(0.75, 0.8, 0.7, 12, true), '#8a8680', 0, 0.35, 0).lit(TO(0.75, 0.1, 5, 14), '#9a958e', 0, 0.7, 0, Math.PI / 2).lit(CY(0.68, 0.68, 0.05, 12), '#1a2a3a', 0, 0.45, 0)
         .lit(BX(0.12, 1.5, 0.12), '#6a4a2a', 0.65, 1.2, 0).lit(BX(0.12, 1.5, 0.12), '#6a4a2a', -0.65, 1.2, 0).lit(CY(0.06, 0.06, 1.4, 6), '#5a3a20', 0, 1.75, 0, 0, 0, Math.PI / 2)
-        .lit(BX(1.7, 0.08, 1.0), '#7a3a26', 0, 2.1, 0.25, 0.5).lit(BX(1.7, 0.08, 1.0), '#7a3a26', 0, 2.1, -0.25, -0.5).lit(CY(0.12, 0.1, 0.22, 8), '#6a5a4a', 0, 1.2, 0);
+        .lit(BX(1.7, 0.08, 1.0), '#7a3a26', 0, 2.1, 0.25, 0.5).lit(BX(1.7, 0.08, 1.0), '#7a3a26', 0, 2.1, -0.25, -0.5).lit(CY(0.12, 0.1, 0.22, 8), '#6a5a4a', 0, 1.2, 0).lit(CY(0.012, 0.012, 0.46, 4), '#c8b890', 0, 1.52, 0);
       well = inst(k.build().lit, matInst, 20, true); }
     // Stadt: erhöhter Bürgersteig, Zebrastreifen, Bank, Mülltonne
     curb = inst(new Kit().lit(BX(1, 0.07, 1), '#ffffff', 0, 0.035, 0, 0, 0, 0, 1, 1, 1, 0.04).build().lit, matInst, 3000, true);
     { const k = new Kit(); for (let j = 0; j < 3; j++) k.lit(BX(0.95, 0.012, 0.16), '#e8e8e0', 0, 0.006, -0.33 + j * 0.33, 0, 0, 0, 1, 1, 1, 0.03);
       zebra = inst(k.build().lit, matInst, 600, false); }
-    bench = inst(new Kit().lit(BX(1.1, 0.06, 0.36), '#8a5a32', 0, 0.42, 0).lit(BX(1.1, 0.3, 0.06), '#8a5a32', 0, 0.62, -0.17, -0.2).lit(BX(0.06, 0.42, 0.36), '#3a3e46', 0.48, 0.21, 0)
+    bench = inst(new Kit().lit(BX(1.1, 0.06, 0.36), '#8a5a32', 0, 0.42, 0).lit(BX(1.1, 0.3, 0.06), '#8a5a32', 0, 0.62, -0.17, -0.2).lit(BX(0.05, 0.32, 0.05), '#3a3e46', 0.48, 0.58, -0.16).lit(BX(0.05, 0.32, 0.05), '#3a3e46', -0.48, 0.58, -0.16).lit(BX(0.06, 0.42, 0.36), '#3a3e46', 0.48, 0.21, 0)
       .lit(BX(0.06, 0.42, 0.36), '#3a3e46', -0.48, 0.21, 0).build().lit, matInst, 300, true);
     bin = inst(new Kit().lit(CY(0.2, 0.17, 0.62, 10), '#4a6a4a', 0, 0.31, 0).lit(CY(0.22, 0.22, 0.06, 10), '#3a4a3a', 0, 0.64, 0).lit(BX(0.24, 0.03, 0.05), '#2a2a2a', 0, 0.68, 0).build().lit, matInst, 300, true);
     // Stadt: Flachdach mit Brüstung, Wassertank, Klimakasten, Antenne, Leuchtreklame, Ampel
@@ -245,7 +266,7 @@
     roofAC = inst(new Kit().lit(BX(0.9, 0.55, 0.6), '#9a9c9e', 0, 0.28, 0).lit(CY(0.2, 0.2, 0.04, 10), '#3a3a3e', 0, 0.57, 0).lit(BX(0.92, 0.04, 0.62), '#6a6c6e', 0, 0.02, 0).build().lit, matInst, 300, true);
     antenna = inst(new Kit().lit(CY(0.05, 0.08, 4.2, 6), '#5a5e66', 0, 2.1, 0).lit(BX(1.2, 0.05, 0.05), '#5a5e66', 0, 3.0, 0).lit(BX(0.8, 0.05, 0.05), '#5a5e66', 0, 3.6, 0)
       .lit(BX(0.5, 0.5, 0.5), '#3a3e46', 0, 0.25, 0).lit(SP(0.09, 6, 4), '#c82a2a', 0, 4.25, 0).build().lit, matInst, 20, true);
-    signBox = inst(new Kit().lit(BX(0.08, 0.55, 1.5), '#1a1a1e', 0, 0, 0).lit(BX(0.1, 0.06, 0.06), '#3a3a3e', -0.12, 0.2, 0.5).lit(BX(0.1, 0.06, 0.06), '#3a3a3e', -0.12, 0.2, -0.5).build().lit, matInst, 100, false);
+    signBox = inst(new Kit().lit(BX(0.08, 0.55, 1.5), '#1a1a1e', 0, 0, 0).lit(BX(0.12, 0.06, 0.06), '#3a3a3e', -0.08, 0.2, 0.5).lit(BX(0.12, 0.06, 0.06), '#3a3a3e', -0.08, 0.2, -0.5).build().lit, matInst, 100, false);
     trafficLight = inst(new Kit().lit(CY(0.05, 0.06, 2.6, 6), '#3a3e46', 0, 1.3, 0).lit(BX(0.9, 0.06, 0.06), '#3a3e46', 0.42, 2.5, 0).lit(BX(0.2, 0.5, 0.2), '#22252a', 0.82, 2.25, 0)
       .lit(BX(0.24, 0.06, 0.24), '#22252a', 0.82, 2.52, 0).build().lit, matInst, 120, true);
     // Bunker: Panzertür des Tresors (Warnstreifen, Handrad) und Sicherungsschalter
@@ -273,7 +294,7 @@
         .lit(CY(0.09, 0.09, 0.04, 10), '#c8a040', 0.3, 0.5, 0.31, Math.PI / 2, 0, 0).lit(BX(0.06, 0.06, 0.02), '#d82a2a', -0.25, 0.8, 0.31).lit(BX(0.06, 0.06, 0.02), '#2ad84a', -0.12, 0.8, 0.31);
       bMachine = inst(k.build().lit, matInst, 300, true); }
     bTank = inst(new Kit().lit(CY(0.32, 0.36, 0.14, 12), '#4a4e56', 0, 0.07, 0).lit(CY(0.32, 0.32, 0.12, 12), '#4a4e56', 0, 1.5, 0).lit(CY(0.05, 0.05, 0.4, 6), '#7a7e86', 0, 1.75, 0)
-      .lit(BX(0.04, 1.3, 0.04), '#6a6e76', 0.3, 0.8, 0).lit(BX(0.04, 1.3, 0.04), '#6a6e76', -0.3, 0.8, 0).lit(BX(0.04, 1.3, 0.04), '#6a6e76', 0, 0.8, 0.3).lit(BX(0.04, 1.3, 0.04), '#6a6e76', 0, 0.8, -0.3)
+      .lit(BX(0.04, 1.4, 0.04), '#6a6e76', 0.3, 0.78, 0).lit(BX(0.04, 1.4, 0.04), '#6a6e76', -0.3, 0.78, 0).lit(BX(0.04, 1.4, 0.04), '#6a6e76', 0, 0.78, 0.3).lit(BX(0.04, 1.4, 0.04), '#6a6e76', 0, 0.78, -0.3)
       .build().lit, matInst, 200, true);
     bTankG = inst(new Kit().lit(CY(0.28, 0.28, 1.3, 12), '#ffffff', 0, 0.79, 0).lit(SP(0.12, 7, 5), '#c8ffc8', 0.05, 0.9, 0.05).build().lit, new T.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55, toneMapped: false }), 200, false);
     ores = inst(new Kit()
@@ -354,8 +375,8 @@
         .lit(BX(0.42, 0.34, 0.7), '#e6e6e6', -0.2, 0.32, 0, 0, 0, 0.3)
         .lit(SP(0.29, 7, 5), '#e8e8e8', 0, 0.38, 0.43).lit(SP(0.29, 7, 5), '#dcdcdc', 0, 0.36, -0.43)
         .lit(BX(0.46, 0.1, 0.46), '#cfcfcf', 0.02, 0.5, 0);
-      for (let i = 0; i < 7; i++) { const zz = -0.38 + i * 0.13, len = 0.16 + ((i * 37) % 5) * 0.05; k.lit(BX(0.04, len, 0.1), i % 2 ? '#f0f0f0' : '#d8d8d8', 0.27, -0.32 - len / 2, zz, 0, 0, ((i * 13) % 5 - 2) * 0.08); }
-      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) k.lit(BX(0.12, 0.14 + i * 0.05, 0.04), '#e0e0e0', -0.18 + i * 0.16, -0.58 - i * 0.02, s * 0.44, 0, 0, 0.1 * s);
+      for (let i = 0; i < 7; i++) { const zz = -0.38 + i * 0.13, len = 0.16 + ((i * 37) % 5) * 0.05; k.lit(BX(0.04, len, 0.1), i % 2 ? '#f0f0f0' : '#d8d8d8', 0.2, -0.44 - len / 2, zz * 0.95, 0, 0, ((i * 13) % 5 - 2) * 0.08); }
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) k.lit(BX(0.12, 0.14 + i * 0.05, 0.04), '#e0e0e0', -0.18 + i * 0.16, -0.55 - i * 0.025, s * 0.39, 0, 0, 0.1 * s);
       zTorso = inst(k.build().lit, matInst, MAXZ, true); }
     // Wunden & Knochen (eigene Farben, werden nicht eingefärbt)
     zGore = inst(new Kit()
@@ -626,7 +647,7 @@
       if (i > 0 && i < n) k.lit(BX(size, size * 1.1, size), c, -half, y, t).lit(BX(size, size * 1.1, size), c, half, y, t);
     }
   }
-  function buildSpec(type, lvl) {
+  function buildSpec(type, lvl) { R3._tag = type + lvl;
     const P = PAL[lvl - 1], parts = [], glowsS = [];
     const prt = (anim, x, y, z, extra) => { const k = new Kit(); parts.push(Object.assign({ anim, x: x || 0, y: y || 0, z: z || 0, kit: k }, extra || {})); return k; };
     const glow = (x, y, z, s, c, night, flick) => { const o = { x, y, z, s, c, night: !!night, flick: !!flick }; glowsS.push(o); return o; };
@@ -706,7 +727,7 @@
         core.glow(OC(0.3), '#ffb050', 0, 0, 0, 0, 0, 0, 1, 1.4, 1, 0.05).glow(OC(0.17), '#fff3c0', 0, 0, 0, 0, 0.7, 0, 1, 1.3, 1, 0);
         glow(0, 3.35, 0, 2.6, '#ff9a3a', false, false).bob = true;
         glow(0, 1.5, 0, 2.4, '#ff8a2a', true, true);
-        for (const s of [-1, 1]) { st.lit(CY(0.03, 0.03, 0.3, 5), '#5a3a1a', s * 0.5, 1.2, 1.36); st.glow(OC(0.06), '#ffcf6a', s * 0.5, 1.4, 1.36); glow(s * 0.5, 1.42, 1.38, 0.7, '#ff9a3a', false, true); }
+        for (const s of [-1, 1]) { st.lit(CY(0.035, 0.045, 1.3, 6), '#5a3a1a', s * 0.42, 0.77, 1.52).lit(CY(0.07, 0.04, 0.1, 6), '#3a2a1a', s * 0.42, 1.44, 1.52); st.glow(OC(0.07), '#ffcf6a', s * 0.42, 1.54, 1.52); glow(s * 0.42, 1.58, 1.52, 0.7, '#ff9a3a', false, true); }   // Fackeln stehen auf der Treppe vor dem Tor
         break;
       }
       case 'arrow': {
@@ -720,7 +741,7 @@
         const tu = prt('turret', 0, 2.12, 0);
         tu.lit(CY(0.24, 0.3, 0.16, 8), P.metal, 0, 0, 0).lit(BX(0.5, 0.28, 0.36), P.main, 0.05, 0.2, 0).lit(BX(0.18, 0.2, 0.42), P.dark, -0.25, 0.2, 0)
           .lit(CY(0.04, 0.04, 0.7, 6), '#222226', 0.6, 0.29, 0.07, 0, 0, Math.PI / 2).lit(CY(0.04, 0.04, 0.7, 6), '#222226', 0.6, 0.29, -0.07, 0, 0, Math.PI / 2)
-          .lit(CY(0.07, 0.07, 0.12, 8), P.dark, 0.95, 0.29, 0, 0, 0, Math.PI / 2).lit(BX(0.2, 0.18, 0.1), '#5a6044', 0, 0.2, 0.26)
+          .lit(CY(0.07, 0.07, 0.12, 8), P.dark, 0.95, 0.29, 0, 0, 0, Math.PI / 2).lit(BX(0.2, 0.18, 0.1), '#5a6044', 0, 0.2, 0.22)
           .lit(BX(0.04, 0.3, 0.36), P.trim, 0.32, 0.36, 0, 0, 0, 0.3).glow(BX(0.02, 0.04, 0.04), '#ff4a2a', 0.31, 0.3, 0.15);
         break;
       }
@@ -731,7 +752,7 @@
         for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; st.lit(BX(0.24, 0.22, 0.2), P.light, Math.cos(a) * 0.82, 0.88, Math.sin(a) * 0.82, 0, -a, 0); }
         for (const [x, z] of [[-0.55, 0.55], [-0.4, 0.62], [-0.5, 0.42]]) st.lit(SP(0.09, 8, 6), '#1e1e22', x, 0.86, z);
         const tu = prt('turret', 0, 0.78, 0);
-        for (const s of [-1, 1]) tu.lit(BX(0.6, 0.28, 0.08), '#6b4a2a', -0.05, 0.14, s * 0.19).lit(CY(0.18, 0.18, 0.06, 10), '#4a3018', -0.05, 0.16, s * 0.27, Math.PI / 2, 0, 0).lit(CY(0.05, 0.05, 0.08, 6), P.metal, -0.05, 0.16, s * 0.3, Math.PI / 2, 0, 0);
+        for (const s of [-1, 1]) tu.lit(BX(0.6, 0.28, 0.08), '#6b4a2a', -0.05, 0.14, s * 0.19).lit(CY(0.18, 0.18, 0.06, 10), '#4a3018', -0.05, 0.16, s * 0.25, Math.PI / 2, 0, 0).lit(CY(0.05, 0.05, 0.08, 6), P.metal, -0.05, 0.16, s * 0.28, Math.PI / 2, 0, 0);
         tu.lit(CY(0.12, 0.17, 1.05, 12), '#2a2a32', 0.32, 0.34, 0, 0, 0, -Math.PI / 2 + 0.12)
           .lit(TO(0.13, 0.03, 5, 12), P.metal, 0.83, 0.4, 0, 0, Math.PI / 2, 0).lit(TO(0.16, 0.025, 5, 12), P.metal, 0.05, 0.31, 0, 0, Math.PI / 2, 0)
           .lit(SP(0.1, 8, 6), '#2a2a32', -0.22, 0.3, 0);
@@ -771,8 +792,8 @@
         st.lit(BX(1.9, 0.2, 1.9), P.stone, 0, 0.1, 0);
         for (const [x, z, r] of [[-0.6, -0.6, 0.32], [0.65, -0.55, 0.28], [-0.65, 0.6, 0.26]]) st.lit(DO(r), '#7a6a54', x, r * 0.6, z, x, z, 0, 1, 0.8, 1, 0.12);
         for (const [x, z] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) st.lit(BX(0.09, 2.2, 0.09), P.metal, x * 0.8, 1.2, z * 0.8, z * 0.18, 0, -x * 0.18);
-        for (let h = 0; h < 4; h++) for (const s of [-1, 1]) st.lit(BX(0.75 - h * 0.12, 0.04, 0.04), P.dark, 0, 0.5 + h * 0.5, s * (0.36 - h * 0.06)).lit(BX(0.04, 0.04, 0.75 - h * 0.12), P.dark, s * (0.36 - h * 0.06), 0.5 + h * 0.5, 0);
-        st.lit(BX(0.4, 0.2, 0.4), P.trim, 0, 2.35, 0).glow(SP(0.05, 5, 4), '#ff3a2a', 0, 2.5, 0);
+        for (let h = 0; h < 4; h++) for (const s of [-1, 1]) st.lit(BX(0.78 - h * 0.11, 0.04, 0.04), P.dark, 0, 0.5 + h * 0.5, s * (0.36 - h * 0.05)).lit(BX(0.04, 0.04, 0.78 - h * 0.11), P.dark, s * (0.36 - h * 0.05), 0.5 + h * 0.5, 0);
+        st.lit(BX(0.5, 0.22, 0.5), P.trim, 0, 2.28, 0).glow(SP(0.05, 5, 4), '#ff3a2a', 0, 2.42, 0);
         st.lit(BX(0.5, 0.4, 0.5), P.main, 0.6, 0.4, 0.55).lit(CY(0.06, 0.06, 0.6, 6), '#3a3a40', 0.75, 0.9, 0.7);
         for (let i = 0; i < 4; i++) { st.lit(OC(0.07), '#ffd36b', -0.2 + (i % 2) * 0.4, 0.26, 0.6 + (i >> 1) * 0.15, i, i, 0, 0.9, 1.4, 0.9, 0.15); }
         glow(0, 0.35, 0.65, 0.6, '#ffd36b', true, false);
@@ -1117,7 +1138,7 @@
 
   // Vorschau für den Skin-Editor im Hauptmenü (eigener kleiner Renderer)
   let pvR = null, pvScene = null, pvCam = null, pvObj = null, pvKey = '';
-  R3._dbg = { toolKit, buildPlayer, poseTool };   // für Modell-Vorschauen in Tests
+  R3._dbg = { toolKit, buildPlayer, poseTool, kitIslands, Kit, specFor, makeAnimal, get fp() { return fpView; }, get cam() { return camera; } };   // für Modell-Vorschauen in Tests
   R3.skinPreview = function (skin, ang) {
     if (!R3.ready) return null;
     if (!pvR) {
@@ -1148,14 +1169,16 @@
   function updateFpView(p, at) {
     // Hand in den Farben des eigenen Skins: Ärmel, Armschiene, Handschuh (Faust um den Griff, Daumen oben)
     const hk = lookKey(p);
-    if (fpHand && fpHand.userData.key !== hk) { fpView.remove(fpHand); fpHand.geometry.dispose(); fpHand = null; }
+    if (fpHand && fpHand.userData.key !== hk) { fpWrist.remove(fpHand); fpHand.geometry.dispose(); fpHand = null; fpView.remove(fpSleeve); fpSleeve.geometry.dispose(); fpSleeve = null; }
     if (!fpHand) {
       const sk = G.skinParse(p.skin || ''), O = G.SKIN_OPTS, pick = id => { const d = O.find(o => o.id === id); return (d.colors || d.list)[sk[id]]; };
       const J = pick('c'), GL = p.eq && p.eq.g ? (G.ARMOR_COL || [])[p.eq.g] : '#3a2a1a';
       fpHand = new T.Mesh(new Kit().lit(BX(0.13, 0.12, 0.13), GL, 0, -0.005, 0.03).lit(BX(0.05, 0.04, 0.07), GL, 0.04, 0.07, 0.02)
-        .lit(BX(0.135, 0.125, 0.06), '#6a5e52', 0, -0.01, 0.12).lit(BX(0.138, 0.02, 0.062), '#8a4a2a', 0, -0.01, 0.15)
-        .lit(BX(0.15, 0.15, 0.26), J, 0, -0.02, 0.27).build().lit, matLit);
-      fpHand.userData.key = hk; fpHand.renderOrder = 10; fpView.add(fpHand);
+        .lit(BX(0.135, 0.125, 0.06), '#6a5e52', 0, -0.01, 0.12).lit(BX(0.138, 0.02, 0.062), '#8a4a2a', 0, -0.01, 0.15).build().lit, matLit);
+      fpHand.userData.key = hk; fpHand.renderOrder = 10; fpWrist.add(fpHand);
+      // Ärmel: Einheitslänge entlang +z (von der Schulter bis zum Handgelenk), wird jedes Bild ausgerichtet
+      fpSleeve = new T.Mesh(new Kit().lit(BX(0.15, 0.15, 1), J, 0, -0.02, -0.5).lit(BX(0.16, 0.16, 0.08), '#' + col.set(J).offsetHSL(0, 0, -0.1).getHexString(), 0, -0.02, -0.9).build().lit, matLit);
+      fpSleeve.renderOrder = 10; fpView.add(fpSleeve);
     }
     if (!fpTools) {
       fpTools = {}; fpMetal = new T.MeshLambertMaterial({ vertexColors: true, flatShading: true, color: '#dfe6ee', emissive: '#1a1a1a' });
@@ -1163,7 +1186,7 @@
         const tg = new T.Group(), k = toolKit(id);
         if (k.lit) tg.add(new T.Mesh(k.lit, matLit)); if (k.metal) tg.add(new T.Mesh(k.metal, fpMetal)); if (k.glow) tg.add(new T.Mesh(k.glow, matGlow));
         tg.rotation.set(0, Math.PI / 2, id === 'bow' || id === 'staff' ? 0.04 : 0.5); tg.position.set(0, 0, 0);
-        fpView.add(tg); fpTools[id] = tg;
+        fpWrist.add(tg); fpTools[id] = tg;
       }
       fpView.traverse(o => { o.renderOrder = 10; if (o.material) { o.material = o.material; } });
     }
@@ -1171,8 +1194,17 @@
     const swp = p.swing > 0 ? Math.sin((1 - p.swing / 0.3) * Math.PI) : 0;
     const w = walkPh.get('p' + p.id) || { ph: 0, mv: 0 };
     const aim = p.tool === 'bow' || p.tool === 'staff';   // Fernwaffen zeigen auf das Fadenkreuz
-    fpView.position.set((aim ? 0.2 : 0.3) + Math.sin(w.ph) * 0.015 * w.mv, (aim ? -0.25 : -0.32) + Math.abs(Math.cos(w.ph)) * 0.015 * w.mv, -0.5 - (p.tool === 'spear' ? swp * 0.35 : 0));
-    fpView.rotation.set(aim ? 0.05 + swp * 0.12 : p.tool === 'spear' ? 0 : -swp * 1.3, aim ? 0.1 : p.tool === 'axe' ? swp * 1.2 : 0, p.tool === 'pick' ? swp * 0.4 : 0);
+    // Schulter dreht den ganzen Arm ein Stück, das Handgelenk führt die Waffe – der Ärmel bleibt immer verbunden
+    const tl = p.tool, melee = !aim && tl !== 'spear';
+    fpView.position.set(FP_SH.x + Math.sin(w.ph) * 0.015 * w.mv, FP_SH.y + Math.abs(Math.cos(w.ph)) * 0.015 * w.mv, FP_SH.z);
+    const t = p.swing > 0 ? 1 - p.swing / 0.3 : -1, wind = t < 0 ? 0 : t < 0.3 ? smooth(t / 0.3) : 1 - smooth((t - 0.3) / 0.12);
+    const hit = t < 0.3 ? 0 : t < 0.48 ? smooth((t - 0.3) / 0.18) : 1 - smooth((t - 0.48) / 0.52);
+    fpView.rotation.set(melee ? wind * 0.22 - hit * 0.04 : aim ? swp * 0.06 : 0, melee ? wind * 0.06 + hit * (tl === 'axe' ? 0.32 : 0.24) : 0, 0);
+    fpWrist.position.set(((aim ? 0.2 : 0.3) - FP_SH.x) / 0.72, ((aim ? -0.25 : -0.32) - FP_SH.y) / 0.72, (-0.5 - FP_SH.z - (tl === 'spear' ? swp * 0.3 : 0)) / 0.72);
+    fpWrist.rotation.set(aim ? 0.05 + swp * 0.08 : tl === 'spear' ? 0 : wind * 0.6 - hit * 0.65, aim ? 0.1 : tl === 'axe' ? hit * 0.5 : 0, melee ? hit * (tl === 'pick' ? 0.4 : 0.7) : 0);
+    fpW.copy(fpWrist.position); fpW.z += 0.16;   // Ärmel endet hinter der Faust
+    const len = fpW.length(); fpSleeve.quaternion.setFromUnitVectors(FP_Z, fpW.normalize().negate()); fpSleeve.scale.set(1, 1, len);
+    fpSleeve.position.set(0, 0, 0);
     const lv = (p.tl && p.tl[p.tool]) || 1;
     fpMetal.color.set(G.TMET[Math.min(4, lv - 1)]);
   }
@@ -1290,6 +1322,75 @@
       for (let i = 0; i < 3; i++) for (const sd of [-1, 1]) k.lit(BX(0.008, 0.008, 0.22), '#e8e8e8', 0.8, L + 0.66 + (i - 1) * 0.03, sd * 0.14, 0, sd * (i - 1) * 0.2, 0);
       for (const sd of [-1, 1]) k.lit(SP(0.1, 7, 5), fc, 0.36, L + 1.18, sd * 0.13, sd * 0.25, 0, 0.3, 0.55, 3.2, 1.1).lit(SP(0.07, 6, 4), '#f0a8b8', 0.39, L + 1.18, sd * 0.135, sd * 0.25, 0, 0.3, 0.3, 2.8, 0.9);
       leg(0.33, 0.15, L, 0.1, lt); leg(0.33, -0.15, L, 0.1, lt);
+    } else if (an.type === 'fox' || an.type === 'wolf') {
+      const wolf = an.type === 'wolf', W = wolf ? '#d8d8dc' : '#f4ece0', ear = wolf ? dk : '#2a1a10';
+      L = wolf ? 0.72 : 0.45;
+      k.lit(SP(0.42, 10, 7), fc, 0, L + 0.32, 0, 0, 0, 0, 1.6, 0.78, 0.72).lit(SP(0.3, 8, 6), W, 0.3, L + 0.2, 0, 0, 0, 0, 1.1, 0.7, 0.75)
+        .lit(SP(0.24, 8, 6), fc, 0.55, L + 0.55, 0, 0, 0, 0, 1.1, 1.05, 1).lit(SP(0.28, 8, 6), wolf ? dk : fc, 0.45, L + 0.5, 0, 0, 0, 0, 0.9, 1.1, 1.15)
+        .lit(CO(0.13, 0.36, 6), fc, 0.86, L + 0.47, 0, 0, 0, -Math.PI / 2 - 0.12).lit(SP(0.06, 6, 4), W, 0.82, L + 0.4, 0, 0, 0, 0, 1.6, 0.7, 1.4)
+        .lit(SP(0.04, 5, 4), '#141010', 1.03, L + 0.45, 0)
+        .lit(SP(0.035, 5, 4), wolf ? '#e8c040' : '#2a1a10', 0.74, L + 0.62, 0.11).lit(SP(0.035, 5, 4), wolf ? '#e8c040' : '#2a1a10', 0.74, L + 0.62, -0.11)
+        .lit(SP(0.17, 7, 5), fc, -0.62, L + 0.3, 0, 0, 0, -0.5, 2.2, 0.85, 0.85).lit(SP(0.12, 6, 4), wolf ? dk : W, -0.95, L + 0.1, 0, 0, 0, -0.5, 1.4, 0.9, 0.9);
+      for (const sd of [-1, 1]) k.lit(CO(0.08, 0.2, 4), fc, 0.52, L + 0.82, sd * 0.11, sd * 0.2, 0, 0.1).lit(CO(0.045, 0.12, 4), ear, 0.53, L + 0.84, sd * 0.11, sd * 0.2, 0, 0.1);
+      const w = wolf ? 0.13 : 0.09, ft = wolf ? '#2a2a2e' : '#2a1a10';
+      leg(0.36, 0.15, L, w, ft); leg(0.36, -0.15, L, w, ft); leg(-0.38, 0.15, L, w * 1.1, ft, true); leg(-0.38, -0.15, L, w * 1.1, ft, true);
+    } else if (an.type === 'bear') {
+      L = 0.6;
+      k.lit(SP(0.62, 10, 7), fc, -0.05, L + 0.5, 0, 0, 0, 0, 1.45, 0.95, 0.95).lit(SP(0.45, 9, 6), dk, 0.35, L + 0.72, 0, 0, 0, 0, 1, 0.8, 1)
+        .lit(SP(0.36, 9, 6), fc, 0.8, L + 0.62, 0, 0, 0, 0, 1.05, 1, 1).lit(SP(0.18, 7, 5), lt, 1.1, L + 0.52, 0, 0, 0, 0, 1.3, 0.85, 0.95)
+        .lit(SP(0.06, 5, 4), '#141010', 1.32, L + 0.56, 0).lit(SP(0.04, 5, 4), '#141010', 1.02, L + 0.76, 0.15).lit(SP(0.04, 5, 4), '#141010', 1.02, L + 0.76, -0.15)
+        .lit(SP(0.12, 6, 4), lt, -0.82, L + 0.55, 0);
+      for (const sd of [-1, 1]) k.lit(SP(0.1, 6, 4), fc, 0.7, L + 0.94, sd * 0.22, 0, 0, 0, 0.7, 1, 1).lit(SP(0.06, 5, 4), dk, 0.73, L + 0.94, sd * 0.22, 0, 0, 0, 0.5, 0.8, 0.8);
+      leg(0.5, 0.3, L, 0.26, '#2a1a10'); leg(0.5, -0.3, L, 0.26, '#2a1a10'); leg(-0.55, 0.3, L, 0.28, '#2a1a10', true); leg(-0.55, -0.3, L, 0.28, '#2a1a10', true);
+    } else if (an.type === 'camel') {
+      L = 1.5;
+      k.lit(SP(0.5, 10, 7), fc, 0, L + 0.32, 0, 0, 0, 0, 1.55, 0.75, 0.72).lit(SP(0.34, 9, 6), lt, -0.05, L + 0.68, 0, 0, 0, 0, 1.2, 0.95, 0.85)
+        .lit(SP(0.2, 7, 5), fc, -0.05, L + 0.95, 0, 0, 0, 0, 0.9, 0.7, 0.7)
+        .lit(CY(0.12, 0.17, 0.95, 8), fc, 0.72, L + 0.72, 0, 0, 0, -0.75).lit(SP(0.2, 8, 6), fc, 1.05, L + 1.08, 0, 0, 0, 0, 1.5, 0.85, 0.8)
+        .lit(SP(0.1, 6, 4), lt, 1.3, L + 1.02, 0).lit(SP(0.035, 5, 4), '#141010', 1.0, L + 1.17, 0.13).lit(SP(0.035, 5, 4), '#141010', 1.0, L + 1.17, -0.13)
+        .lit(CY(0.02, 0.03, 0.4, 4), dk, -0.72, L + 0.2, 0, 0, 0, 0.3).lit(SP(0.05, 4, 3), dk, -0.8, L, 0);
+      for (const sd of [-1, 1]) k.lit(SP(0.05, 5, 4), fc, 0.92, L + 1.25, sd * 0.11, 0, 0, 0, 0.7, 1.4, 0.9);
+      leg(0.48, 0.2, L, 0.11, '#6a5030'); leg(0.48, -0.2, L, 0.11, '#6a5030'); leg(-0.5, 0.2, L, 0.12, '#6a5030', true); leg(-0.5, -0.2, L, 0.12, '#6a5030', true);
+    } else if (an.type === 'scorpion') {
+      L = 0.18;
+      k.lit(SP(0.36, 9, 6), fc, 0, L + 0.12, 0, 0, 0, 0, 1.4, 0.45, 0.9).lit(SP(0.22, 8, 5), dk, 0.42, L + 0.12, 0, 0, 0, 0, 1, 0.5, 1.1);
+      // Schwanz: Segmente im Bogen nach oben und nach vorne, mit Stachel
+      let tx = 0, ty = 0;
+      for (let i = 0; i < 10; i++) { const a = i / 9 * 2.4, r = 0.4; tx = -0.42 - Math.sin(a) * r * 0.55; ty = L + 0.14 + (1 - Math.cos(a)) * r; k.lit(SP(0.11 - i * 0.005, 7, 5), i % 2 ? fc : dk, tx, ty, 0); }
+      k.lit(CO(0.055, 0.22, 5), '#c8a040', tx + 0.1, ty - 0.02, 0, 0, 0, -2.0);
+      for (const sd of [-1, 1]) {
+        k.lit(CY(0.04, 0.05, 0.36, 5), fc, 0.62, L + 0.12, sd * 0.2, 0, sd * 0.5, Math.PI / 2).lit(SP(0.1, 7, 5), dk, 0.8, L + 0.12, sd * 0.32, 0, 0, 0, 1.6, 0.7, 1)
+          .lit(CO(0.04, 0.16, 4), dk, 0.96, L + 0.12, sd * 0.36, 0, 0, -Math.PI / 2);
+        for (let j = 0; j < 3; j++) k.lit(CY(0.025, 0.02, 0.36, 4), dk, 0.15 - j * 0.2, L + 0.05, sd * 0.36, sd * 1.0, 0, 0);
+      }
+      k.lit(SP(0.025, 4, 3), '#0a0a0a', 0.58, L + 0.2, 0.06).lit(SP(0.025, 4, 3), '#0a0a0a', 0.58, L + 0.2, -0.06);
+      leg(0.2, 0.22, L, 0.05, dk); leg(0.2, -0.22, L, 0.05, dk); leg(-0.2, 0.22, L, 0.05, dk, true); leg(-0.2, -0.22, L, 0.05, dk, true);
+    } else if (an.type === 'frog') {
+      L = 0.14;
+      k.lit(SP(0.36, 9, 7), fc, 0, L + 0.24, 0, 0, 0, 0.25, 1.2, 0.75, 1).lit(SP(0.3, 8, 6), '#d8e8a0', 0.08, L + 0.12, 0, 0, 0, 0, 1.1, 0.5, 0.9)
+        .lit(SP(0.24, 8, 6), fc, 0.32, L + 0.36, 0, 0, 0, 0, 1, 0.7, 1.15);
+      for (const sd of [-1, 1]) {
+        k.lit(SP(0.1, 7, 5), fc, 0.38, L + 0.52, sd * 0.15).lit(SP(0.07, 6, 4), '#f4e060', 0.42, L + 0.56, sd * 0.16).lit(SP(0.04, 5, 4), '#0a0a0a', 0.47, L + 0.57, sd * 0.17)
+          .lit(SP(0.17, 7, 5), fc, -0.22, L + 0.08, sd * 0.3, 0, 0, 0, 1.6, 0.7, 0.8).lit(SP(0.08, 6, 4), dk, 0.0, 0.04, sd * 0.36, 0, 0, 0, 1.8, 0.4, 1);
+        for (let i = 0; i < 3; i++) k.lit(SP(0.035, 4, 3), dk, -0.1 + i * 0.15, L + 0.42 - Math.abs(i - 1) * 0.04, sd * (0.1 + i * 0.04));
+      }
+      leg(0.25, 0.16, L, 0.06, fc); leg(0.25, -0.16, L, 0.06, fc);
+    } else if (an.type === 'chicken') {
+      L = 0.36;
+      k.lit(SP(0.34, 9, 7), fc, 0, L + 0.3, 0, 0, 0, 0.2, 1.2, 1, 0.9).lit(SP(0.2, 7, 5), fc, 0.28, L + 0.62, 0, 0, 0, 0, 0.9, 1.1, 0.9)
+        .lit(CO(0.06, 0.16, 4), '#e0a020', 0.48, L + 0.62, 0, 0, 0, -Math.PI / 2).lit(BX(0.12, 0.1, 0.04), '#d82a2a', 0.28, L + 0.82, 0)
+        .lit(SP(0.04, 5, 4), '#d82a2a', 0.42, L + 0.52, 0, 0, 0, 0, 0.8, 1.4, 0.8)
+        .lit(SP(0.03, 4, 3), '#0a0a0a', 0.38, L + 0.68, 0.09).lit(SP(0.03, 4, 3), '#0a0a0a', 0.38, L + 0.68, -0.09)
+        .lit(CO(0.16, 0.34, 5), lt, -0.36, L + 0.5, 0, 0, 0, 0.7);
+      for (const sd of [-1, 1]) k.lit(SP(0.16, 7, 5), lt, -0.02, L + 0.3, sd * 0.24, 0, 0, 0.2, 1.4, 0.8, 0.4);
+      leg(0.04, 0.1, L, 0.05, '#e0a020'); leg(0.04, -0.1, L, 0.05, '#e0a020');
+    } else if (an.type === 'rat') {
+      L = 0.12;
+      k.lit(SP(0.3, 9, 6), fc, 0, L + 0.2, 0, 0, 0, 0, 1.6, 0.75, 0.8).lit(CO(0.16, 0.36, 6), fc, 0.58, L + 0.22, 0, 0, 0, -Math.PI / 2 - 0.1)
+        .lit(SP(0.035, 4, 3), '#e87a90', 0.76, L + 0.2, 0).lit(SP(0.03, 4, 3), '#0a0a0a', 0.55, L + 0.32, 0.08).lit(SP(0.03, 4, 3), '#0a0a0a', 0.55, L + 0.32, -0.08)
+        .lit(CY(0.018, 0.035, 0.75, 4), '#c89090', -0.78, L + 0.12, 0, 0, 0, Math.PI / 2 + 0.25);
+      for (const sd of [-1, 1]) k.lit(SP(0.08, 6, 4), '#d8a0a8', 0.42, L + 0.38, sd * 0.12, 0, 0, 0, 0.5, 1, 1);
+      leg(0.22, 0.12, L, 0.05, '#c89090'); leg(0.22, -0.12, L, 0.05, '#c89090'); leg(-0.25, 0.12, L, 0.06, '#c89090', true); leg(-0.25, -0.12, L, 0.06, '#c89090', true);
     } else {
       L = 0.55;
       k.lit(SP(0.52, 10, 7), fc, -0.05, L + 0.44, 0, 0, 0, 0, 1.55, 0.85, 0.85).lit(SP(0.48, 9, 6), fc, 0.35, L + 0.56, 0, 0, 0, 0, 1.1, 1.05, 1)

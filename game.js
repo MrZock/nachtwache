@@ -12,7 +12,7 @@ const TS = 40;            // Tile-Größe in Pixeln
 const MAP = 768;          // Karte: MAP x MAP Tiles (riesig – jeder kann weit weg seine eigene Basis bauen)
 const WORLD = TS * MAP;
 const DAY_LEN = 150, NIGHT_LEN = 140;   // längere Tage und Nächte (Alpha 1.6.0)
-const GAME_VER = 'Alpha 1.6.0';
+const GAME_VER = 'Alpha 1.7.0';
 const BUILD_RANGE = 16;   // Bauradius um den Reaktor (Tiles, Chebyshev) – wächst mit der Stufe
 const buildRange = () => BUILD_RANGE + (S && S.hq ? S.hq.lvl - 1 : 0) * 4;
 const RES_R = 16;         // Kollisionsradius von Bäumen/Felsen
@@ -33,7 +33,7 @@ const angDiff = (a, b) => { let d = a - b; while (d > Math.PI) d -= TAU; while (
 // Läuft das Spiel als Windows-App (Electron)?
 const DESKTOP = typeof window !== 'undefined' && !!window.BLACKOUT_DESKTOP;
 // Netzwerk-Version: bei jeder Änderung am Online-Protokoll erhöhen – Web- und Windows-Version müssen gleich sein
-const NET_VER = 36;
+const NET_VER = 37;
 const WEB_URL = 'https://mrzock.github.io/nachtwache/';
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -613,6 +613,26 @@ function settingsApply() {
   if (typeof calcUiScale === 'function') calcUiScale();
 }
 function settingSet(id, v) { SET[id] = v; store.set(SET_KEY, SET); settingsApply(); }
+// Hauptmenü → Online: erst auswählen, ob man selbst hostet oder einem Spiel beitritt
+let onlinePick = false;
+function drawOnlinePick() {
+  const w = Math.min(560, VW - 24), h = 270, x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.98); ui.push({ x, y, w, h, fn: () => {} });
+  titleText('🌐 ONLINE SPIELEN', x + w / 2, y + 32, 24, '#ff8a3a');
+  text('×', x + w - 22, y + 28, 22, '#aaa', 'center'); ui.push({ x: x + w - 40, y: y + 8, w: 34, h: 34, fn: () => { onlinePick = false; } });
+  const bw = (w - 54) / 2, by = y + 68, bh = 130;
+  [['🏠', 'HOSTEN', 'Eigene Welt starten –', 'Freunde treten mit dem Code bei', () => { onlinePick = false; openSlots('host'); }],
+   ['🔑', 'BEITRETEN', 'Den Raum-Code eines', 'Freundes eingeben', () => { onlinePick = false; lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info'); }]].forEach(([ic, t, d1, d2, fn], i) => {
+    const bx = x + 18 + i * (bw + 18), hov = input.sx >= bx && input.sx <= bx + bw && input.sy >= by && input.sy <= by + bh;
+    ctx.fillStyle = hov ? 'rgba(255,140,60,0.22)' : 'rgba(255,255,255,0.06)'; rr(bx, by, bw, bh, 10); ctx.fill();
+    ctx.strokeStyle = hov ? '#ffb070' : 'rgba(255,160,90,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    text(ic, bx + bw / 2, by + 34, 30, '#fff', 'center');
+    text(t, bx + bw / 2, by + 74, 18, '#ffd0a0', 'center', '700');
+    text(d1, bx + bw / 2, by + 98, 12, '#bbb', 'center', '600'); text(d2, bx + bw / 2, by + 114, 12, '#bbb', 'center', '600');
+    ui.push({ x: bx, y: by, w: bw, h: bh, fn: () => { SFX.play('click'); fn(); } });
+  });
+  button('Zurück', x + w / 2 - 80, y + h - 52, 160, 38, () => { onlinePick = false; }, false, true);
+}
 function drawSettings() {
   const w = Math.min(760, VW - 20), rowH = clamp(Math.floor((VH - 156) / SET_OPTS.length), 40, 50), h = Math.min(VH - 20, 80 + SET_OPTS.length * rowH + 56), x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
   panel(x, y, w, h, 0.97);
@@ -636,7 +656,60 @@ function drawSettings() {
     });
   });
   button('✔ FERTIG', x + w - 190, y + h - 50, 170, 38, () => { settingsOpen = false; }, true, true);
+  if (!isTouch) button('⌨ TASTEN', x + w / 2 - 85, y + h - 50, 170, 38, () => { keysOpen = true; settingsOpen = false; }, false, true);
   button('↺ STANDARD', x + 20, y + h - 50, 170, 38, () => { for (const k of ['vol', 'mus', 'q', 'shake', 'sens', 'fps', 'names', 'ui', 'joy']) SET[k] = { vol: 3, mus: 2, q: isTouch ? 1 : 2, shake: 1, sens: 2, fps: 0, names: 1, ui: 1, joy: 1 }[k]; store.set(SET_KEY, SET); settingsApply(); }, false, true);
+}
+// ---------- Tastenbelegung: jede Aktion kann auf eine eigene Taste gelegt werden (gespeichert als KeyboardEvent.code)
+// Standard: Liste von Codes oder ein Buchstabe (k:) – Buchstaben passen sich dem Tastatur-Layout an (Y/Z auf QWERTZ)
+const KEYS_KEY = 'nachtwache.keys';
+const KEY_ACTS = [
+  ['Bewegen', [['up', 'Vorwärts', ['KeyW', 'ArrowUp']], ['down', 'Rückwärts', ['KeyS', 'ArrowDown']], ['left', 'Links', ['KeyA', 'ArrowLeft']], ['right', 'Rechts', ['KeyD', 'ArrowRight']],
+    ['jump', 'Springen', ['Space']], ['ability', 'Fähigkeit', ['ShiftLeft', 'ShiftRight']]]],
+  ['Waffen', [['pick', 'Spitzhacke', ['KeyQ']], ['sword', 'Schwert', ['KeyE']], ['bow', 'Armbrust', ['KeyR']], ['spear', 'Speer', ['KeyC']], ['axe', 'Axt', ['KeyV']], ['staff', 'Plasmawerfer', ['KeyB']],
+    ['med', 'Medkit', 'k:l'], ['gren', 'Granate', 'k:g'], ['molo', 'Molotow', 'k:z']]],
+  ['Aktionen', [['interact', 'Aktion / Falle', ['KeyF']], ['frost', 'Kryoturm', ['KeyJ']], ['upgrade', 'Upgrade', ['KeyU']], ['sell', 'Verkaufen', ['KeyX', 'Delete']], ['ping', 'Markierung', 'k:y']]],
+  ['Fenster', [['craft', 'Inventar & Bauen', ['KeyI']], ['forge', 'Schmiede', ['KeyH']], ['skills', 'Skills', ['KeyK']], ['map', 'Karte', ['KeyM']], ['list', 'Spielerliste', ['Tab']],
+    ['chat', 'Chat', ['KeyT', 'Enter']], ['view', 'Ansicht wechseln', ['KeyO', 'F5']], ['pause', 'Pause', ['KeyP']], ['mute', 'Ton an/aus', ['KeyN']]]],
+];
+const KEY_DEF = {}; for (const [, list] of KEY_ACTS) for (const [id, name, d] of list) KEY_DEF[id] = { name, d };
+let keyBinds = Object.assign({}, store.get(KEYS_KEY, {}) || {}), keysOpen = false, keyWait = null;
+// passt die Taste zur Aktion? (eigene Belegung geht vor, 'None' = keine Taste)
+function keyIs(e, id) {
+  const b = keyBinds[id];
+  if (b) return e.code === b;
+  const d = KEY_DEF[id].d;
+  return typeof d === 'string' ? (e.key || '').toLowerCase() === d.slice(2) : d.includes(e.code);
+}
+function moveOf(e) { for (const id of ['up', 'down', 'left', 'right']) if (keyIs(e, id)) return id; return null; }
+const KEY_NAMES = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'Shift', ShiftRight: 'Shift R', ControlLeft: 'Strg', ControlRight: 'Strg R', AltLeft: 'Alt', Space: 'Leertaste', Backquote: '^', Delete: 'Entf', CapsLock: 'Feststell' };
+const keyCodeName = c => !c || c === 'None' ? '—' : KEY_NAMES[c] || c.replace(/^Key|^Digit|^Numpad/, '');
+function keyLabel(id) { const b = keyBinds[id]; if (b) return keyCodeName(b); const d = KEY_DEF[id].d; return typeof d === 'string' ? d.slice(2).toUpperCase() : d.map(keyCodeName).join(' / '); }
+function keyAssign(id, code) {
+  // dieselbe Taste wird bei anderen Aktionen frei gemacht
+  for (const o in KEY_DEF) if (o !== id && keyIs({ code, key: '' }, o) && !(typeof KEY_DEF[o].d === 'string' && !keyBinds[o])) keyBinds[o] = 'None';
+  keyBinds[id] = code; store.set(KEYS_KEY, keyBinds);
+}
+function drawKeys() {
+  const cols = VW > 820 ? 2 : 1, all = KEY_ACTS.flatMap(([g, l]) => [[g], ...l]), per = Math.ceil(all.length / cols), rowH = clamp(Math.floor((VH - 150) / per), 20, 30);
+  const w = Math.min(cols === 2 ? 900 : 460, VW - 20), h = Math.min(VH - 20, 100 + per * rowH + 50), x = VW / 2 - w / 2, y = Math.max(10, VH / 2 - h / 2);
+  panel(x, y, w, h, 0.98); ui.push({ x, y, w, h, fn: () => {} });
+  titleText('⌨ TASTENBELEGUNG', x + 24, y + 30, 22, '#ff8a3a', 'left');
+  text(keyWait ? 'Drücke jetzt die neue Taste für „' + KEY_DEF[keyWait].name + '“ (ESC = abbrechen, Entf = Standard)' : 'Klicke auf eine Aktion und drücke dann die neue Taste.', x + 24, y + 58, 12, keyWait ? '#ffe27a' : '#aaa', 'left', '600');
+  text('×', x + w - 22, y + 28, 22, '#aaa', 'center'); ui.push({ x: x + w - 40, y: y + 8, w: 34, h: 34, fn: () => { keysOpen = false; keyWait = null; } });
+  const cw = (w - 30) / cols;
+  all.forEach((row, i) => {
+    const c = Math.floor(i / per), r = i % per, rx = x + 15 + c * cw, ry = y + 78 + r * rowH;
+    if (row.length === 1) { text(row[0].toUpperCase(), rx + 6, ry + rowH / 2, 11, '#ff8a3a', 'left', '700'); return; }
+    const [id, name] = row, on = keyWait === id;
+    ctx.fillStyle = on ? 'rgba(255,170,90,0.25)' : r % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)'; rr(rx, ry + 1, cw - 10, rowH - 3, 5); ctx.fill();
+    text(name, rx + 10, ry + rowH / 2, 13, '#e8dcd0', 'left', '600');
+    const lab = on ? '…' : keyLabel(id); ctx.font = '700 12px ' + FONT; const tw = Math.max(46, ctx.measureText(lab).width + 16);
+    ctx.fillStyle = keyBinds[id] ? '#8a4a1e' : 'rgba(255,255,255,0.1)'; rr(rx + cw - 18 - tw, ry + 4, tw, rowH - 9, 4); ctx.fill();
+    text(lab, rx + cw - 18 - tw / 2, ry + rowH / 2, 12, '#fff', 'center', '700');
+    ui.push({ x: rx, y: ry, w: cw - 10, h: rowH, fn: () => { keyWait = id; SFX.play('click'); } });
+  });
+  button('✔ FERTIG', x + w - 190, y + h - 50, 170, 38, () => { keysOpen = false; keyWait = null; }, true, true);
+  button('↺ STANDARD', x + 20, y + h - 50, 170, 38, () => { keyBinds = {}; store.set(KEYS_KEY, keyBinds); keyWait = null; SFX.play('click'); }, false, true);
 }
 function skinSet(id, v) { mySkin[id] = v; store.set(SKIN_KEY, skinStr(mySkin)); if (S && S.player) S.player.skin = skinStr(mySkin); }
 
@@ -1173,12 +1246,37 @@ function openChest(c, q) {
   const who = q.name || ('Spieler ' + (q.id + 1));
   toastFor(q, '🎒 Beute: ' + txt, '#ffe27a');
 }
-// ---------- Tiere: Hirsche & Hasen flüchten, Wildschweine wehren sich
+// ---------- Tiere: jedes Biom hat eigene Arten. Fluchttiere rennen weg, Wildschweine wehren sich,
+// Wölfe, Bären und Skorpione greifen an, wenn man ihnen zu nahe kommt (aggro = Reichweite)
 const ADEF = {
-  deer:   { name: 'Hirsch',     hp: 40, r: 14, walk: 40, run: 150, gold: 12, xp: 10, heal: 20, color: '#a0703c', flee: true },
-  rabbit: { name: 'Hase',       hp: 12, r: 8,  walk: 35, run: 175, gold: 4,  xp: 4,  heal: 8,  color: '#c8b8a0', flee: true },
-  boar:   { name: 'Wildschwein', hp: 90, r: 15, walk: 35, run: 125, gold: 20, xp: 18, heal: 25, color: '#5a4030', dmg: 12 },
+  deer:     { name: 'Hirsch',      hp: 40,  r: 14, walk: 40, run: 150, gold: 12, xp: 10, heal: 20, color: '#a0703c', flee: true },
+  rabbit:   { name: 'Hase',        hp: 12,  r: 8,  walk: 35, run: 175, gold: 4,  xp: 4,  heal: 8,  color: '#c8b8a0', flee: true },
+  boar:     { name: 'Wildschwein', hp: 90,  r: 15, walk: 35, run: 125, gold: 20, xp: 18, heal: 25, color: '#5a4030', dmg: 12 },
+  fox:      { name: 'Fuchs',       hp: 22,  r: 10, walk: 45, run: 185, gold: 8,  xp: 7,  heal: 10, color: '#d0662a', flee: true },
+  wolf:     { name: 'Wolf',        hp: 70,  r: 14, walk: 50, run: 175, gold: 18, xp: 16, heal: 15, color: '#8a8a92', dmg: 11, aggro: 210, pack: 3 },
+  bear:     { name: 'Bär',         hp: 260, r: 22, walk: 30, run: 120, gold: 45, xp: 40, heal: 45, color: '#5a3a24', dmg: 26, aggro: 110 },
+  camel:    { name: 'Kamel',       hp: 110, r: 18, walk: 30, run: 110, gold: 22, xp: 14, heal: 35, color: '#c8a064', flee: true },
+  scorpion: { name: 'Skorpion',    hp: 35,  r: 10, walk: 40, run: 140, gold: 14, xp: 12, heal: 5,  color: '#4a2e1a', dmg: 9, aggro: 120 },
+  frog:     { name: 'Frosch',      hp: 8,   r: 7,  walk: 30, run: 150, gold: 3,  xp: 3,  heal: 4,  color: '#4a8a3a', flee: true },
+  chicken:  { name: 'Huhn',        hp: 10,  r: 8,  walk: 30, run: 130, gold: 4,  xp: 3,  heal: 10, color: '#efe8da', flee: true },
+  rat:      { name: 'Ratte',       hp: 8,   r: 6,  walk: 45, run: 190, gold: 2,  xp: 2,  heal: 2,  color: '#5a5450', flee: true },
 };
+// welche Tiere wo leben (Biom → [Art, Gewicht])
+const ANIMAL_BIOME = {
+  0: [['deer', 35], ['rabbit', 25], ['boar', 15], ['fox', 15], ['bear', 3], ['wolf', 4]],
+  2: [['camel', 50], ['scorpion', 40], ['fox', 10]],
+  3: [['wolf', 35], ['rabbit', 30], ['fox', 20], ['bear', 15]],
+  4: [['frog', 45], ['boar', 30], ['deer', 25]],
+  6: [['rat', 100]],
+};
+function pickAnimal(bi, x, y) {
+  // in Dörfern laufen Hühner herum
+  if (worldSpots().villages.some(v => Math.hypot(v.x * TS - x, v.y * TS - y) < 14 * TS)) return Math.random() < 0.7 ? 'chicken' : null;
+  const tab = ANIMAL_BIOME[bi]; if (!tab) return null;
+  let r = Math.random() * tab.reduce((a, t) => a + t[1], 0);
+  for (const [k, w] of tab) if ((r -= w) <= 0) return k;
+  return tab[0][0];
+}
 const ATYPES = Object.keys(ADEF);
 function animalTick(dt) {
   if (!S.animals) S.animals = [];
@@ -1192,8 +1290,12 @@ function animalTick(dt) {
       const ti = tileAt(x, y);
       if (ti < 0 || S.res[ti] || S.bmap[ti] || S.biome[ti] === 5) continue;
       if (S.hq && Math.hypot(x - bCenter(S.hq).x, y - bCenter(S.hq).y) < 12 * TS) continue;
-      const r = Math.random(), type = r < 0.45 ? 'deer' : r < 0.8 ? 'rabbit' : 'boar', D = ADEF[type];
-      S.animals.push({ id: S.nextAnimal = (S.nextAnimal || 0) + 1, type, x, y, r: D.r, hp: D.hp, maxHp: D.hp, face: rand(0, TAU), dir: rand(0, TAU), t: 0, flash: 0, walk: 0, angry: null, atkCd: 0, vx: 0, vy: 0, dead: false });
+      const type = pickAnimal(S.biome[ti], x, y); if (!type) continue;
+      const D = ADEF[type], n = D.pack ? randi(2, D.pack) : 1;
+      for (let k = 0; k < n; k++) {
+        const ax = x + (k ? rand(-40, 40) : 0), ay = y + (k ? rand(-40, 40) : 0);
+        S.animals.push({ id: S.nextAnimal = (S.nextAnimal || 0) + 1, type, x: ax, y: ay, r: D.r, hp: D.hp, maxHp: D.hp, face: rand(0, TAU), dir: rand(0, TAU), t: 0, flash: 0, walk: 0, angry: null, atkCd: 0, vx: 0, vy: 0, dead: false });
+      }
       break;
     }
   }
@@ -1204,6 +1306,7 @@ function animalTick(dt) {
     const near = nearestPlayer(an.x, an.y);
     const dp = near ? Math.hypot(near.x - an.x, near.y - an.y) : 1e9;
     if (an.angry && (an.angry.dead > 0 || an.angry.afk || Math.hypot(an.angry.x - an.x, an.angry.y - an.y) > 500)) an.angry = null;
+    if (!an.angry && D.aggro && near && dp < D.aggro && !near.afk && near.dead <= 0 && (an.type !== 'wolf' || S.phase === 'night' || dp < D.aggro * 0.6)) an.angry = near;   // Raubtiere greifen an
     if (an.angry) {
       const q = an.angry, d = Math.hypot(q.x - an.x, q.y - an.y) || 1;
       dx = (q.x - an.x) / d; dy = (q.y - an.y) / d; sp = D.run;
@@ -1237,13 +1340,16 @@ function hurtAnimal(an, dmg, p) {
   an.hp -= dmg; an.flash = 0.12;
   floatText(an.x, an.y - an.r - 6, Math.round(dmg), '#fff', 12);
   burst(an.x, an.y, '#8a2a2a', 5, 110, 0.4, 2.5);
-  if (an.type === 'boar' && p) an.angry = p;
+  if (p && ADEF[an.type].dmg) {   // Wehrhafte Tiere schlagen zurück, Wölfe holen das Rudel
+    an.angry = p;
+    if (an.type === 'wolf') for (const o of S.animals) if (o.type === 'wolf' && !o.dead && Math.hypot(o.x - an.x, o.y - an.y) < 300) o.angry = p;
+  }
   else if (p) { an.t = 0; }
   if (an.hp <= 0) {
     an.dead = true;
     const D = ADEF[an.type], g = Math.round(D.gold * lootMul());
     S.gold += g; S.goldEarned += g; S.animalKills = (S.animalKills || 0) + 1;
-    if (p) { giveXp(p, D.xp); p.hp = Math.min(p.maxHp, p.hp + D.heal); giveMat(p, 'c', an.type === 'rabbit' ? 1 : 2); }
+    if (p) { giveXp(p, D.xp); p.hp = Math.min(p.maxHp, p.hp + D.heal); giveMat(p, 'c', D.r < 10 ? 1 : D.r > 17 ? 4 : 2); if (an.type === 'scorpion') giveMat(p, 'h', 1); }
     floatText(an.x, an.y - 24, D.name + ': +' + g + ' Gold, +' + D.heal + ' HP', '#ffd36b', 13);
     burst(an.x, an.y, '#8a2a2a', 16, 150, 0.6, 3);
     SFX.play('zdie', an.x, an.y);
@@ -2343,7 +2449,7 @@ function useAbility(p) {
   }
 }
 function toggleView() {
-  if (!R3) { toast('Die Ego-Perspektive gibt es in der 3D-Version', '#ff9a7a'); return; }
+  if (!R3) return;
   // Umschalten zwischen Third-Person (Schulter-Kamera) und Ego-Perspektive
   R3.fp = true; R3.eye = !R3.eye;
   toast(R3.eye ? '👁 Ego-Perspektive – O = zurück' : '🎥 Third-Person – O = Ego-Perspektive', '#cfe8ff');
@@ -3521,6 +3627,17 @@ function chatSend(text) {
   text = chatFilter(cleanText(text, 120));
   if (!text || !S) return;
   if (/^\/(full|vollbild|fullscreen|fs)$/i.test(text)) { toggleFullscreen(); return; }
+  // /handel <Name>: Handelsfenster mit diesem Spieler öffnen (läuft bei jedem selbst)
+  const hm = /^\/(handel|handeln|trade)(?:\s+(.+))?$/i.exec(text);
+  if (hm) {
+    const others = S.players.filter(q => q !== S.player && q.name);
+    if (!others.length) { addChat('', 'Handeln geht nur mit Mitspielern (online).', '#ff9a7a'); return; }
+    if (!hm[2]) { addChat('', 'So geht es: /handel <Name> – online sind: ' + others.map(q => q.name).join(', '), '#9fd0ff'); return; }
+    const n = hm[2].trim().toLowerCase(), q = others.find(o => o.name.toLowerCase() === n) || others.find(o => o.name.toLowerCase().startsWith(n));
+    if (!q) { addChat('', 'Kein Spieler „' + hm[2].trim() + '“ gefunden – online sind: ' + others.map(o => o.name).join(', '), '#ff9a7a'); return; }
+    openTrade(q.id); addChat('', '🤝 Handel mit ' + q.name + ' – stell dein Angebot zusammen.', '#9fd0ff');
+    return;
+  }
   if (text[0] === '/') {
     if (NET.role === 'client') { netSendR({ t: 'chat', text }); return; }
     runCommand(S.player, text); return;
@@ -3645,10 +3762,10 @@ function runCommand(p, text) {
   if (cmd === 'afk') setAfk(p, !p.afk);
   else if (cmd === 'wo' || cmd === 'pos') sysMsg(p, '📍 Du bist in ' + sectorOf(p.x, p.y) + ' (Karte: M)');
   else if (cmd === 'hilfe' || cmd === 'help' || cmd === '?') {
-    sysMsg(p, 'Befehle: /wo (dein Planquadrat) · /afk · /full (Vollbild) · /heim (zur Basis) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
+    sysMsg(p, 'Befehle: /handel <Name> (handeln) · /wo (dein Planquadrat) · /afk · /full (Vollbild) · /heim (zur Basis) · /team <Text> (nur dein Clan) · /w <Name> <Text> (flüstern) · /spieler');
     sysMsg(p, 'Jeder hat seine eigene Basis. Im Clan teilt ihr Reaktor, Rohstoffe und Gebäude.');
     sysMsg(p, 'Clans: /clan gründen <Name> · /clan einladen <Spieler> · /clan beitreten <Name> · /clan verlassen · /clan offen · /clan kick <Spieler> · /clan info');
-    sysMsg(p, 'Tasten: M Karte · K Skills · H Schmiede · Shift Spezialfähigkeit · Leertaste Springen · Tab Spielerliste · J Kryoturm · Y Markierung · I Inventar · L Medkit · G Granate · Z Molotow · N Ton · O = Ego-Perspektive');
+    sysMsg(p, 'Tasten (änderbar unter ⚙ Einstellungen → ⌨ Tasten): ' + ['map', 'skills', 'forge', 'ability', 'jump', 'list', 'ping', 'craft', 'med', 'gren', 'molo', 'view'].map(a => keyLabel(a) + ' ' + KEY_DEF[a].name).join(' · '));
     sysMsg(p, '🥚 Psst … in diesem Spiel sind ' + EGGS.length + ' Easter Eggs versteckt. Viel Spaß beim Suchen!', '#ffe27a');
   } else if (cmd === 'team' || cmd === 't' || cmd === 'tc') {
     if (!p.clan) { sysMsg(p, 'Du bist in keinem Clan. Gründe einen mit /clan gründen <Name>', '#ff9a7a'); return; }
@@ -4230,7 +4347,7 @@ function lobbyOpen(kind, room) {
 // =====================================================================
 // Rendering
 // =====================================================================
-let canvas = null, ctx = null, lightC = null, lctx = null, lightSprite = null, mmC = null;
+let canvas = null, ctx = null, mmC = null;
 // Handy/Tablet: Touch-Steuerung + verkleinerte Oberfläche
 let isTouch = !HEADLESS && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 let uiS = 1;
@@ -4277,22 +4394,13 @@ function calcUiScale() { uiS = isTouch ? clamp(Math.min(VW / 1050, VH / 620) * s
 let ui = [];
 let hoverSlot = null;
 
-function makeLightSprite() {
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  return c;
-}
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   VW = Math.max(1, window.innerWidth); VH = Math.max(1, window.innerHeight);
   canvas.width = VW * DPR | 0; canvas.height = VH * DPR | 0;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  lightC.width = Math.max(1, Math.ceil(VW / 2)); lightC.height = Math.max(1, Math.ceil(VH / 2));
   calcUiScale();
 }
-const MM_COL = ['rgb(58,84,48)', 'rgb(34,92,40)', 'rgb(120,120,128)', 'rgb(214,176,52)'];
 function buildMinimap() {
   mmC = document.createElement('canvas'); mmC.width = MAP; mmC.height = MAP;
   const g = mmC.getContext('2d'), img = g.createImageData(MAP, MAP);
@@ -4499,231 +4607,12 @@ function drawBuildingShape(type, lvl, w, ang, t, flash) {
   if (flash) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; rr(2, 2, w - 4, w - 4, 6); ctx.fill(); }
 }
 
-function drawZombie(z) {
-  const D = ZDEF[z.type], r = z.r, fl = z.flash > 0;
-  ctx.save(); ctx.translate(z.x, z.y);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(2, r * 0.6, r, r * 0.5, 0, 0, TAU); ctx.fill();
-  ctx.rotate(z.face);
-  const sw = Math.sin(z.walk) * r * 0.2, lunge = z.lunge > 0 ? r * 0.4 : 0;
-  ctx.fillStyle = fl ? '#fff' : D.color;
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5;
-  circle(r * 0.75 + sw + lunge, -r * 0.7, r * 0.32); ctx.fill(); ctx.stroke();
-  circle(r * 0.75 - sw + lunge, r * 0.7, r * 0.32); ctx.fill(); ctx.stroke();
-  if (z.type === 'boss') {
-    ctx.fillStyle = fl ? '#fff' : '#5a2070';
-    for (let i = 0; i < 8; i++) { const a = i * TAU / 8 + 0.2; ctx.beginPath(); ctx.moveTo(Math.cos(a - 0.2) * r, Math.sin(a - 0.2) * r); ctx.lineTo(Math.cos(a) * r * 1.35, Math.sin(a) * r * 1.35); ctx.lineTo(Math.cos(a + 0.2) * r, Math.sin(a + 0.2) * r); ctx.fill(); }
-  }
-  ctx.fillStyle = fl ? '#fff' : D.color;
-  circle(0, 0, r); ctx.fill(); ctx.stroke();
-  if (z.type === 'brute') { ctx.fillStyle = fl ? '#fff' : '#3a5a2e'; circle(-r * 0.15, -r * 0.65, r * 0.4); ctx.fill(); circle(-r * 0.15, r * 0.65, r * 0.4); ctx.fill(); }
-  if (z.type === 'spitter') { ctx.fillStyle = '#9dffb8'; circle(r * 0.55, 0, r * 0.35); ctx.fill(); }
-  if (z.type === 'armored') {
-    ctx.fillStyle = fl ? '#fff' : '#9aa4ae'; circle(-r * 0.05, 0, r * 0.78); ctx.fill();
-    ctx.strokeStyle = '#5a646e'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#6a747e'; ctx.fillRect(-r * 0.5, -r * 0.08, r, r * 0.16);
-  }
-  if (z.type === 'shade') {
-    ctx.fillStyle = 'rgba(160,90,255,' + (0.25 + 0.15 * Math.sin(animT * 7 + z.id)) + ')'; circle(0, 0, r * 1.5); ctx.fill();
-    ctx.fillStyle = fl ? '#fff' : '#1a0a2a'; for (let k = 0; k < 5; k++) { const a = Math.PI + (k - 2) * 0.35; ctx.beginPath(); ctx.moveTo(Math.cos(a - 0.15) * r * 0.8, Math.sin(a - 0.15) * r * 0.8); ctx.lineTo(Math.cos(a) * r * (1.6 + 0.2 * Math.sin(animT * 9 + k)), Math.sin(a) * r * 1.6); ctx.lineTo(Math.cos(a + 0.15) * r * 0.8, Math.sin(a + 0.15) * r * 0.8); ctx.fill(); }
-  }
-  if (z.type === 'shaman') {
-    ctx.fillStyle = fl ? '#fff' : '#4a2a7a';
-    ctx.beginPath(); ctx.moveTo(-r * 0.9, -r * 0.6); ctx.lineTo(r * 0.3, 0); ctx.lineTo(-r * 0.9, r * 0.6); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(190,150,255,' + (0.5 + 0.3 * Math.sin(animT * 6 + z.id)) + ')'; circle(r * 1.1, r * 0.9, r * 0.32); ctx.fill();
-  }
-  if (z.type === 'bomber') {
-    ctx.fillStyle = '#3a2a22'; circle(-r * 0.2, 0, r * 0.55); ctx.fill();
-    ctx.strokeStyle = '#c8a070'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-r * 0.2, -r * 0.5); ctx.lineTo(-r * 0.5, -r * 1.1); ctx.stroke();
-    if (Math.sin(animT * 18 + z.id) > 0) { ctx.fillStyle = '#ffe14a'; circle(-r * 0.5, -r * 1.15, 3); ctx.fill(); }
-  }
-  if (z.type === 'runner') { ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.moveTo(-r * 0.6, -r * 0.3); ctx.lineTo(-r * 0.2, 0); ctx.lineTo(-r * 0.6, r * 0.3); ctx.stroke(); }
-  ctx.fillStyle = z.type === 'boss' ? '#ffde3a' : z.type === 'shaman' || z.type === 'shade' ? '#d8b4ff' : '#ff3a3a';
-  circle(r * 0.45, -r * 0.3, Math.max(1.8, r * 0.13)); ctx.fill();
-  circle(r * 0.45, r * 0.3, Math.max(1.8, r * 0.13)); ctx.fill();
-  if (z.frostT > 0) { ctx.fillStyle = 'rgba(170,225,255,0.45)'; circle(0, 0, r * 1.05); ctx.fill(); }
-  if (z.golden) { ctx.fillStyle = 'rgba(255,211,107,' + (0.45 + 0.2 * Math.sin(animT * 8)) + ')'; circle(0, 0, r * 1.1); ctx.fill(); }
-  ctx.restore();
-}
 
-function drawAnimal(an) {
-  const D = ADEF[an.type], r = an.r, fl = an.flash > 0, leg = Math.sin(an.walk || 0) * r * 0.3;
-  ctx.save(); ctx.translate(an.x, an.y);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(2, r * 0.5, r * 1.1, r * 0.5, 0, 0, TAU); ctx.fill();
-  ctx.rotate(an.face || 0);
-  ctx.fillStyle = fl ? '#fff' : '#3a2a1a';
-  for (const [lx, ly] of [[r * 0.5, -r * 0.5], [r * 0.5, r * 0.5], [-r * 0.5, -r * 0.5], [-r * 0.5, r * 0.5]]) { circle(lx + (ly > 0 ? leg : -leg), ly * 1.05, r * 0.18); ctx.fill(); }
-  ctx.fillStyle = fl ? '#fff' : D.color;
-  ctx.beginPath(); ctx.ellipse(0, 0, r * 1.05, r * 0.65, 0, 0, TAU); ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.2; ctx.stroke();
-  circle(r * 0.95, 0, r * 0.45); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#111'; circle(r * 1.15, -r * 0.18, Math.max(1.3, r * 0.08)); ctx.fill(); circle(r * 1.15, r * 0.18, Math.max(1.3, r * 0.08)); ctx.fill();
-  if (an.type === 'deer') {
-    ctx.strokeStyle = '#d8c090'; ctx.lineWidth = 2;
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 0.85, s * r * 0.3); ctx.lineTo(r * 0.55, s * r * 0.95); ctx.lineTo(r * 0.3, s * r * 1.1); ctx.moveTo(r * 0.62, s * r * 0.75); ctx.lineTo(r * 0.85, s * r * 1.05); ctx.stroke(); }
-    ctx.fillStyle = '#f0e0c8'; circle(-r * 0.95, 0, r * 0.22); ctx.fill();
-  } else if (an.type === 'rabbit') {
-    ctx.fillStyle = fl ? '#fff' : '#d8c8b0';
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(r * 0.6, s * r * 0.45, r * 0.55, r * 0.17, s * 0.5, 0, TAU); ctx.fill(); }
-    ctx.fillStyle = '#fff'; circle(-r * 1.0, 0, r * 0.3); ctx.fill();
-  } else {
-    ctx.fillStyle = '#f2ead8';
-    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(r * 1.25, s * r * 0.2); ctx.lineTo(r * 1.55, s * r * 0.45); ctx.lineTo(r * 1.2, s * r * 0.35); ctx.fill(); }
-    ctx.fillStyle = '#3a2a1a'; circle(r * 1.35, 0, r * 0.2); ctx.fill();
-  }
-  ctx.restore();
-  if (an.hp < an.maxHp) hpBar(an.x, an.y - r - 10, 26, an.hp / an.maxHp, '#e0a050');
-}
-function drawPlayer(p) {
-  if (p.dead > 0) return;
-  ctx.save(); ctx.translate(p.x, p.y);
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(2, 9, 14, 7, 0, 0, TAU); ctx.fill();
-  if (p.z > 0) { const k = 1 + p.z / 420; ctx.translate(0, -p.z * 0.45); ctx.scale(k, k); }
-  ctx.rotate(p.danceT > 0 ? animT * 12 : p.face);
-  const sw = p.swing > 0 ? Math.sin((1 - p.swing / 0.3) * Math.PI) : 0;
-  const skin = p.flash > 0 ? '#ff8080' : '#f0c9a0';
-  if (p.rageT > 0) { ctx.fillStyle = 'rgba(255,90,40,' + (0.25 + 0.1 * Math.sin(animT * 10)) + ')'; circle(0, 0, p.r * 1.7); ctx.fill(); }
-  // Werkzeug
-  ctx.save();
-  const met = toolMet(p, p.tool);
-  if (p.tool === 'spear') { ctx.rotate(-0.25); ctx.translate(sw * 18, 0); }
-  else if (p.tool === 'axe') ctx.rotate(-1.6 + sw * 3.2);
-  else if (p.tool !== 'bow') { ctx.rotate(-0.9 + sw * 1.9); }
-  ctx.translate(14, 10);
-  if (p.tool === 'pick') {
-    ctx.fillStyle = '#7a5530'; ctx.fillRect(0, -2, 24, 4);
-    ctx.strokeStyle = met; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(22, 0, 10, -1.3, 1.3); ctx.stroke();
-  } else if (p.tool === 'sword') {
-    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-2, -2, 8, 4);
-    ctx.fillStyle = '#c9a227'; ctx.fillRect(5, -6, 3, 12);
-    ctx.fillStyle = met; ctx.beginPath(); ctx.moveTo(8, -3); ctx.lineTo(32, -2); ctx.lineTo(36, 0); ctx.lineTo(32, 2); ctx.lineTo(8, 3); ctx.closePath(); ctx.fill();
-  } else if (p.tool === 'spear') {
-    ctx.fillStyle = '#7a5530'; ctx.fillRect(-8, -1.5, 44, 3);
-    ctx.fillStyle = met; ctx.beginPath(); ctx.moveTo(35, -4.5); ctx.lineTo(48, 0); ctx.lineTo(35, 4.5); ctx.closePath(); ctx.fill();
-  } else if (p.tool === 'axe') {
-    ctx.fillStyle = met; ctx.beginPath(); ctx.ellipse(24, 0, 7, 13, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = '#6a4526'; ctx.fillRect(-2, -2, 32, 4);
-  } else if (p.tool === 'staff') {
-    ctx.fillStyle = '#5a3a1a'; ctx.fillRect(-4, -2, 32, 4);
-    ctx.fillStyle = 'rgba(255,150,50,' + (0.3 + 0.15 * Math.sin(animT * 8)) + ')'; circle(31, 0, 10); ctx.fill();
-    ctx.fillStyle = met === TMET[0] ? '#ff7a2a' : met; circle(31, 0, 5); ctx.fill();
-  } else {
-    ctx.translate(-2, -10);
-    const pull = p.cd > 0.2 ? 0 : 4;
-    ctx.strokeStyle = '#8a5a2a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(4, 0, 15, -1.25, 1.25); ctx.stroke();
-    ctx.strokeStyle = '#ddd'; ctx.lineWidth = 1; ctx.beginPath();
-    ctx.moveTo(4 + Math.cos(-1.25) * 15, Math.sin(-1.25) * 15); ctx.lineTo(4 - pull, 0); ctx.lineTo(4 + Math.cos(1.25) * 15, Math.sin(1.25) * 15); ctx.stroke();
-    if (p.cd < 0.25) { ctx.fillStyle = '#ddd'; ctx.fillRect(4 - pull, -1, 22, 2); }
-  }
-  ctx.restore();
-  // Körper
-  ctx.fillStyle = skin; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5;
-  circle(12, -11, 5); ctx.fill(); ctx.stroke();
-  circle(14, 10, 5); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = PLAYER_COL[p.id % PLAYER_COL.length]; circle(0, 0, p.r); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = skin; circle(2, 0, p.r * 0.62); ctx.fill();
-  ctx.fillStyle = '#5a3a1a'; ctx.beginPath(); ctx.arc(0, 0, p.r * 0.64, Math.PI * 0.55, Math.PI * 1.45); ctx.fill();
-  ctx.restore();
-}
 
 function resScale(i) {
   const k = S.res[i], f = 0.6 + 0.4 * clamp(S.rhp[i] / RES_HP[k], 0, 1);
   const gr = S.grow.get(i);
   return gr ? f * (1 - gr / 1.2 * 0.85) : f;
-}
-const GROUND2D = [null, null, ['#c8ad6e', '#bc9f62', '#d2b97c'], ['#e4ecf2', '#d6e0ea', '#eef4f8'], ['#3a4a2c', '#33422a', '#425432'], ['#1e1428', '#180f22', '#261a34']];
-function drawTree(x, y, v, wob, sc, bi) {
-  const s = (0.9 + (v % 5) * 0.06) * sc;
-  let ox = 0, oy = 0;
-  if (wob) { const k = Math.sin(wob.t * 40) * 4 * (wob.t / 0.25); ox = Math.cos(wob.a) * k; oy = Math.sin(wob.a) * k; }
-  if (bi === 2) {   // Kaktus
-    ctx.fillStyle = 'rgba(0,0,0,0.22)'; circle(x + 4, y + 6, 13 * s); ctx.fill();
-    ctx.fillStyle = '#3f8a3a'; rr(x + ox - 7 * s, y + oy - 18 * s, 14 * s, 30 * s, 7 * s); ctx.fill();
-    ctx.fillStyle = '#4fa048'; rr(x + ox - 17 * s, y + oy - 8 * s, 8 * s, 14 * s, 4 * s); ctx.fill(); rr(x + ox + 9 * s, y + oy - 13 * s, 8 * s, 12 * s, 4 * s); ctx.fill();
-    if (v % 4 === 0) { ctx.fillStyle = '#ff6a8a'; circle(x + ox, y + oy - 18 * s, 3 * s); ctx.fill(); }
-    return;
-  }
-  if (bi === 4) {   // toter Sumpfbaum
-    ctx.fillStyle = 'rgba(0,0,0,0.25)'; circle(x + 5, y + 7, 20 * s); ctx.fill();
-    ctx.strokeStyle = '#4a3a26'; ctx.lineWidth = 5 * s; ctx.beginPath();
-    for (let k = 0; k < 4; k++) { const a = v + k * 1.6; ctx.moveTo(x, y); ctx.lineTo(x + ox + Math.cos(a) * 20 * s, y + oy + Math.sin(a) * 20 * s); }
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(70,90,50,0.85)'; circle(x + ox - 3, y + oy - 3, 13 * s); ctx.fill();
-    ctx.fillStyle = '#3a2a1a'; circle(x, y, 6 * sc); ctx.fill();
-    return;
-  }
-  if (bi === 3) {   // verschneite Tanne
-    ctx.fillStyle = 'rgba(0,0,0,0.2)'; circle(x + 5, y + 7, 22 * s); ctx.fill();
-    ctx.fillStyle = '#2a5a44'; circle(x + ox, y + oy, 22 * s); ctx.fill();
-    ctx.fillStyle = '#f2f8fc'; circle(x + ox - 4, y + oy - 4, 15 * s); ctx.fill();
-    ctx.fillStyle = '#ffffff'; circle(x + ox - 8, y + oy - 8, 8 * s); ctx.fill();
-    return;
-  }
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; circle(x + 5, y + 7, 22 * s); ctx.fill();
-  ctx.fillStyle = '#5a3d22'; circle(x, y, 7 * sc); ctx.fill();
-  ctx.fillStyle = '#245a2a'; circle(x + ox, y + oy, 23 * s); ctx.fill();
-  ctx.fillStyle = '#2f7334'; circle(x + ox - 4, y + oy - 4, 17 * s); ctx.fill();
-  ctx.fillStyle = '#3d8c3f'; circle(x + ox - 8, y + oy - 8, 9 * s); ctx.fill();
-}
-function drawScrap(x, y, v, sc, wob) {
-  if (wob) { const k = Math.sin(wob.t * 40) * 3 * (wob.t / 0.25); x += Math.cos(wob.a) * k; y += Math.sin(wob.a) * k; }
-  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(x + 3, y + 5, 19 * sc, 12 * sc, 0, 0, TAU); ctx.fill();
-  if (v % 3 === 0) {   // Autowrack
-    ctx.save(); ctx.translate(x, y); ctx.rotate(v * 0.7); ctx.scale(sc, sc);
-    ctx.fillStyle = ['#8a3a2a', '#4a5a6a', '#7a6a3a', '#5a5a52'][v % 4]; rr(-19, -10, 38, 20, 5); ctx.fill();
-    ctx.fillStyle = '#a8582a'; rr(-6, -7, 14, 14, 3); ctx.fill();
-    ctx.fillStyle = '#202428'; ctx.fillRect(9, -8, 4, 16); ctx.fillRect(-14, -8, 4, 16);
-    ctx.fillStyle = 'rgba(160,80,40,0.7)'; circle(-10 + v % 9, -3, 3); ctx.fill(); circle(12, 4, 2.5); ctx.fill();
-    ctx.restore();
-  } else {   // Fässer & Blech
-    const cols = ['#a84a20', '#3a5a3a', '#8a2a20', '#4a4a52'];
-    for (let k = 0; k < 3; k++) { const a = v + k * 2.1; ctx.fillStyle = cols[(v + k) % 4]; circle(x + Math.cos(a) * 8 * sc, y + Math.sin(a) * 7 * sc, 7 * sc); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.5; ctx.stroke(); }
-    ctx.fillStyle = '#7a6a5a'; ctx.fillRect(x - 12 * sc, y + 6 * sc, 18 * sc, 4 * sc);
-  }
-}
-function drawMountain(x, y, v, h, bi) {
-  const base = bi === 2 ? [150, 104, 72] : bi === 3 ? [120, 128, 140] : bi === 4 ? [80, 82, 70] : [104, 98, 92];
-  const k = 0.75 + Math.min(h, 6) * 0.06 + (v % 5) * 0.02;
-  ctx.fillStyle = 'rgb(' + (base[0] * k | 0) + ',' + (base[1] * k | 0) + ',' + (base[2] * k | 0) + ')';
-  ctx.fillRect(x, y, TS + 0.5, TS + 0.5);
-  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.moveTo(x + 4 + v % 9, y + 6); ctx.lineTo(x + 30, y + 14 + v % 11); ctx.lineTo(x + 12, y + 34); ctx.fill();
-  if (h >= 3 || bi === 3) { ctx.fillStyle = 'rgba(240,244,250,' + (0.55 + Math.min(h, 6) * 0.07) + ')'; ctx.beginPath(); ctx.moveTo(x + 20, y + 4); ctx.lineTo(x + 34, y + 20); ctx.lineTo(x + 20, y + 26); ctx.lineTo(x + 6, y + 18); ctx.fill(); }
-}
-function drawVoid(x, y, v) {
-  ctx.fillStyle = '#0a0610'; ctx.fillRect(x - 21, y - 21, 42, 42);
-  ctx.fillStyle = 'rgba(140,60,220,' + (0.15 + 0.1 * Math.sin(animT * 2 + v)) + ')'; circle(x + (v % 9) - 4, y + (v % 7) - 3, 6 + v % 6); ctx.fill();
-}
-function drawCrystal(x, y, v, sc) {
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; circle(x + 3, y + 5, 14 * sc); ctx.fill();
-  const glow = 0.6 + 0.3 * Math.sin(animT * 3 + v);
-  ctx.fillStyle = 'rgba(180,110,255,' + 0.25 * glow + ')'; circle(x, y, 22 * sc); ctx.fill();
-  for (let k = 0; k < 4; k++) {
-    const a = v + k * 1.57, ox = Math.cos(a) * 7 * sc, oy = Math.sin(a) * 7 * sc, h = (12 + (k % 2) * 6) * sc;
-    ctx.fillStyle = k % 2 ? '#c890ff' : '#8a4ae0';
-    ctx.beginPath(); ctx.moveTo(x + ox, y + oy - h); ctx.lineTo(x + ox + 5 * sc, y + oy); ctx.lineTo(x + ox, y + oy + 4 * sc); ctx.lineTo(x + ox - 5 * sc, y + oy); ctx.closePath(); ctx.fill();
-  }
-  ctx.fillStyle = '#f4e8ff'; circle(x - 2, y - 6 * sc, 2); ctx.fill();
-}
-const ROCK2D = { 2: ['#c09a60', '#d8b880'], 3: ['#a8c8dc', '#d0e6f2'], 4: ['#5a5a4a', '#707060'], 5: ['#2a2236', '#3e3450'] };
-function drawRock(x, y, v, wob, sc, gold, bi) {
-  let ox = 0, oy = 0;
-  if (wob) { const k = Math.sin(wob.t * 40) * 3 * (wob.t / 0.25); ox = Math.cos(wob.a) * k; oy = Math.sin(wob.a) * k; }
-  x += ox; y += oy;
-  const n = 7, rot = v / 40;
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; circle(x + 4, y + 5, 17 * sc); ctx.fill();
-  const rc = ROCK2D[bi];
-  ctx.fillStyle = gold ? '#6e6252' : rc ? rc[0] : '#7d7d86'; ctx.beginPath();
-  for (let i = 0; i < n; i++) { const a = rot + i * TAU / n, r = (15 + ((v >> (i % 5)) & 3) * 1.4) * sc; ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * r, y + Math.sin(a) * r); }
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = gold ? '#8a7c66' : rc ? rc[1] : '#9a9aa4'; circle(x - 4 * sc, y - 4 * sc, 7 * sc); ctx.fill();
-  if (gold) {
-    // Goldadern + Funkeln
-    ctx.fillStyle = '#f2c94c';
-    for (let i = 0; i < 4; i++) { const a = rot * 3 + i * 1.7; circle(x + Math.cos(a) * 8 * sc, y + Math.sin(a) * 7 * sc, (2.4 + (i % 2)) * sc); ctx.fill(); }
-    const tw = Math.sin(animT * 4 + v) * 0.5 + 0.5;
-    if (tw > 0.7) { ctx.fillStyle = 'rgba(255,250,210,' + ((tw - 0.7) * 3) + ')'; circle(x + 5 * sc, y - 6 * sc, 2.5); ctx.fill(); }
-  }
 }
 function hpBar(x, y, w, frac, col) {
   ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(x - w / 2 - 1, y - 1, w + 2, 6);
@@ -4735,270 +4624,20 @@ function render(dt) {
   ui = [];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.globalCompositeOperation = 'source-over';
-  if (R3) {
-    // 3D: Welt zeichnet three.js, hier nur noch Overlays + HUD
-    ctx.clearRect(0, 0, VW, VH);
-    if (!S) return;
-    if (!R3.ready) R3.init(ROOT.NW);
-    R3.render(dt);
-    R3.overlay(ctx);
-    drawUI();
-    return;
-  }
-  ctx.fillStyle = '#0b0f0a'; ctx.fillRect(0, 0, VW, VH);
+  ctx.clearRect(0, 0, VW, VH);
+  if (!R3) { drawNo3D(); return; }
+  // Welt zeichnet three.js, hier nur noch Overlays + HUD
   if (!S) return;
-  const t = S.t;
-  let sx = 0, sy = 0;
-  if (S.shake > 0.2 && mode === 'play') { sx = rand(-1, 1) * S.shake; sy = rand(-1, 1) * S.shake; }
-  const cx = Math.round(camX + sx), cy = Math.round(camY + sy);
-  ctx.save(); ctx.translate(-cx, -cy);
-
-  // Boden
-  const tx0 = Math.max(0, Math.floor(cx / TS)), ty0 = Math.max(0, Math.floor(cy / TS));
-  const tx1 = Math.min(MAP - 1, Math.floor((cx + VW) / TS)), ty1 = Math.min(MAP - 1, Math.floor((cy + VH) / TS));
-  ctx.fillStyle = '#3d5a32'; ctx.fillRect(0, 0, WORLD, WORLD);
-  for (let y = ty0; y <= ty1; y++) for (let x = tx0; x <= tx1; x++) {
-    const i = y * MAP + x, v = S.variant[i], bi = S.biome ? S.biome[i] : 0;
-    if (bi >= 2) {
-      const pal = GROUND2D[bi];
-      ctx.fillStyle = pal[v < 70 ? (v < 30 ? 1 : 2) : 0]; ctx.fillRect(x * TS, y * TS, TS + 0.5, TS + 0.5);
-      if (bi === 4 && v % 9 === 0) { ctx.fillStyle = 'rgba(40,70,80,0.75)'; ctx.beginPath(); ctx.ellipse(x * TS + 20, y * TS + 20, 15, 9, v, 0, TAU); ctx.fill(); }
-      else if (bi === 5 && v % 7 === 0) { ctx.strokeStyle = 'rgba(190,90,255,' + (0.35 + 0.25 * Math.sin(animT * 2 + v)) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x * TS + 5, y * TS + 10 + v % 20); ctx.lineTo(x * TS + 20, y * TS + 20); ctx.lineTo(x * TS + 34, y * TS + 6 + v % 30); ctx.stroke(); }
-      else if (bi === 3 && v > 240) { ctx.fillStyle = '#ffffff'; circle(x * TS + (v % 7) * 5 + 5, y * TS + (v % 5) * 6 + 8, 2); ctx.fill(); }
-      else if (bi === 2 && v > 245) { ctx.fillStyle = '#8a7a50'; circle(x * TS + (v % 7) * 5 + 5, y * TS + (v % 5) * 6 + 8, 2); ctx.fill(); }
-      continue;
-    }
-    if (v < 70) { ctx.fillStyle = v < 30 ? '#38532e' : '#42613a'; ctx.fillRect(x * TS, y * TS, TS, TS); }
-    else if (v > 245) { ctx.fillStyle = '#4f6e3c'; circle(x * TS + (v % 7) * 5 + 5, y * TS + (v % 5) * 6 + 8, 2); ctx.fill(); }
-  }
-  // Portale
-  for (const po of S.portal ? [S.portal, S.portal2] : []) {
-    if (po.x < cx - 80 || po.x > cx + VW + 80 || po.y < cy - 80 || po.y > cy + VH + 80) continue;
-    ctx.save(); ctx.translate(po.x, po.y);
-    ctx.fillStyle = '#2a2236'; circle(0, 0, 34); ctx.fill();
-    for (let k = 0; k < 3; k++) { ctx.rotate(animT * (1.2 + k * 0.6)); ctx.strokeStyle = ['#b47aff', '#7a3aff', '#e2c4ff'][k]; ctx.lineWidth = 4 - k; ctx.beginPath(); ctx.arc(0, 0, 26 - k * 7, 0, Math.PI * 1.4); ctx.stroke(); }
-    ctx.fillStyle = 'rgba(200,150,255,0.8)'; circle(0, 0, 5 + Math.sin(animT * 5) * 2); ctx.fill();
-    ctx.restore();
-  }
-  ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 6; ctx.strokeRect(0, 0, WORLD, WORLD);
-
-  // Bauraster & Bauzone
-  if (S.place && mode === 'play') {
-    if (S.hq) {
-      const hx = (S.hq.tx + 1.5) * TS, hy = (S.hq.ty + 1.5) * TS, R = (buildRange() + 0.5) * TS;
-      ctx.fillStyle = 'rgba(255,255,255,0.04)'; ctx.fillRect(hx - R, hy - R, 2 * R, 2 * R);
-      ctx.strokeStyle = 'rgba(255,230,140,0.35)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]); ctx.strokeRect(hx - R, hy - R, 2 * R, 2 * R); ctx.setLineDash([]);
-    }
-    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1; ctx.beginPath();
-    for (let x = tx0; x <= tx1 + 1; x++) { ctx.moveTo(x * TS, ty0 * TS); ctx.lineTo(x * TS, (ty1 + 1) * TS); }
-    for (let y = ty0; y <= ty1 + 1; y++) { ctx.moveTo(tx0 * TS, y * TS); ctx.lineTo((tx1 + 1) * TS, y * TS); }
-    ctx.stroke();
-  }
-
-  // Felsen
-  for (let y = ty0 - 1; y <= ty1 + 1; y++) for (let x = tx0 - 1; x <= tx1 + 1; x++) {
-    if (!inMap(x, y)) continue;
-    const i = y * MAP + x;
-    const k = S.res[i];
-    if (k === 7) drawScrap((x + 0.5) * TS, (y + 0.5) * TS, S.variant[i], resScale(i), S.wobble.get(i));
-    else if (k === 6) drawMountain(x * TS, y * TS, S.variant[i], S.mtn ? S.mtn[i] : 1, S.biome ? S.biome[i] : 0);
-    else if (k === 4) drawVoid((x + 0.5) * TS, (y + 0.5) * TS, S.variant[i]);
-    else if (k === 5) drawCrystal((x + 0.5) * TS, (y + 0.5) * TS, S.variant[i], resScale(i));
-    else if (k >= 2) drawRock((x + 0.5) * TS, (y + 0.5) * TS, S.variant[i], S.wobble.get(i), resScale(i), k === 3, S.biome ? S.biome[i] : 0);
-  }
-  // Gebäude
-  for (const b of S.buildings) {
-    const bx = b.tx * TS, by = b.ty * TS, w = b.size * TS;
-    if (bx > cx + VW || by > cy + VH || bx + w < cx || by + w < cy) continue;
-    ctx.save(); ctx.translate(bx, by);
-    drawBuildingShape(b.type, b.lvl, w, b.angle, t + b.id, b.flash > 0);
-    ctx.restore();
-  }
-  // Projektile (bodennah)
-  for (const pr of S.projs) {
-    if (pr.k === 'bomb') {
-      ctx.fillStyle = 'rgba(0,0,0,0.3)'; circle(pr.x, pr.y, 6); ctx.fill();
-    }
-  }
-  // Zombies
-  for (const z of S.zombies) {
-    if (z.x < cx - 60 || z.y < cy - 60 || z.x > cx + VW + 60 || z.y > cy + VH + 60) continue;
-    drawZombie(z);
-  }
-  // Tiere
-  for (const an of S.animals || []) {
-    if (an.x < cx - 60 || an.y < cy - 60 || an.x > cx + VW + 60 || an.y > cy + VH + 60) continue;
-    drawAnimal(an);
-  }
-  // Schatztruhen
-  for (const c of S.chests) {
-    const bob = Math.sin(t * 3 + c.id) * 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(c.x + 2, c.y + 12, 15, 5, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#7a4a1e'; rr(c.x - 14, c.y - 8 + bob, 28, 18, 3); ctx.fill();
-    ctx.fillStyle = '#9a6028'; rr(c.x - 14, c.y - 14 + bob, 28, 9, 4); ctx.fill();
-    ctx.fillStyle = '#e6b83a'; ctx.fillRect(c.x - 14, c.y - 6 + bob, 28, 3); ctx.fillRect(c.x - 2.5, c.y - 9 + bob, 5, 8);
-    if (Math.sin(animT * 5 + c.id) > 0.6) { ctx.fillStyle = '#fff6c0'; circle(c.x + 9, c.y - 15 + bob, 2.2); ctx.fill(); }
-  }
-  for (const q of S.players) drawPlayer(q);
-  if (S.players.length > 1 || S.player.afk) {
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = 'bold 11px ' + FONT;
-    for (const q of S.players) if (q.dead <= 0) {
-      const nm = pName(q) + (q.afk ? ' 💤 AFK' : '');
-      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillText(nm, q.x + 1, q.y - 35);
-      ctx.fillStyle = q === S.player ? '#cfe8ff' : '#ffb0a8'; ctx.fillText(nm, q.x, q.y - 36);
-    }
-  }
-  // Markierungen (G)
-  for (const pg of S.pings) {
-    const k = (4 - pg.t) % 1, col = pingCol(pg.pid);
-    ctx.globalAlpha = clamp(pg.t, 0, 1);
-    ctx.strokeStyle = col; ctx.lineWidth = 3;
-    circle(pg.x, pg.y, 10 + k * 40); ctx.globalAlpha *= 1 - k; ctx.stroke();
-    ctx.globalAlpha = clamp(pg.t, 0, 1);
-    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(pg.x, pg.y); ctx.lineTo(pg.x - 9, pg.y - 22); ctx.lineTo(pg.x + 9, pg.y - 22); ctx.closePath(); ctx.fill();
-    circle(pg.x, pg.y - 26, 9); ctx.fill();
-    ctx.fillStyle = '#fff'; circle(pg.x, pg.y - 26, 3.5); ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-  // Projektile
-  for (const pr of S.projs) {
-    if (pr.k === 'arrow' || pr.k === 'parrow') {
-      const a = Math.atan2(pr.vy, pr.vx);
-      ctx.save(); ctx.translate(pr.x, pr.y); ctx.rotate(a);
-      ctx.fillStyle = pr.k === 'arrow' ? '#cfe8ff' : '#f0e0b0'; ctx.fillRect(-14, -1, 16, 2);
-      ctx.fillStyle = '#ddd'; ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-1, -3); ctx.lineTo(-1, 3); ctx.fill();
-      ctx.fillStyle = '#c04040'; ctx.fillRect(-15, -2.5, 4, 5);
-      ctx.restore();
-    } else if (pr.k === 'fire') {
-      ctx.fillStyle = 'rgba(255,140,40,0.35)'; circle(pr.x, pr.y, 13); ctx.fill();
-      ctx.fillStyle = '#ffb347'; circle(pr.x, pr.y, 7); ctx.fill();
-      ctx.fillStyle = '#fff3c0'; circle(pr.x, pr.y, 3); ctx.fill();
-    } else if (pr.k === 'ball') {
-      ctx.fillStyle = '#1a1a1a'; circle(pr.x, pr.y, 6); ctx.fill();
-      ctx.fillStyle = '#555'; circle(pr.x - 2, pr.y - 2, 2); ctx.fill();
-    } else if (pr.k === 'bomb') {
-      const y = pr.y - pr.h, s = 7 + pr.h / 25;
-      ctx.fillStyle = '#222'; circle(pr.x, y, s); ctx.fill();
-      ctx.fillStyle = '#ff7a3a'; circle(pr.x + s * 0.6, y - s * 0.6, 2.5 + Math.sin(t * 30)); ctx.fill();
-    } else if (pr.k === 'glob') {
-      ctx.fillStyle = '#7fe0a0'; circle(pr.x, pr.y, pr.r); ctx.fill();
-      ctx.fillStyle = '#cfffe0'; circle(pr.x - 2, pr.y - 2, 2); ctx.fill();
-    }
-  }
-  // Bäume (über allem, was am Boden ist)
-  for (let y = ty0 - 1; y <= ty1 + 1; y++) for (let x = tx0 - 1; x <= tx1 + 1; x++) {
-    if (!inMap(x, y)) continue;
-    const i = y * MAP + x;
-    if (S.res[i] === 1) drawTree((x + 0.5) * TS, (y + 0.5) * TS, S.variant[i], S.wobble.get(i), resScale(i), S.biome ? S.biome[i] : 0);
-  }
-  // Partikel
-  for (const q of S.parts) {
-    ctx.globalAlpha = clamp(q.life / q.max, 0, 1);
-    ctx.fillStyle = q.color; ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
-  }
-  ctx.globalAlpha = 1;
-  // Ringe
-  for (const r of S.rings) {
-    ctx.globalAlpha = clamp(r.life / r.maxLife, 0, 1);
-    ctx.strokeStyle = r.color; ctx.lineWidth = 3; circle(r.x, r.y, r.r); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  // Blitze
-  for (const b of S.bolts) {
-    ctx.globalAlpha = clamp(b.life / b.max, 0, 1);
-    for (let pass = 0; pass < 2; pass++) {
-      ctx.strokeStyle = pass ? '#ffffff' : b.color; ctx.lineWidth = pass ? 1.5 : 5;
-      ctx.beginPath();
-      for (let i = 0; i < b.pts.length - 1; i++) {
-        const [ax, ay] = b.pts[i], [bx, by] = b.pts[i + 1];
-        if (i === 0) ctx.moveTo(ax, ay);
-        for (let s = 1; s <= 4; s++) {
-          const f = s / 4, j = s === 4 ? 0 : Math.sin(b.seed + i * 7 + s * 3 + animT * 60) * 10;
-          ctx.lineTo(lerp(ax, bx, f) + j, lerp(ay, by, f) - j);
-        }
-      }
-      ctx.stroke();
-    }
-  }
-  ctx.globalAlpha = 1;
-  // HP-Balken
-  for (const z of S.zombies) {
-    if (z.hp < z.maxHp && z.x > cx - 40 && z.y > cy - 40 && z.x < cx + VW + 40 && z.y < cy + VH + 40)
-      hpBar(z.x, z.y - z.r - 10, z.type === 'boss' ? 70 : Math.max(24, z.r * 2), z.hp / z.maxHp, z.type === 'boss' ? '#d87bff' : '#e74c3c');
-  }
-  for (const b of S.buildings) {
-    if (b.hp < b.maxHp) { const c = bCenter(b); hpBar(c.x, b.ty * TS - 4, Math.max(30, b.size * TS - 10), b.hp / b.maxHp, b.type === 'hq' ? '#f2c94c' : '#5fd068'); }
-  }
-  const p = S.player;
-  for (const q of S.players) if (q.dead <= 0 && q.hp < q.maxHp) hpBar(q.x, q.y - 26, 34, q.hp / q.maxHp, q === p ? '#4fc3f7' : '#ff8a80');
-  // Texte
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  for (const tx of S.texts) {
-    ctx.globalAlpha = clamp(tx.life / tx.max * 1.5, 0, 1);
-    ctx.font = 'bold ' + tx.size + 'px ' + FONT;
-    ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillText(tx.text, tx.x + 1, tx.y + 1);
-    ctx.fillStyle = tx.color; ctx.fillText(tx.text, tx.x, tx.y);
-  }
-  ctx.globalAlpha = 1;
-
-  // Auswahl & Platzierungsvorschau
-  if (S.sel && !S.sel.dead) {
-    const b = S.sel, c = bCenter(b), d = BDEF[b.type];
-    ctx.strokeStyle = '#ffe27a'; ctx.lineWidth = 2; ctx.strokeRect(b.tx * TS - 2, b.ty * TS - 2, b.size * TS + 4, b.size * TS + 4);
-    if (d.range) { ctx.fillStyle = 'rgba(255,230,140,0.06)'; circle(c.x, c.y, d.range[b.lvl - 1] * TS); ctx.fill(); ctx.strokeStyle = 'rgba(255,230,140,0.4)'; ctx.stroke(); }
-    if (d.radius) { ctx.strokeStyle = 'rgba(160,255,140,0.4)'; circle(c.x, c.y, d.radius[b.lvl - 1] * TS); ctx.stroke(); }
-  }
-  if (S.place && mode === 'play' && !hoverSlot) {
-    const a = aimPoint(), fp = footprintAt(S.place, a.x, a.y), d = BDEF[S.place];
-    const err = placeError(S.place, fp.tx, fp.ty), w = fp.size * TS;
-    ctx.save(); ctx.translate(fp.tx * TS, fp.ty * TS); ctx.globalAlpha = 0.6;
-    drawBuildingShape(S.place, 1, w, -Math.PI / 2, t, false);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = err ? 'rgba(255,60,60,0.35)' : 'rgba(80,255,120,0.25)'; ctx.fillRect(0, 0, w, w);
-    ctx.strokeStyle = err ? '#ff5050' : '#60ff90'; ctx.lineWidth = 2; ctx.strokeRect(0, 0, w, w);
-    ctx.restore();
-    if (d.range) { ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5; circle(fp.tx * TS + w / 2, fp.ty * TS + w / 2, d.range[0] * TS); ctx.stroke(); }
-    if (d.radius) { ctx.strokeStyle = 'rgba(160,255,140,0.45)'; ctx.lineWidth = 1.5; circle(fp.tx * TS + w / 2, fp.ty * TS + w / 2, d.radius[0] * TS); ctx.stroke(); }
-  }
-  ctx.restore();
-
-  drawLighting(cx, cy);
-  drawWeather2D();
+  if (!R3.ready) R3.init(ROOT.NW);
+  R3.render(dt);
+  R3.overlay(ctx);
   drawUI();
 }
-function drawWeather2D() {
-  if (!S.weather && biomeAtW(S.player.x, S.player.y) !== 5) return;
-  const bi = biomeAtW(S.player.x, S.player.y), t = animT;
-  if (bi === 5) {   // Schattenreich: aufsteigende Funken
-    for (let i = 0; i < 60; i++) {
-      const x = (i * 137.5 + Math.sin(i + t * 0.5) * 40) % VW, y = VH - ((i * 53 + t * (30 + i % 20)) % (VH + 20));
-      ctx.fillStyle = 'rgba(190,110,255,' + (0.35 + 0.3 * Math.sin(t * 3 + i)) + ')'; circle(x, y, 1.5 + i % 3); ctx.fill();
-    }
-  }
-  if (S.weather && bi !== 2 && bi !== 5) {
-    const n = S.weather === 2 ? 260 : 160;
-    if (bi === 3) {
-      ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      for (let i = 0; i < n; i++) { const x = ((i * 137.5 + Math.sin(t + i) * 30 - t * 40) % VW + VW) % VW, y = ((i * 97 + t * (60 + i % 40)) % (VH + 20)) - 10; circle(x, y, 1.5 + i % 3); ctx.fill(); }
-    } else {
-      ctx.strokeStyle = 'rgba(180,200,230,0.35)'; ctx.lineWidth = 1.2; ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const sx = (i * 137.5 + Math.sin(i) * 50) % VW, sp = 700 + (i % 7) * 60;
-        const y = ((i * 97 + t * sp) % (VH + 40)) - 20, x = (sx - t * 120 + VW * 4) % VW;
-        ctx.moveTo(x, y); ctx.lineTo(x - 4, y + 14);
-      }
-      ctx.stroke();
-    }
-  }
-  for (const s of S.strikes) {
-    const a = clamp(s.life / 0.45, 0, 1), x = s.x - camX, y = s.y - camY;
-    ctx.fillStyle = 'rgba(230,240,255,' + 0.35 * a + ')'; ctx.fillRect(0, 0, VW, VH);
-    ctx.strokeStyle = 'rgba(240,245,255,' + a + ')'; ctx.lineWidth = 3; ctx.beginPath();
-    let px = x + Math.sin(s.seed) * 60, py = -10;
-    ctx.moveTo(px, py);
-    for (let k = 1; k <= 8; k++) { const f = k / 8; px = lerp(px, x, 0.35) + Math.sin(s.seed + k * 2.3) * 22 * (1 - f); py = lerp(-10, y, f); ctx.lineTo(px, py); }
-    ctx.stroke();
-  }
+// Ohne WebGL läuft das Spiel nicht (die alte 2D-Version gibt es nicht mehr)
+function drawNo3D() {
+  ctx.fillStyle = '#120d0a'; ctx.fillRect(0, 0, VW, VH);
+  text('BLACKOUT braucht 3D-Grafik (WebGL)', VW / 2, VH / 2 - 14, 22, '#ffb070', 'center');
+  text('Bitte aktiviere die Hardwarebeschleunigung im Browser oder nutze einen anderen Browser.', VW / 2, VH / 2 + 18, 14, '#ccc', 'center');
 }
 // HUD & Menüs in "logischen" Koordinaten zeichnen (auf dem Handy verkleinert)
 function drawUI() {
@@ -5107,53 +4746,6 @@ function drawTouchMore() {
   });
 }
 
-function drawLighting(cx, cy) {
-  const dk = darkness();
-  if (dk <= 0.01) return;
-  const W2 = lightC.width, H2 = lightC.height;
-  lctx.setTransform(1, 0, 0, 1, 0, 0);
-  lctx.globalCompositeOperation = 'source-over';
-  lctx.clearRect(0, 0, W2, H2);
-  const shadowRealm = S.biome && S.biome[tileAt(S.player.x, S.player.y)] === 5;
-  lctx.fillStyle = (S.bloodMoon ? 'rgba(46,4,10,' : shadowRealm ? 'rgba(30,6,48,' : 'rgba(6,10,32,') + dk + ')';
-  lctx.fillRect(0, 0, W2, H2);
-  lctx.globalCompositeOperation = 'destination-out';
-  const light = (x, y, r, a) => {
-    const sx = (x - cx) / 2, sy = (y - cy) / 2, sr = r / 2;
-    if (sx + sr < 0 || sy + sr < 0 || sx - sr > W2 || sy - sr > H2) return;
-    lctx.globalAlpha = a; lctx.drawImage(lightSprite, sx - sr, sy - sr, sr * 2, sr * 2);
-  };
-  const flick = 1 + Math.sin(animT * 13) * 0.03 + Math.sin(animT * 7.3) * 0.03;
-  const p = S.player;
-  for (const q of S.players) if (q.dead <= 0) light(q.x, q.y, 230 * flick, 1);
-  for (const b of S.buildings) {
-    const c = bCenter(b);
-    if (b.type === 'hq') light(c.x, c.y, 330 * flick, 1);
-    else if (TOWERS[b.type]) light(c.x, c.y, 170 * flick, 0.9);
-    else if (b.type === 'mine' || b.type === 'harv') light(c.x, c.y, 110, 0.7);
-    else if (b.type === 'heal') light(c.x, c.y, 150 * flick, 0.85);
-    else if (b.type === 'frost') light(c.x, c.y, 140 * flick, 0.8);
-  }
-  for (const c of S.chests) light(c.x, c.y, 90, 0.8);
-  if (S.portal) { light(S.portal.x, S.portal.y, 200 * flick, 1); light(S.portal2.x, S.portal2.y, 220 * flick, 1); }
-  for (const pg of S.pings) light(pg.x, pg.y, 120, 0.7);
-  for (const f of S.flashes) light(f.x, f.y, f.r, clamp(f.life / f.max, 0, 1));
-  for (const pr of S.projs) if (pr.k === 'bomb' || pr.k === 'glob') light(pr.x, pr.y - (pr.h || 0), 50, 0.6);
-  lctx.globalAlpha = 1;
-  ctx.drawImage(lightC, 0, 0, VW, VH);
-  // warmer Fackelschein
-  ctx.globalCompositeOperation = 'lighter';
-  const warm = (x, y, r, a) => {
-    const sx = x - cx, sy = y - cy;
-    if (sx + r < 0 || sy + r < 0 || sx - r > VW || sy - r > VH) return;
-    const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
-    g.addColorStop(0, 'rgba(255,170,80,' + a + ')'); g.addColorStop(1, 'rgba(255,120,40,0)');
-    ctx.fillStyle = g; ctx.fillRect(sx - r, sy - r, r * 2, r * 2);
-  };
-  if (S.hq) { const c = bCenter(S.hq); warm(c.x, c.y, 200 * flick, 0.12 * dk); }
-  for (const b of S.buildings) if (TOWERS[b.type]) { const c = bCenter(b); warm(c.x, c.y, 90 * flick, 0.1 * dk); }
-  ctx.globalCompositeOperation = 'source-over';
-}
 
 // ---------- HUD
 // Einheitlicher Stil (Alpha 1.5.0): dunkles Glas, weiche Ecken, feine Lichtkante oben
@@ -6298,9 +5890,9 @@ function drawHelp() {
     ['Bauen & Ausrüstung', [['🛠', 'Inventar & Bauen'], ['Gebäude antippen', 'Upgrade, Verkaufen, Eisen'], ['🩹 💣 🔥', 'Medkit, Granate, Molotow']]],
     ['Mehr (☰)', [['🗺', 'Karte mit Planquadraten'], ['★ ⚒', 'Skills, Schmiede'], ['💬 📍', 'Chat, Markierung'], ['👥 🤝', 'Spieler, Handeln'], ['⚙', 'Einstellungen']]],
   ] : [
-    ['Bewegen & Kämpfen', [['W A S D', 'laufen'], ['Maus', 'umsehen (Linksklick fängt die Maus)'], ['Linksklick', 'angreifen / abbauen'], ['Leertaste', 'springen'], ['Shift', 'Spezialfähigkeit'], ['O / F5', 'Ego ↔ Third-Person'], ['Mausrad', 'Kamera-Abstand']]],
-    ['Waffen & Bauen', [['Q E R C V B', 'Waffen'], ['L · G · Z', 'Medkit · Granate · Molotow'], ['I', 'Inventar & Bauen'], ['1 – 0', 'Gebäude wählen'], ['F', 'Falle / Aktion (Truhe, Luke, Schalter)'], ['J', 'Kryoturm'], ['U · X', 'Upgrade · Verkaufen']]],
-    ['Info & Online', [['M', 'Karte (Planquadrate A–H, 1–8)'], ['K · H', 'Skills · Schmiede'], ['Tab', 'Spielerliste'], ['T / Enter', 'Chat (Mausrad = ältere)'], ['Y', 'Markierung setzen'], ['/wo', 'eigenes Planquadrat'], ['N · ESC', 'Ton · Menü']]],
+    ['Bewegen & Kämpfen', [[['up', 'left', 'down', 'right'].map(keyLabel).map(l => l.split(' / ')[0]).join(' '), 'laufen'], ['Maus', 'umsehen (Linksklick fängt die Maus)'], ['Linksklick', 'angreifen / abbauen'], [keyLabel('jump'), 'springen'], [keyLabel('ability'), 'Spezialfähigkeit'], [keyLabel('view'), 'Ego ↔ Third-Person'], ['Mausrad', 'Kamera-Abstand']]],
+    ['Waffen & Bauen', [[['pick', 'sword', 'bow', 'spear', 'axe', 'staff'].map(keyLabel).join(' '), 'Waffen'], [['med', 'gren', 'molo'].map(keyLabel).join(' · '), 'Medkit · Granate · Molotow'], [keyLabel('craft'), 'Inventar & Bauen'], ['1 – 0', 'Gebäude wählen'], [keyLabel('interact'), 'Falle / Aktion (Truhe, Luke, Schalter)'], [keyLabel('frost'), 'Kryoturm'], [keyLabel('upgrade') + ' · ' + keyLabel('sell'), 'Upgrade · Verkaufen']]],
+    ['Info & Online', [[keyLabel('map'), 'Karte (Planquadrate A–H, 1–8)'], [keyLabel('skills') + ' · ' + keyLabel('forge'), 'Skills · Schmiede'], [keyLabel('list'), 'Spielerliste'], [keyLabel('chat'), 'Chat (Mausrad = ältere)'], [keyLabel('ping'), 'Markierung setzen'], ['/handel Name', 'mit einem Spieler handeln'], [keyLabel('mute') + ' · ESC', 'Ton · Menü']]],
   ];
   const cw = Math.min(300, (VW - 60) / cols.length), w = cw * cols.length + 40, h = 96 + Math.max(...cols.map(c => c[1].length)) * 30, x = VW / 2 - w / 2, y = Math.max(16, VH / 2 - h / 2 - 20);
   ctx.fillStyle = 'rgba(5,7,10,0.5)'; ctx.fillRect(0, 0, VW, VH);
@@ -6396,7 +5988,7 @@ function drawOverlays() {
     y += ls * 0.62;
     ctx.font = Math.round(ls * 0.26) + 'px ' + FONT_P; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillText('3D SURVIVAL GAME', cx + 3, y + 3);
-    ctx.fillStyle = '#c8c0b8'; ctx.fillText(R3 ? '3D SURVIVAL GAME' : 'SURVIVAL GAME · 2D', cx, y);
+    ctx.fillStyle = '#c8c0b8'; ctx.fillText('3D SURVIVAL GAME', cx, y);
     y += ls * 0.32;
     ctx.font = '12px ' + FONT_P; ctx.fillStyle = '#ff8a3a';
     ctx.fillText(GAME_VER.toUpperCase() + ' · DIE WELT IST DUNKEL. DEIN REAKTOR IST DAS LETZTE LICHT.', cx, y);
@@ -6411,8 +6003,7 @@ function drawOverlays() {
     const bw = small ? Math.min(250, (VW - 60) / 3) : 300, bh = small ? 46 : 54;
     if (small) {
       button('▶ EINZELSPIELER', cx - bw * 1.5 - 10, y, bw, bh, startSingle, true);
-      button('ONLINE HOSTEN', cx - bw / 2, y, bw, bh, () => openSlots('host'));
-      button('ONLINE BEITRETEN', cx + bw / 2 + 10, y, bw, bh, () => lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info'));
+      button('🌐 ONLINE', cx - bw / 2, y, bw * 2 + 10, bh, () => { onlinePick = true; });
       y += bh + 10;
       button('NAME: ' + playerName, cx - bw * 1.5 - 10, y, bw, 34, setName, false, true);
       button('🏆 ERFOLGE ' + achDone.size + '/' + ACHIEVEMENTS.length, cx - bw / 2, y, bw, 34, () => { achOpen = true; }, false, true);
@@ -6425,8 +6016,7 @@ function drawOverlays() {
     } else {
       const bx = cx - bw / 2;
       button('▶ EINZELSPIELER', bx, y, bw, bh + 6, startSingle, true); y += bh + 18;
-      button('ONLINE HOSTEN', bx, y, bw, bh, () => openSlots('host')); y += bh + 10;
-      button('ONLINE BEITRETEN', bx, y, bw, bh, () => lobbyOpen(ONLINE_URL ? 'lan-join' : 'lan-info')); y += bh + 16;
+      button('🌐 ONLINE', bx, y, bw, bh, () => { onlinePick = true; }); y += bh + 16;
       button('NAME: ' + playerName + '  ✎', bx, y, bw / 2 - 5, 34, setName, false, true);
       button('🏆 ' + achDone.size + '/' + ACHIEVEMENTS.length, bx + bw / 2 + 5, y, bw / 2 - 5, 34, () => { achOpen = true; }, false, true); y += 44;
       button('🎨 SKIN ANPASSEN', bx, y, bw / 2 - 5, 34, () => { skinOpen = true; }, false, true);
@@ -6441,13 +6031,13 @@ function drawOverlays() {
     // Seitenpanels auf großen Bildschirmen
     if (wide) {
       const pw = Math.min(330, (VW - bw) / 2 - 70), py = VH * 0.47;
-      const news = ['VIEL GRÖSSERE WELT', 'MEHR STÄDTE · 8 DÖRFER', 'VERLASSENE HÜTTEN MIT TRUHEN', 'F = TRUHE ÖFFNEN (NICHT AUF DER KARTE!)', 'NEUE BODENTEXTUREN', 'GRAS · SAND · SCHNEE · ASPHALT', 'STÄDTE: BÜRGERSTEIGE & LATERNEN', 'ZEBRASTREIFEN · BÄNKE · GRÖSSERE AUTOS', 'LÄNGERE TAGE UND NÄCHTE', 'TAG 150 S · NACHT 140 S'];
+      const news = ['11 TIERARTEN – JE BIOM ANDERE', 'WOLFSRUDEL · BÄREN · SKORPIONE · KAMELE', 'TASTEN SELBST BELEGEN', '⚙ EINSTELLUNGEN → ⌨ TASTEN', 'ONLINE: HOSTEN ODER BEITRETEN', 'ALLES HINTER EINEM KNOPF', '/HANDEL NAME', 'HANDELN PER CHAT-BEFEHL', 'SAUBERERE MODELLE', 'ARM BLEIBT BEIM SCHLAGEN DRAN'];
       panel(40, py, pw, 46 + news.length * 24, 0.78);
       titleText('NEU IN ' + GAME_VER.toUpperCase(), 40 + pw / 2, py + 24, 20, '#ff8a3a');
       ctx.font = '11px ' + FONT_P; ctx.textAlign = 'left';
       news.forEach((l, i) => { ctx.fillStyle = i % 2 ? '#a8a098' : '#e8dcd0'; ctx.fillText((i % 2 ? '   ' : '▸ ') + l, 56, py + 54 + i * 24); });
       const ctl = isTouch ? ['LINKER STICK: LAUFEN', 'RECHTER STICK: ANGREIFEN', '⚡ SPEZIALFÄHIGKEIT', '⚒ SCHMIEDE · ★ SKILLS'] :
-        ['WASD  LAUFEN', 'MAUS  UMSEHEN', 'LINKSKLICK  ANGREIFEN', 'O / F5  EGO ↔ THIRD-PERSON', 'Q E R C V B  WAFFEN', '1–0 · F · J  BAUEN', 'LEER SPRINGEN · SHIFT FÄHIGKEIT', 'H SCHMIEDE · K SKILLS', 'M KARTE · TAB SPIELER', 'T CHAT · F1 HILFE'];
+        [['up', 'left', 'down', 'right'].map(a => keyLabel(a).split(' / ')[0]).join('') + '  LAUFEN', 'MAUS  UMSEHEN', 'LINKSKLICK  ANGREIFEN', keyLabel('view') + '  EGO ↔ THIRD-PERSON', ['pick', 'sword', 'bow', 'spear', 'axe', 'staff'].map(keyLabel).join(' ') + '  WAFFEN', '1–0 · ' + keyLabel('interact') + ' · ' + keyLabel('frost') + '  BAUEN', keyLabel('jump').toUpperCase() + ' SPRINGEN · ' + keyLabel('ability').toUpperCase() + ' FÄHIGKEIT', keyLabel('forge') + ' SCHMIEDE · ' + keyLabel('skills') + ' SKILLS', keyLabel('map') + ' KARTE · ' + keyLabel('list').toUpperCase() + ' SPIELER', keyLabel('chat').split(' / ')[0] + ' CHAT · F1 HILFE · ⚙ TASTEN ÄNDERN'];
       const px = VW - 40 - pw;
       panel(px, py, pw, 46 + ctl.length * 24, 0.78);
       titleText('STEUERUNG', px + pw / 2, py + 24, 20, '#ff8a3a');
@@ -6460,8 +6050,10 @@ function drawOverlays() {
     if (achOpen) drawAchList();
     if (skinOpen) drawSkinEditor();
     if (settingsOpen) drawSettings();
+    if (keysOpen) drawKeys();
     if (slotPick) drawSlotPicker();
     if (rankOpen) drawRanks();
+    if (onlinePick && !slotPick) drawOnlinePick();
   } else if (mode === 'paused') {
     titleText(NET.role ? 'MENÜ' : 'PAUSE', cx, VH * 0.3, 60, '#e8dcd0');
     text('Nacht ' + S.night + ' · ' + S.kills + ' Kills · ' + S.buildings.length + ' Gebäude', cx, VH * 0.3 + 48, 17, '#ccc', 'center', '600');
@@ -6474,6 +6066,7 @@ function drawOverlays() {
     if (S.players.length > 1) button('🤝 Handeln', cx - 120, VH * 0.48 + (canSave() ? 220 : 170), 240, 40, () => openTrade(), false, true);
     else if (NET.role === 'client') text('Die Welt speichert der Host – dein Charakter kommt mit deinem Namen zurück.', cx, VH * 0.48 + 236, 13, '#aaa', 'center', '600');
     if (settingsOpen) drawSettings();
+    if (keysOpen) drawKeys();
   } else if (mode === 'over') {
     const r = lastResult;
     titleText('BLACKOUT', cx, VH * 0.2, Math.min(80, VW / 9), '#ff5b2a');
@@ -6522,7 +6115,6 @@ function tryPlaceAtAim(silent) {
   S.lastPlaceTile = key;
   actPlace(S.place, fp.tx, fp.ty);
 }
-const KEYMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right' };
 function hitUI(x, y) {
   x /= uiS; y /= uiS;
   for (let i = ui.length - 1; i >= 0; i--) { const u = ui[i]; if (x >= u.x && x <= u.x + u.w && y >= u.y && y <= u.y + u.h) return u; }
@@ -6532,8 +6124,6 @@ if (!HEADLESS) {
   window.addEventListener('pagehide', () => saveNowSync());
   window.addEventListener('beforeunload', () => saveNowSync());
   canvas = document.getElementById('game'); ctx = canvas.getContext('2d');
-  lightC = document.createElement('canvas'); lctx = lightC.getContext('2d');
-  lightSprite = makeLightSprite();
   window.addEventListener('resize', resize); resize();
 
   const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'KeyB', 'KeyA'];
@@ -6543,57 +6133,61 @@ if (!HEADLESS) {
     if (!e.repeat) { konami.push(e.code); if (konami.length > 10) konami.shift(); if (konami.join() === KONAMI.join() && S && mode === 'play') { konami = []; actEgg('konami'); } }
     if (lobbyOpenNow()) { if (e.code === 'Escape') { netClose(); lobbyHide(); } return; }
     if (chatIsOpen()) return;
-    if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+    if (keyWait) {   // neue Taste für die Tastenbelegung
+      e.preventDefault();
+      if (e.code === 'Escape') keyWait = null;
+      else if (e.code === 'Delete' || e.code === 'Backspace') { delete keyBinds[keyWait]; store.set(KEYS_KEY, keyBinds); keyWait = null; }
+      else if (!/^(Digit|Numpad)[0-9]$|^F1$/.test(e.code)) { keyAssign(keyWait, e.code); keyWait = null; SFX.play('click'); }
+      return;
+    }
+    const mv = moveOf(e);
+    if (mv) { keys[mv] = true; e.preventDefault(); }
     if (e.code === 'Space' || e.code === 'Tab') e.preventDefault();
-    if (mouseLocked() && ['KeyK', 'KeyH', 'KeyM', 'KeyT', 'Enter', 'Escape', 'KeyP'].includes(e.code)) document.exitPointerLock();
+    if (mouseLocked() && (['Enter', 'Escape'].includes(e.code) || ['skills', 'forge', 'map', 'chat', 'pause', 'craft'].some(a => keyIs(e, a)))) document.exitPointerLock();
     if (e.repeat) return;
     if (e.code === 'F1') { e.preventDefault(); if (mode === 'play' || mode === 'paused') helpOpen = !helpOpen; return; }
+    if (e.code === 'Escape' && keysOpen) { keysOpen = false; return; }
     if (e.code === 'Escape' && helpOpen) { helpOpen = false; return; }
-    if (e.code === 'KeyN') { SFX.toggle(); if (S && mode === 'play') toast(SFX.muted ? 'Ton aus' : 'Ton an'); return; }
-    if (e.code === 'KeyM' && mode === 'play') { mapOpen = !mapOpen; SFX.play('click'); return; }
+    if (keyIs(e, 'mute')) { SFX.toggle(); if (S && mode === 'play') toast(SFX.muted ? 'Ton aus' : 'Ton an'); return; }
+    if (keyIs(e, 'map') && mode === 'play') { mapOpen = !mapOpen; SFX.play('click'); return; }
     if (e.code === 'Escape' && achOpen) { achOpen = false; return; }
     if (e.code === 'Escape' && skinOpen) { skinOpen = false; return; }
     if (e.code === 'Escape' && slotPick) { slotPick = null; return; }
     if (e.code === 'Escape' && rankOpen) { rankOpen = false; return; }
-    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick && !rankOpen) startSingle(); return; }
+    if (e.code === 'Escape' && onlinePick) { onlinePick = false; return; }
+    if (mode === 'menu') { if ((e.code === 'Enter' || e.code === 'Space') && !slotPick && !rankOpen && !keysOpen && !onlinePick) startSingle(); return; }
     if (mode === 'over') { if ((e.code === 'Enter' || e.code === 'Space') && modeT > 1 && NET.role !== 'client') startGame(); return; }
     if (e.code === 'Escape' && settingsOpen) { settingsOpen = false; return; }
-    if (mode === 'paused') { if (e.code === 'Escape' || e.code === 'KeyP') mode = 'play'; return; }
+    if (mode === 'paused') { if (e.code === 'Escape' || keyIs(e, 'pause')) mode = 'play'; return; }
     if (mode !== 'play') return;
     if (e.code === 'Escape') {
       if (tradeOpen) tradeOpen = false; else if (mapOpen) mapOpen = false; else if (craftOpen) craftOpen = false; else if (forgeOpen) forgeOpen = false; else if (skillsOpen) skillsOpen = false; else if (S.place && S.hq) S.place = null; else if (S.sel) S.sel = null; else mode = 'paused';
       return;
     }
-    if (e.code === 'KeyP') { mode = 'paused'; return; }
+    if (keyIs(e, 'pause')) { mode = 'paused'; return; }
     const dm = /^(Digit|Numpad)([0-9])$/.exec(e.code);
     if (dm) { selectBuild(KEY_BUILD[dm[2]]); return; }
-    if (e.code === 'KeyT' || e.code === 'Enter') { e.preventDefault(); chatOpen(); return; }
-    { const k = (e.key || '').toLowerCase();
-      if (k === 'y') { const a = aimPoint(); pingAt(a.x, a.y); return; }
-      if (k === 'l') { actUse('med'); return; }
-      if (k === 'g') { actUse('gren'); return; }
-      if (k === 'z') { actUse('molo'); return; } }
-    if (e.code === 'KeyK') { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
-    if (e.code === 'KeyH') { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
-    if (e.code === 'KeyI') { toggleCraft(); return; }
-    if (e.code === 'KeyF') { if (nearHatch(S.player) || nearSwitch(S.player) || nearBox(S.player)) actInteract(); else selectBuild('trap'); return; }
-    if (e.code === 'KeyJ') { selectBuild('frost'); return; }
-    if (e.code === 'Space') { jump(); return; }
-    if (e.code === 'KeyO' || e.code === 'F5') { e.preventDefault(); toggleView(); return; }
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { actAbility(); return; }
+    if (keyIs(e, 'chat')) { e.preventDefault(); chatOpen(); return; }
+    if (keyIs(e, 'ping')) { const a = aimPoint(); pingAt(a.x, a.y); return; }
+    if (keyIs(e, 'med')) { actUse('med'); return; }
+    if (keyIs(e, 'gren')) { actUse('gren'); return; }
+    if (keyIs(e, 'molo')) { actUse('molo'); return; }
+    if (keyIs(e, 'skills')) { skillsOpen = !skillsOpen; forgeOpen = false; SFX.play('click'); return; }
+    if (keyIs(e, 'forge')) { forgeOpen = !forgeOpen; skillsOpen = false; craftOpen = false; SFX.play('click'); return; }
+    if (keyIs(e, 'craft')) { toggleCraft(); return; }
+    if (keyIs(e, 'interact')) { if (nearHatch(S.player) || nearSwitch(S.player) || nearBox(S.player)) actInteract(); else selectBuild('trap'); return; }
+    if (keyIs(e, 'frost')) { selectBuild('frost'); return; }
+    if (keyIs(e, 'jump')) { jump(); return; }
+    if (keyIs(e, 'view')) { e.preventDefault(); toggleView(); return; }
+    if (keyIs(e, 'ability')) { actAbility(); return; }
     if (R3 && e.code === 'Comma') { R3.rotate(-Math.PI / 4); return; }
     if (R3 && e.code === 'Period') { R3.rotate(Math.PI / 4); return; }
-    if (e.code === 'KeyQ') selectTool('pick');
-    else if (e.code === 'KeyE') selectTool('sword');
-    else if (e.code === 'KeyR') selectTool('bow');
-    else if (e.code === 'KeyC') selectTool('spear');
-    else if (e.code === 'KeyV') selectTool('axe');
-    else if (e.code === 'KeyB') selectTool('staff');
-    else if (e.code === 'KeyU' && S.sel) actUpgrade(S.sel);
-    else if ((e.code === 'KeyX' || e.code === 'Delete') && S.sel) actSell(S.sel);
+    for (const t of ['pick', 'sword', 'bow', 'spear', 'axe', 'staff']) if (keyIs(e, t)) { selectTool(t); return; }
+    if (keyIs(e, 'upgrade') && S.sel) actUpgrade(S.sel);
+    else if (keyIs(e, 'sell') && S.sel) actSell(S.sel);
   });
-  window.addEventListener('keyup', e => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; if (e.code === 'Tab') listOpen = false; });
-  window.addEventListener('keydown', e => { if (e.code === 'Tab' && mode === 'play' && !chatIsOpen()) listOpen = true; });
+  window.addEventListener('keyup', e => { const mv = moveOf(e); if (mv) keys[mv] = false; if (keyIs(e, 'list')) listOpen = false; });
+  window.addEventListener('keydown', e => { if (keyIs(e, 'list') && mode === 'play' && !chatIsOpen() && !keyWait) listOpen = true; });
   window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; input.down = false; if (mode === 'play' && !NET.role) mode = 'paused'; });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   let rotDrag = null;
@@ -6754,7 +6348,7 @@ if (!HEADLESS) {
 
 // Schnittstelle für automatisierte Tests
 if (!HEADLESS) setTimeout(settingsApply, 0);
-ROOT.NW = { lotAt, worldSpots, nearBox, boxEmpty, dunSwitches, vaultDoors, nearSwitch, useSwitch, riftPos, get dunSw() { return S.dunSw; }, chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
+ROOT.NW = { get tradeOpenNow() { return tradeOpen; }, get tradeToNow() { return tradeTo; }, lotAt, worldSpots, nearBox, boxEmpty, dunSwitches, vaultDoors, nearSwitch, useSwitch, riftPos, get dunSw() { return S.dunSw; }, chatFilter, sectorOf, plateBuilding, fixBuilding, strayTick, GAME_VER, playerAttack, tradeOffer, tradeAnswer, get tradeInbox() { return tradeInbox; }, pvpCan, pvpHit, recordRun, myRuns, MUSIC, musicMood, get tut() { return tut; }, tutStart, tutSteps, worldState, saveInfo, applySave, decodeSave, restoreChar, get saveSlot() { return saveSlot; }, set saveSlot(v) { saveSlot = v; }, saveNow, saveNowSync, SAVE_IO, slotStart, openSlots, cityCenters, hatchPos, dunExit, DUN, isStreet, interact, dropLoot, inDim, inDun, get craftTab() { return craftTab; }, get uiList() { return ui; }, hitUI, SET, lanConnect, spawnZombie, ARMOR_COL, craftEquip, useCons, armorRed, hurtPlayer, hurtZombie, SKIN_OPTS, skinParse,
   jump, toggleView, allHQs, teamOf, tidOf, withTeam, farSpawn,
   DIM, BIOME_NAME, biomeAtW, get mapOpen() { return mapOpen; },
   netOnMessage, hostAddPeer, clientUpdate: typeof clientUpdate !== "undefined" ? clientUpdate : null, ABIL, useAbility, selectAbility, runCommand, buildRange, foundEgg, eggsFound, NET, addRemotePlayer, hostPeerGone, hostHandleClient, pById,
