@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-15T11:27:21.886Z",
+  "updated": "2026-10-15T11:51:36.356Z",
   "games": [
     {
       "id": "blackout",
@@ -146,7 +146,7 @@
         "Hell/Dunkel, eigene Farbe, Schriftgröße, Status und Spitznamen",
         "Auch im Browser und auf dem Handy: mrzock.github.io/spark-chat"
       ],
-      "version": "Alpha 1.1.0",
+      "version": "Alpha 1.1.1",
       "color": "#2ee6ff",
       "cover": "spark-chat.jpg",
       "icon": "spark-chat-icon.png",
@@ -156,13 +156,13 @@
       "files": [
         {
           "path": "index.html",
-          "size": 7047,
-          "sha256": "9f96614da22aaf5eaee2d58ecf9f7e5a16d8b1aa4381b6e32107d91077ef72cf"
+          "size": 7054,
+          "sha256": "614a8dc543a84e0d8906ea53e6729fd122e07c96b2999763a69fe42383582317"
         },
         {
           "path": "chat.js",
-          "size": 97486,
-          "sha256": "d04d42d2004f021c548579602deac53faaa4315c912bab8c654bfcf8a65b521d"
+          "size": 103615,
+          "sha256": "a27f7ace257d86be2f44c37ef257c366708112cbdb78b4715a45c6b56be6c98e"
         },
         {
           "path": "chat.css",
@@ -181,6 +181,16 @@
         }
       ],
       "changelog": [
+        {
+          "version": "Alpha 1.1.1",
+          "date": "2026-10-15",
+          "items": [
+            "Nachrichten an Freunde, die gerade offline sind oder deren Verbindung hängt, kommen jetzt zuverlässig an",
+            "✓ = beim Server, ✓✓ = wirklich auf dem Gerät des Empfängers angekommen",
+            "Hängende Verbindungen werden erkannt und automatisch neu aufgebaut",
+            "Im Browser/auf dem Handy: Push-Benachrichtigungen („Du hast eine neue Nachricht“) – freiwillig in den Einstellungen"
+          ]
+        },
         {
           "version": "Alpha 1.1.0",
           "date": "2026-10-15",
@@ -211,7 +221,7 @@
       ],
       "background": true,
       "shortcutName": "SPARK Chat",
-      "size": 172630
+      "size": 178766
     }
   ]
 }

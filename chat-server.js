@@ -16,6 +16,8 @@ const QUEUE_MAX = 300, QUEUE_DAYS = 7, MAX_CT = 850000;           // eine Nachri
 const QUEUE_BYTES = 10 * 1048576, QUEUE_TOTAL = 150 * 1048576, AV_MAX = 32000;   // Warteschlange: pro Person 10 MB, insgesamt 150 MB
 const QUEUE_KEEP = 32000;                     // Nachrichten bis zu dieser Größe werden für Neustarts mitgespeichert
 const GROUP_MAX = 32, GROUPS_PER_USER = 50;
+const CONTACT = process.env.CHAT_CONTACT || 'alex.posaschenikow2008@gmail.com';
+const PUSH_HOST = /^https:\/\/([a-z0-9-]+\.)*(fcm\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)\//;
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
 const okName = s => typeof s === 'string' && /^[A-Za-z0-9_.-]{3,20}$/.test(s);
 const okHex = (s, n) => typeof s === 'string' && s.length === n && /^[0-9a-f]+$/.test(s);
@@ -25,8 +27,8 @@ const now = () => Date.now();
 module.exports = function createChat({ wsSend, log }) {
   // ---------- Daten: { users: { key: {...} } }, Meldungen, Sperrliste
   let db = { v: 1, users: {} }, reports = [], bans = new Set(), ready = false, dirty = false, repDirty = false;
-  let avatars = {}, avDirty = false, qDirty = false;   // Profilbilder (JPEG, Base64) – getrennte Datei, nur für Freunde sichtbar
-  const LOCAL_AV = path.join(__dirname, 'chat-avatars.json'), LOCAL_QUEUE = path.join(__dirname, 'chat-queue.json');
+  let avatars = {}, avDirty = false, qDirty = false, vapid = null, vapidDirty = false;   // Profilbilder (JPEG, Base64) – getrennte Datei, nur für Freunde sichtbar
+  const LOCAL_AV = path.join(__dirname, 'chat-avatars.json'), LOCAL_QUEUE = path.join(__dirname, 'chat-queue.json'), LOCAL_VAPID = path.join(__dirname, 'chat-vapid.json');
   const sha = {};   // GitHub-Dateiversionen
   const user = k => db.users[k];
   const rm = (arr, x) => { const i = arr.indexOf(x); if (i >= 0) arr.splice(i, 1); };
@@ -68,15 +70,18 @@ module.exports = function createChat({ wsSend, log }) {
         reports = (await ghRead('meldungen.json')) || [];
         avatars = (await ghRead('profilbilder.json')) || {};
         restoreQueue((await ghRead('warteschlange.json')) || {});
+        vapid = await ghRead('vapid.json');
         await loadBans();
       } else {
         try { db = JSON.parse(fs.readFileSync(LOCAL_FILE, 'utf8')); } catch (e) { db = { v: 1, users: {} }; }
         try { reports = JSON.parse(fs.readFileSync(LOCAL_REPORTS, 'utf8')); } catch (e) { reports = []; }
         try { avatars = JSON.parse(fs.readFileSync(LOCAL_AV, 'utf8')); } catch (e) { avatars = {}; }
         try { restoreQueue(JSON.parse(fs.readFileSync(LOCAL_QUEUE, 'utf8'))); } catch (e) {}
+        try { vapid = JSON.parse(fs.readFileSync(LOCAL_VAPID, 'utf8')); } catch (e) {}
       }
       if (!db.users) db.users = {};
       if (!db.groups) db.groups = {};
+      if (!vapid || !vapid.jwk || !vapid.pub) vapid = newVapid();
       prune();
       ready = true;
       log('Chat: ' + Object.keys(db.users).length + ' Konten geladen (' + (GH_TOKEN ? 'GitHub ' + GH_REPO : 'lokale Datei') + ')');
@@ -109,23 +114,25 @@ module.exports = function createChat({ wsSend, log }) {
   setInterval(prune, 24 * 3600e3).unref();
   let saving = false;
   async function save() {
-    if (!ready || saving || (!dirty && !repDirty && !avDirty && !qDirty)) return;
+    if (!ready || saving || (!dirty && !repDirty && !avDirty && !qDirty && !vapidDirty)) return;
     saving = true;
-    const d = dirty, rd = repDirty, ad = avDirty, qd = qDirty; dirty = repDirty = avDirty = qDirty = false;
+    const d = dirty, rd = repDirty, ad = avDirty, qd = qDirty, vd = vapidDirty; dirty = repDirty = avDirty = qDirty = vapidDirty = false;
     try {
       if (GH_TOKEN) {
         const files = { 'konten.json': db, 'meldungen.json': reports };
         if (ad) files['profilbilder.json'] = avatars;
         if (qd) files['warteschlange.json'] = keptQueue();
+        if (vd) files['vapid.json'] = vapid;
         await ghWriteAll(files);
       } else {
         if (d) fs.writeFileSync(LOCAL_FILE, JSON.stringify(db));
         if (rd) fs.writeFileSync(LOCAL_REPORTS, JSON.stringify(reports, null, 1));
         if (ad) fs.writeFileSync(LOCAL_AV, JSON.stringify(avatars));
         if (qd) fs.writeFileSync(LOCAL_QUEUE, JSON.stringify(keptQueue()));
+        if (vd) fs.writeFileSync(LOCAL_VAPID, JSON.stringify(vapid));
       }
     } catch (e) {
-      dirty = dirty || d; repDirty = repDirty || rd; avDirty = avDirty || ad; qDirty = qDirty || qd;
+      dirty = dirty || d; repDirty = repDirty || rd; avDirty = avDirty || ad; qDirty = qDirty || qd; vapidDirty = vapidDirty || vd;
       log('Chat: Speichern fehlgeschlagen (' + e.message + ')');
     }
     saving = false;
@@ -193,8 +200,30 @@ module.exports = function createChat({ wsSend, log }) {
 
   let queueBytes = 0;
   const mSize = m => (m.ct ? m.ct.length : 0) + 200;
+  // Zustellen: Geräte mit Empfangsbestätigung (ab Chat 1.1.1) behalten die Nachricht „unterwegs“, bis „got“ kommt.
+  // Kommt keine Bestätigung (tote Verbindung), wandert sie zurück in die Warteschlange – nichts geht verloren.
+  const inflight = new Map();   // key → Map(from|id → { m, t, n })
+  const mid = m => m.from + '|' + m.id;
+  function track(k, m) {
+    let inf = inflight.get(k); if (!inf) inflight.set(k, inf = new Map());
+    const o = inf.get(mid(m)); inf.set(mid(m), { m, t: now(), n: o ? o.n + 1 : 0 });
+    if (mSize(m) <= QUEUE_KEEP) qDirty = true;
+  }
   function deliver(k, m) {
-    if (isOn(k)) { sendUser(k, m); return true; }
+    const cs = [...conns(k)];
+    if (!cs.length) { const r = queuePush(k, m); if (r === false) pushFor(k, m); return r; }
+    for (const c of cs) send(c, m);
+    if (cs.some(c => c.acks)) { track(k, m); return 'sent'; }
+    return true;
+  }
+  function requeue(k, only) {
+    const inf = inflight.get(k); if (!inf) return;
+    let last = null;
+    for (const [id, e] of inf) { if (only && only !== id) continue; inf.delete(id); if (queuePush(k, e.m) === false) last = e.m; }
+    if (!inf.size) inflight.delete(k);
+    if (last && !isOn(k)) pushFor(k, last);
+  }
+  function queuePush(k, m) {
     const q = queue.get(k) || [];
     if (q.some(x => x.id === m.id && x.from === m.from)) return false;
     if (queueBytes + mSize(m) > QUEUE_TOTAL) return null;   // Server-Speicher voll
@@ -208,6 +237,7 @@ module.exports = function createChat({ wsSend, log }) {
   function keptQueue() {
     const out = {}, cut = now() - QUEUE_DAYS * 864e5;
     for (const [k, q] of queue) { const keep = q.filter(m => mSize(m) <= QUEUE_KEEP && m.ts >= cut); if (keep.length) out[k] = keep; }
+    for (const [k, inf] of inflight) for (const e of inf.values()) if (mSize(e.m) <= QUEUE_KEEP && !(out[k] || []).some(x => mid(x) === mid(e.m))) (out[k] = out[k] || []).push(e.m);
     return out;
   }
   function restoreQueue(o) {
@@ -226,13 +256,24 @@ module.exports = function createChat({ wsSend, log }) {
     for (const m of q) {
       if (m.ts < cut) continue;
       send(c, m);
-      if (m.t === 'msg') sendUser(m.from.toLowerCase(), { t: 'dlv', id: m.id, to: user(k) ? user(k).name : '' });
+      if (c.acks) track(k, m);
+      else if (m.t === 'msg') sendUser(m.from.toLowerCase(), { t: 'dlv', id: m.id, to: user(k) ? user(k).name : '' });
     }
   }
   setInterval(() => {
     const cut = now() - QUEUE_DAYS * 864e5;
     for (const [k, q] of queue) { const n = q.filter(m => m.ts >= cut); n.bytes = n.reduce((s, m) => s + mSize(m), 0); queueBytes -= (q.bytes || 0) - n.bytes; n.length ? queue.set(k, n) : queue.delete(k); }
   }, 3600000).unref();
+
+  setInterval(() => {
+    const t = now();
+    for (const [k, inf] of inflight) for (const [id, e] of inf) {
+      if (t - e.t < 30000) continue;
+      if (isOn(k) && e.n < 2) { for (const c of conns(k)) if (c.acks) send(c, e.m); e.t = t; e.n++; }
+      else requeue(k, id);
+    }
+    for (const set of online.values()) for (const c of set) if (t - c.seen > 80000) { try { c.sock.destroy(); } catch (e) {} }
+  }, 15000).unref();
 
   function endCallsOf(c, why) {
     for (const [cid, call] of calls) {
@@ -248,7 +289,10 @@ module.exports = function createChat({ wsSend, log }) {
   async function onText(c, text) {
     let m; try { m = JSON.parse(text); } catch (e) { return; }
     if (!m || typeof m.t !== 'string') return;
+    c.seen = now();
     if (m.t === 'a') return relayAudio(c, m);
+    if (m.t === 'got' && c.key) return onGot(c, m);
+    if (m.t === 'ping') return send(c, { t: 'pong' });
     // allgemeines Tempolimit (Audio ausgenommen)
     const t = now(); if (t - c.rt > 10000) { c.rt = t; c.rn = 0; }
     if (++c.rn > 60) { send(c, { t: 'err', msg: 'Langsamer bitte – zu viele Nachrichten.' }); return; }
@@ -260,6 +304,7 @@ module.exports = function createChat({ wsSend, log }) {
   }
 
   async function onAuth(c, m) {
+    c.acks = (m.v | 0) >= 2;   // ab Chat 1.1.1: Empfangsbestätigungen
     const k = String(m.u || '').toLowerCase();
     if (m.t === 'salt') { const u = user(k); return send(c, { t: 'salt', u: m.u, salt: u ? u.salt : fakeSalt(k) }); }
     if (m.t === 'register') {
@@ -285,6 +330,17 @@ module.exports = function createChat({ wsSend, log }) {
     send(c, { t: 'err', msg: 'Bitte zuerst anmelden.' });
   }
 
+  function onGot(c, m) {
+    const inf = inflight.get(c.key); if (!inf || !Array.isArray(m.items)) return;
+    for (const it of m.items.slice(0, 1000)) {
+      if (!Array.isArray(it)) continue;
+      const id = String(it[0]) + '|' + String(it[1]), e = inf.get(id); if (!e) continue;
+      inf.delete(id);
+      if (e.m.t === 'msg') sendUser(String(e.m.from).toLowerCase(), { t: 'dlv', id: e.m.id, to: user(c.key) ? user(c.key).name : '' });
+    }
+    if (!inf.size) inflight.delete(c.key);
+    qDirty = true;
+  }
   function login(c, k) {
     const u = user(k);
     const today = new Date().toISOString().slice(0, 10); if (u.seen !== today) { u.seen = today; touch(); }
@@ -292,7 +348,7 @@ module.exports = function createChat({ wsSend, log }) {
     if (!online.has(k)) online.set(k, new Set());
     const first = !isOn(k);
     online.get(k).add(c);
-    send(c, { t: 'hello', me: { u: u.name, pub: u.pub, encPriv: u.encPriv, salt: u.salt, invisible: !!u.invisible, created: u.created, av: u.av || 0, status: u.status || '' } });
+    send(c, { t: 'hello', me: { u: u.name, pub: u.pub, encPriv: u.encPriv, salt: u.salt, invisible: !!u.invisible, created: u.created, av: u.av || 0, status: u.status || '', vapid: vapid ? vapid.pub : '' } });
     send(c, social(k));
     for (const f of u.inReq) if (user(f)) send(c, { t: 'req', u: user(f).name });
     flushQueue(k, c);
@@ -311,7 +367,8 @@ module.exports = function createChat({ wsSend, log }) {
         if ((c.bb += m.ct.length) > 25 * 1048576) return send(c, { t: 'nack', id: m.id, msg: 'Zu viele Bilder auf einmal – bitte kurz warten.' });
         const out = { t: 'msg', from: me.name, id: m.id, iv: m.iv, ct: m.ct, ts: now() };
         const r = deliver(ok, out);
-        if (r) send(c, { t: 'dlv', id: m.id, to: other.name });
+        if (r === 'sent') send(c, { t: 'sent', id: m.id, to: other.name });
+        else if (r) send(c, { t: 'dlv', id: m.id, to: other.name });
         else if (r === null) send(c, { t: 'nack', id: m.id, msg: other.name + ' ist offline und der Server-Speicher ist gerade voll. Versuch es später nochmal.' });
         else send(c, { t: 'queued', id: m.id, to: other.name });
         return;
@@ -379,6 +436,15 @@ module.exports = function createChat({ wsSend, log }) {
         }
         return send(c, { t: 'gack', id: m.id, n, q });
       }
+      case 'pushsub': {   // Push-Benachrichtigungen fürs Handy – nur nach ausdrücklicher Einwilligung in der App
+        const sb = m.sub || {}, ep = String(sb.endpoint || ''), keys = sb.keys || {};
+        if (m.consent !== true) return send(c, { t: 'info', msg: 'Bitte stimme den Push-Benachrichtigungen zuerst zu.' });
+        if (!PUSH_HOST.test(ep) || ep.length > 800 || !/^[A-Za-z0-9_-]{80,100}$/.test(keys.p256dh || '') || !/^[A-Za-z0-9_-]{16,32}$/.test(keys.auth || '')) return send(c, { t: 'info', msg: 'Push-Benachrichtigungen werden von diesem Browser nicht unterstützt.' });
+        me.push = (me.push || []).filter(p => p.endpoint !== ep).slice(-4);
+        me.push.push({ endpoint: ep, keys: { p256dh: keys.p256dh, auth: keys.auth }, seit: new Date().toISOString().slice(0, 10) });
+        touch(); return send(c, { t: 'pushok', on: true });
+      }
+      case 'pushdel': { if (me.push) { me.push = me.push.filter(p => p.endpoint !== String(m.endpoint || '')); if (!me.push.length) delete me.push; touch(); } return send(c, { t: 'pushok', on: false }); }
       case 'gtyping': { const g = db.groups[String(m.g || '')]; if (g && g.members.includes(k)) for (const mk of g.members) if (mk !== k) sendUser(mk, { t: 'typing', u: me.name, g: m.g }); return; }
       case 'read': if (other && me.friends.includes(ok) && typeof m.id === 'string') sendUser(ok, { t: 'read', u: me.name, id: m.id.slice(0, 40) }); return;
       case 'typing': if (other && me.friends.includes(ok)) sendUser(ok, { t: 'typing', u: me.name }); return;
@@ -396,7 +462,7 @@ module.exports = function createChat({ wsSend, log }) {
         if (me.outReq.length >= 100 || me.friends.length >= 500) return send(c, { t: 'info', msg: 'Zu viele Freunde/Anfragen.' });
         if (!me.outReq.includes(ok)) me.outReq.push(ok);
         // Wer blockiert wurde, merkt das nicht – die Anfrage kommt nur nicht an
-        if (!other.blocked.includes(k) && !other.inReq.includes(k)) { other.inReq.push(k); sendUser(ok, { t: 'req', u: me.name }); pushSocial(ok); }
+        if (!other.blocked.includes(k) && !other.inReq.includes(k)) { other.inReq.push(k); sendUser(ok, { t: 'req', u: me.name }); pushSocial(ok); if (!isOn(ok)) pushTo(ok); }
         touch(); pushSocial(k);
         return send(c, { t: 'info', msg: 'Anfrage an ' + other.name + ' gesendet.', ok: true });
       }
@@ -435,10 +501,11 @@ module.exports = function createChat({ wsSend, log }) {
         return send(c, { t: 'pwok', salt: me.salt, encPriv: me.encPriv });
       }
       case 'mydata': {   // Auskunft (Art. 15 DSGVO): alles, was der Server über dich gespeichert hat
-        const { hash, hs, fails, lock, ...rest } = me;   // seen = Datum der letzten Anmeldung
+        const { hash, hs, fails, lock, push, ...rest } = me;   // seen = Datum der letzten Anmeldung
         const name = f => (user(f) ? user(f).name : f);
         return send(c, { t: 'mydata', data: Object.assign(rest, { friends: me.friends.map(name), inReq: me.inReq.map(name), outReq: me.outReq.map(name), blocked: me.blocked.map(name),
           profilbild: avatars[k] ? 'data:image/jpeg;base64,' + avatars[k] : 'keins',
+          push: (me.push || []).map(p => ({ dienst: new URL(p.endpoint).hostname, seit: p.seit })),
           gruppen: Object.values(db.groups).filter(g => g.members.includes(k)).map(g => ({ name: g.name, leiter: name(g.owner), mitglieder: g.members.map(name) })),
           hinweis: 'Zusätzlich gespeichert: ein Hash deines Anmeldeschlüssels (nicht dein Passwort). Verschlüsselte Nachrichten an dich, die noch nicht zugestellt wurden: ' + ((queue.get(k) || []).length) }) });
       }
@@ -473,7 +540,7 @@ module.exports = function createChat({ wsSend, log }) {
     if (!cid) return;
     if (m.op === 'ring') {
       if (!other || !me.friends.includes(ok)) return send(c, { t: 'call', op: 'end', cid, u: String(m.u || ''), why: 'Nur Freunde können angerufen werden.' });
-      if (!isOn(ok) || other.invisible) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' ist offline.' });
+      if (!isOn(ok) || other.invisible) { if (!isOn(ok)) pushTo(ok); return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' ist offline.' }); }
       for (const [xid, call] of calls) {
         // Beide rufen sich gleichzeitig an → den anderen Anruf direkt verbinden
         if (call.a === ok && call.b === c.key && !call.bc) { call.bc = c; send(call.ac, { t: 'call', op: 'accept', cid: xid, u: me.name }); return send(c, { t: 'call', op: 'joined', cid: xid, old: cid, u: other.name }); }
@@ -510,15 +577,64 @@ module.exports = function createChat({ wsSend, log }) {
     if (to) wsSend(to.sock, JSON.stringify({ t: 'a', cid: m.cid, d: m.d }));
   }
 
+  // ---------- Web-Push: VAPID-Signatur (ES256) + Verschlüsselung (aes128gcm).
+  // Bewusst ohne Absender und Inhalt – nur „Du hast eine neue Nachricht“.
+  const PUSH_MSG = JSON.stringify({ title: 'SPARK Chat', body: 'Du hast eine neue Nachricht', tag: 'spark-chat', url: './' });
+  function newVapid() {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const jwk = privateKey.export({ format: 'jwk' }), pubJwk = publicKey.export({ format: 'jwk' });
+    const pub = Buffer.concat([Buffer.from([4]), Buffer.from(pubJwk.x, 'base64url'), Buffer.from(pubJwk.y, 'base64url')]).toString('base64url');
+    vapidDirty = true; log('Chat: neue Push-Schlüssel erzeugt');
+    return { pub, jwk };
+  }
+  function vapidJwt(aud) {
+    const head = Buffer.from(JSON.stringify({ typ: 'JWT', alg: 'ES256' })).toString('base64url');
+    const body = Buffer.from(JSON.stringify({ aud, exp: Math.floor(now() / 1000) + 12 * 3600, sub: 'mailto:' + CONTACT })).toString('base64url');
+    const key = crypto.createPrivateKey({ key: vapid.jwk, format: 'jwk' });
+    const sig = crypto.sign('sha256', Buffer.from(head + '.' + body), { key, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+    return head + '.' + body + '.' + sig;
+  }
+  function pushEncrypt(sub, text) {
+    const ua = Buffer.from(sub.keys.p256dh, 'base64url'), auth = Buffer.from(sub.keys.auth, 'base64url');
+    const ecdh = crypto.createECDH('prime256v1'); ecdh.generateKeys();
+    const as = ecdh.getPublicKey(), secret = ecdh.computeSecret(ua), salt = crypto.randomBytes(16);
+    const hk = (s, ikm, info, n) => Buffer.from(crypto.hkdfSync('sha256', ikm, s, info, n));
+    const ikm = hk(auth, secret, Buffer.concat([Buffer.from('WebPush: info\0'), ua, as]), 32);
+    const cek = hk(salt, ikm, Buffer.from('Content-Encoding: aes128gcm\0'), 16), nonce = hk(salt, ikm, Buffer.from('Content-Encoding: nonce\0'), 12);
+    const ci = crypto.createCipheriv('aes-128-gcm', cek, nonce);
+    const ct = Buffer.concat([ci.update(Buffer.concat([Buffer.from(text), Buffer.from([2])])), ci.final(), ci.getAuthTag()]);
+    const head = Buffer.alloc(21); salt.copy(head, 0); head.writeUInt32BE(4096, 16); head[20] = 65;
+    return Buffer.concat([head, as, ct]);
+  }
+  const pushSeen = new Map();
+  async function pushTo(k) {
+    const u = user(k); if (!u || !u.push || !u.push.length || !vapid) return;
+    const t = now();
+    if (t - (pushSeen.get(k) || 0) < 20000) return;   // höchstens alle 20 s eine Benachrichtigung
+    pushSeen.set(k, t); if (pushSeen.size > 5000) pushSeen.clear();
+    for (const sub of u.push.slice()) {
+      try {
+        const r = await fetch(sub.endpoint, { method: 'POST', body: pushEncrypt(sub, PUSH_MSG), headers: {
+          TTL: '86400', Urgency: 'high', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream',
+          Authorization: 'vapid t=' + vapidJwt(new URL(sub.endpoint).origin) + ', k=' + vapid.pub } });
+        if (r.status === 404 || r.status === 410) { u.push = u.push.filter(p => p !== sub); if (!u.push.length) delete u.push; touch(); }
+        else if (!r.ok) log('Chat: Push abgelehnt (' + r.status + ')');
+      } catch (e) { log('Chat: Push fehlgeschlagen (' + e.message + ')'); }
+    }
+  }
+  function pushFor(k, m) { if (m.t === 'msg' || m.t === 'gmsg') pushTo(k); }
+
   load();   // erst hier: alle Zustände oben sind angelegt
   return {
-    open(sock, ip) { return { sock, ip, key: null, act: '', rt: 0, rn: 0, at: 0, an: 0, bt: 0, bb: 0 }; },
+    open(sock, ip) { return { sock, ip, key: null, act: '', rt: 0, rn: 0, at: 0, an: 0, bt: 0, bb: 0, seen: now(), acks: false }; },
+    pong(c) { c.seen = now(); },
+    _test: process.env.CHAT_TEST ? { pushEncrypt, vapidJwt, vapid: () => vapid } : undefined,
     text: onText,
     close(c) {
       endCallsOf(c, 'Verbindung getrennt');
       if (!c.key) return;
       const set = online.get(c.key);
-      if (set) { set.delete(c); if (!set.size) { online.delete(c.key); presence(c.key); } else presence(c.key); }
+      if (set) { set.delete(c); if (!set.size) { online.delete(c.key); presence(c.key); requeue(c.key); } else presence(c.key); }
     },
     stats: () => ({ users: Object.keys(db.users).length, online: online.size, ready }),
     flush,
