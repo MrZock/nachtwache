@@ -352,6 +352,9 @@ module.exports = function createChat({ wsSend, log }) {
     send(c, social(k));
     for (const f of u.inReq) if (user(f)) send(c, { t: 'req', u: user(f).name });
     flushQueue(k, c);
+    // Noch unbestätigte Nachrichten (z. B. an eine alte, tote Verbindung) sofort an das neue Gerät
+    const inf = inflight.get(k);
+    if (inf) for (const e of inf.values()) { send(c, e.m); e.t = now(); }
     if (first) presence(k);
   }
 
