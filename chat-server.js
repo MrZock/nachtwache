@@ -1,7 +1,8 @@
 // SPARK Chat – Server-Teil: Konten, Freunde, Weiterleitung von Nachrichten und Anrufen.
 // Der Server sieht keine Passwörter (nur einen daraus abgeleiteten Schlüssel, den er nochmals hasht)
-// und keine Nachrichten: alles ist Ende-zu-Ende-verschlüsselt. Nachrichten für Freunde, die gerade
-// offline sind, liegen nur im Arbeitsspeicher (max. 7 Tage, weg bei einem Neustart).
+// und keine Nachrichten: alles ist Ende-zu-Ende-verschlüsselt. Verschlüsselte Nachrichten für Freunde, die gerade
+// offline sind, warten max. 7 Tage; kleine (Text) werden mitgespeichert, damit sie einen Neustart überstehen.
+// Gruppen: Inhalt wird einmal verschlüsselt, der Schlüssel dazu für jedes Mitglied einzeln (der Server sieht nur Name + Mitglieder).
 // Konten werden in einem privaten GitHub-Repo gespeichert (Umgebungsvariablen GH_TOKEN, GH_DATA_REPO),
 // ohne Token in chat-data.json neben dem Server.
 'use strict';
@@ -13,6 +14,9 @@ const SECRET = crypto.createHash('sha256').update('spark-chat|' + (process.env.C
 const RESERVED = new Set(['admin', 'administrator', 'spark', 'system', 'support', 'moderator', 'mod', 'root', 'server']);
 const QUEUE_MAX = 300, QUEUE_DAYS = 7, MAX_CT = 850000;           // eine Nachricht (inkl. Bild) max. ~850 KB verschlüsselt
 const QUEUE_BYTES = 10 * 1048576, QUEUE_TOTAL = 150 * 1048576, AV_MAX = 32000;   // Warteschlange: pro Person 10 MB, insgesamt 150 MB
+const QUEUE_KEEP = 32000;                     // Nachrichten bis zu dieser Größe werden für Neustarts mitgespeichert
+const GROUP_MAX = 32, GROUPS_PER_USER = 50;
+const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, n);
 const okName = s => typeof s === 'string' && /^[A-Za-z0-9_.-]{3,20}$/.test(s);
 const okHex = (s, n) => typeof s === 'string' && s.length === n && /^[0-9a-f]+$/.test(s);
 const okB64 = (s, max) => typeof s === 'string' && s.length <= max && /^[A-Za-z0-9+/=]+$/.test(s);
@@ -21,8 +25,8 @@ const now = () => Date.now();
 module.exports = function createChat({ wsSend, log }) {
   // ---------- Daten: { users: { key: {...} } }, Meldungen, Sperrliste
   let db = { v: 1, users: {} }, reports = [], bans = new Set(), ready = false, dirty = false, repDirty = false;
-  let avatars = {}, avDirty = false;   // Profilbilder (JPEG, Base64) – getrennte Datei, nur für Freunde sichtbar
-  const LOCAL_AV = path.join(__dirname, 'chat-avatars.json');
+  let avatars = {}, avDirty = false, qDirty = false;   // Profilbilder (JPEG, Base64) – getrennte Datei, nur für Freunde sichtbar
+  const LOCAL_AV = path.join(__dirname, 'chat-avatars.json'), LOCAL_QUEUE = path.join(__dirname, 'chat-queue.json');
   const sha = {};   // GitHub-Dateiversionen
   const user = k => db.users[k];
   const rm = (arr, x) => { const i = arr.indexOf(x); if (i >= 0) arr.splice(i, 1); };
@@ -63,13 +67,16 @@ module.exports = function createChat({ wsSend, log }) {
         db = (await ghRead('konten.json')) || { v: 1, users: {} };
         reports = (await ghRead('meldungen.json')) || [];
         avatars = (await ghRead('profilbilder.json')) || {};
+        restoreQueue((await ghRead('warteschlange.json')) || {});
         await loadBans();
       } else {
         try { db = JSON.parse(fs.readFileSync(LOCAL_FILE, 'utf8')); } catch (e) { db = { v: 1, users: {} }; }
         try { reports = JSON.parse(fs.readFileSync(LOCAL_REPORTS, 'utf8')); } catch (e) { reports = []; }
         try { avatars = JSON.parse(fs.readFileSync(LOCAL_AV, 'utf8')); } catch (e) { avatars = {}; }
+        try { restoreQueue(JSON.parse(fs.readFileSync(LOCAL_QUEUE, 'utf8'))); } catch (e) {}
       }
       if (!db.users) db.users = {};
+      if (!db.groups) db.groups = {};
       prune();
       ready = true;
       log('Chat: ' + Object.keys(db.users).length + ' Konten geladen (' + (GH_TOKEN ? 'GitHub ' + GH_REPO : 'lokale Datei') + ')');
@@ -95,27 +102,30 @@ module.exports = function createChat({ wsSend, log }) {
   }
   function removeUser(k) {
     for (const u of Object.values(db.users)) { rm(u.friends, k); rm(u.inReq, k); rm(u.outReq, k); rm(u.blocked, k); }
-    delete db.users[k]; queue.delete(k);
+    for (const g of Object.values(db.groups || {})) if (g.members.includes(k)) leaveGroup(g, k);
+    delete db.users[k]; queue.delete(k); qDirty = true;
     if (avatars[k]) { delete avatars[k]; avDirty = true; }
   }
   setInterval(prune, 24 * 3600e3).unref();
   let saving = false;
   async function save() {
-    if (!ready || saving || (!dirty && !repDirty && !avDirty)) return;
+    if (!ready || saving || (!dirty && !repDirty && !avDirty && !qDirty)) return;
     saving = true;
-    const d = dirty, rd = repDirty, ad = avDirty; dirty = repDirty = avDirty = false;
+    const d = dirty, rd = repDirty, ad = avDirty, qd = qDirty; dirty = repDirty = avDirty = qDirty = false;
     try {
       if (GH_TOKEN) {
         const files = { 'konten.json': db, 'meldungen.json': reports };
         if (ad) files['profilbilder.json'] = avatars;
+        if (qd) files['warteschlange.json'] = keptQueue();
         await ghWriteAll(files);
       } else {
         if (d) fs.writeFileSync(LOCAL_FILE, JSON.stringify(db));
         if (rd) fs.writeFileSync(LOCAL_REPORTS, JSON.stringify(reports, null, 1));
         if (ad) fs.writeFileSync(LOCAL_AV, JSON.stringify(avatars));
+        if (qd) fs.writeFileSync(LOCAL_QUEUE, JSON.stringify(keptQueue()));
       }
     } catch (e) {
-      dirty = dirty || d; repDirty = repDirty || rd; avDirty = avDirty || ad;
+      dirty = dirty || d; repDirty = repDirty || rd; avDirty = avDirty || ad; qDirty = qDirty || qd;
       log('Chat: Speichern fehlgeschlagen (' + e.message + ')');
     }
     saving = false;
@@ -159,16 +169,26 @@ module.exports = function createChat({ wsSend, log }) {
     if (!u) return null;
     return {
       t: 'social',
-      friends: u.friends.filter(user).map(f => ({ u: user(f).name, pub: user(f).pub, av: user(f).av || 0, on: isOn(f) && !user(f).invisible, act: (isOn(f) && !user(f).invisible && actOf(f)) || '' })),
+      friends: u.friends.filter(user).map(f => ({ u: user(f).name, pub: user(f).pub, av: user(f).av || 0, status: user(f).status || '', on: isOn(f) && !user(f).invisible, act: (isOn(f) && !user(f).invisible && actOf(f)) || '' })),
       inReq: u.inReq.filter(user).map(f => user(f).name), outReq: u.outReq.filter(user).map(f => user(f).name), blocked: u.blocked.filter(user).map(f => user(f).name),
+      groups: Object.entries(db.groups).filter(([, g]) => g.members.includes(k)).map(([id, g]) => groupView(id, g)),
     };
   }
   const pushSocial = k => { const s = social(k); if (s) sendUser(k, s); };
+  const groupView = (id, g) => ({ id, name: g.name, owner: user(g.owner) ? user(g.owner).name : '', members: g.members.filter(user).map(m => ({ u: user(m).name, pub: user(m).pub, av: user(m).av || 0 })) });
+  function leaveGroup(g, k) {
+    rm(g.members, k);
+    const id = Object.keys(db.groups).find(x => db.groups[x] === g);
+    if (!g.members.length) { delete db.groups[id]; return; }
+    if (g.owner === k) g.owner = g.members[0];
+    touch();
+  }
+  const pushGroup = g => { for (const m of g.members) pushSocial(m); };
   function actOf(k) { for (const c of conns(k)) if (c.act) return c.act; return ''; }
   function presence(k) {
     const u = user(k); if (!u) return;
     const on = isOn(k) && !u.invisible, act = on ? actOf(k) : '';
-    for (const f of u.friends) sendUser(f, { t: 'pres', u: u.name, on, act });
+    for (const f of u.friends) sendUser(f, { t: 'pres', u: u.name, on, act, status: u.status || '' });
   }
 
   let queueBytes = 0;
@@ -181,11 +201,27 @@ module.exports = function createChat({ wsSend, log }) {
     q.push(m); queueBytes += mSize(m); q.bytes = (q.bytes || 0) + mSize(m);
     while (q.length > QUEUE_MAX || q.bytes > QUEUE_BYTES) { const x = q.shift(); q.bytes -= mSize(x); queueBytes -= mSize(x); }
     queue.set(k, q);
+    if (mSize(m) <= QUEUE_KEEP) qDirty = true;
     return false;
+  }
+  // Kleine wartende Nachrichten (verschlüsselt) mitspeichern, damit sie einen Neustart überstehen
+  function keptQueue() {
+    const out = {}, cut = now() - QUEUE_DAYS * 864e5;
+    for (const [k, q] of queue) { const keep = q.filter(m => mSize(m) <= QUEUE_KEEP && m.ts >= cut); if (keep.length) out[k] = keep; }
+    return out;
+  }
+  function restoreQueue(o) {
+    const cut = now() - QUEUE_DAYS * 864e5;
+    for (const [k, list] of Object.entries(o || {})) {
+      if (!Array.isArray(list)) continue;
+      const q = list.filter(m => m && m.ts >= cut && typeof m.ct === 'string');
+      if (!q.length) continue;
+      q.bytes = q.reduce((s2, m) => s2 + mSize(m), 0); queueBytes += q.bytes; queue.set(k, q);
+    }
   }
   function flushQueue(k, c) {
     const q = queue.get(k); if (!q) return;
-    queue.delete(k); queueBytes -= q.bytes || 0;
+    queue.delete(k); queueBytes -= q.bytes || 0; qDirty = true;
     const cut = now() - QUEUE_DAYS * 864e5;
     for (const m of q) {
       if (m.ts < cut) continue;
@@ -256,7 +292,7 @@ module.exports = function createChat({ wsSend, log }) {
     if (!online.has(k)) online.set(k, new Set());
     const first = !isOn(k);
     online.get(k).add(c);
-    send(c, { t: 'hello', me: { u: u.name, pub: u.pub, encPriv: u.encPriv, salt: u.salt, invisible: !!u.invisible, created: u.created, av: u.av || 0 } });
+    send(c, { t: 'hello', me: { u: u.name, pub: u.pub, encPriv: u.encPriv, salt: u.salt, invisible: !!u.invisible, created: u.created, av: u.av || 0, status: u.status || '' } });
     send(c, social(k));
     for (const f of u.inReq) if (user(f)) send(c, { t: 'req', u: user(f).name });
     flushQueue(k, c);
@@ -290,10 +326,60 @@ module.exports = function createChat({ wsSend, log }) {
         for (const f of me.friends) pushSocial(f);
         return;
       }
-      case 'getav': {   // nur eigenes Bild oder das von Freunden
-        if (!other || (ok !== k && !me.friends.includes(ok))) return;
+      case 'getav': {   // nur eigenes Bild, das von Freunden oder von Leuten aus gemeinsamen Gruppen
+        if (!other || (ok !== k && !me.friends.includes(ok) && !Object.values(db.groups).some(g => g.members.includes(k) && g.members.includes(ok)))) return;
         return send(c, { t: 'av', u: other.name, v: other.av || 0, img: avatars[ok] || '' });
       }
+      case 'status': {   // eigener Status-Text, nur für Freunde sichtbar
+        me.status = clean(m.text, 60); touch(); presence(k);
+        for (const cc of conns(k)) send(cc, { t: 'mystatus', text: me.status });
+        return;
+      }
+      case 'gcreate': {
+        const name = clean(m.name, 40);
+        if (!name) return send(c, { t: 'info', msg: 'Bitte gib der Gruppe einen Namen.' });
+        if (Object.values(db.groups).filter(g => g.members.includes(k)).length >= GROUPS_PER_USER) return send(c, { t: 'info', msg: 'Du bist schon in zu vielen Gruppen.' });
+        const mem = [k];
+        for (const n of (Array.isArray(m.members) ? m.members : []).slice(0, GROUP_MAX - 1)) { const kk = String(n).toLowerCase(); if (me.friends.includes(kk) && !mem.includes(kk) && !user(kk).blocked.includes(k)) mem.push(kk); }
+        const id = crypto.randomBytes(6).toString('hex');
+        db.groups[id] = { name, owner: k, members: mem, created: new Date().toISOString().slice(0, 10) };
+        touch(); pushGroup(db.groups[id]);
+        return send(c, { t: 'gnew', id });
+      }
+      case 'gadd': case 'gkick': case 'grename': case 'gleave': {
+        const g = db.groups[String(m.g || '')];
+        if (!g || !g.members.includes(k)) return;
+        if (m.t === 'gleave') { const before = g.members.slice(); leaveGroup(g, k); touch(); pushSocial(k); for (const x of before) if (x !== k) pushSocial(x); return; }
+        if (g.owner !== k) return send(c, { t: 'info', msg: 'Das darf nur der Gruppenleiter.' });
+        if (m.t === 'grename') { const name = clean(m.name, 40); if (name) { g.name = name; touch(); pushGroup(g); } return; }
+        if (m.t === 'gadd') {
+          if (!other || !me.friends.includes(ok)) return send(c, { t: 'info', msg: 'Du kannst nur deine Freunde hinzufügen.' });
+          if (g.members.includes(ok)) return;
+          if (g.members.length >= GROUP_MAX) return send(c, { t: 'info', msg: 'Die Gruppe ist voll (max. ' + GROUP_MAX + ').' });
+          if (other.blocked.includes(k)) return send(c, { t: 'info', msg: other.name + ' konnte nicht hinzugefügt werden.' });
+          g.members.push(ok); touch(); pushGroup(g); return;
+        }
+        if (m.t === 'gkick') { if (ok === k || !g.members.includes(ok)) return; rm(g.members, ok); touch(); pushGroup(g); pushSocial(ok); return; }
+        return;
+      }
+      case 'gmsg': {   // Gruppen-Nachricht: ein verschlüsselter Inhalt + pro Mitglied ein verpackter Schlüssel
+        const g = db.groups[String(m.g || '')];
+        if (!g || !g.members.includes(k)) return send(c, { t: 'nack', id: String(m.id || '').slice(0, 40), msg: 'Du bist nicht (mehr) in dieser Gruppe.' });
+        if (typeof m.id !== 'string' || m.id.length > 40 || !okB64(m.ct, MAX_CT) || !m.keys || typeof m.keys !== 'object') return send(c, { t: 'nack', id: String(m.id || '').slice(0, 40), msg: 'Nachricht zu groß.' });
+        const tb = now(); if (tb - c.bt > 60000) { c.bt = tb; c.bb = 0; }
+        if ((c.bb += m.ct.length * Math.min(4, g.members.length - 1)) > 40 * 1048576) return send(c, { t: 'nack', id: m.id, msg: 'Zu viel auf einmal – bitte kurz warten.' });
+        let n = 0, q = 0;
+        for (const mk of g.members) {
+          if (mk === k) continue;
+          const kk = m.keys[user(mk) ? user(mk).name : mk];
+          if (!okB64(kk, 200)) continue;
+          if (user(mk) && user(mk).blocked.includes(k)) continue;   // wer blockiert hat, bekommt nichts
+          const r = deliver(mk, { t: 'gmsg', g: m.g, from: me.name, id: m.id, ct: m.ct, k: kk, ts: now() });
+          if (r) n++; else if (r === false) q++;
+        }
+        return send(c, { t: 'gack', id: m.id, n, q });
+      }
+      case 'gtyping': { const g = db.groups[String(m.g || '')]; if (g && g.members.includes(k)) for (const mk of g.members) if (mk !== k) sendUser(mk, { t: 'typing', u: me.name, g: m.g }); return; }
       case 'read': if (other && me.friends.includes(ok) && typeof m.id === 'string') sendUser(ok, { t: 'read', u: me.name, id: m.id.slice(0, 40) }); return;
       case 'typing': if (other && me.friends.includes(ok)) sendUser(ok, { t: 'typing', u: me.name }); return;
       case 'act': {   // Aktivität („spielt BLACKOUT“) – nur für Freunde sichtbar
@@ -301,7 +387,7 @@ module.exports = function createChat({ wsSend, log }) {
         if (a !== c.act) { c.act = a; presence(k); }
         return;
       }
-      case 'invisible': me.invisible = !!m.on; touch(); presence(k); for (const cc of conns(k)) send(cc, { t: 'hello', me: { u: me.name, pub: me.pub, encPriv: me.encPriv, salt: me.salt, invisible: me.invisible, created: me.created } }); return;
+      case 'invisible': me.invisible = !!m.on; touch(); presence(k); for (const cc of conns(k)) send(cc, { t: 'hello', me: { u: me.name, pub: me.pub, encPriv: me.encPriv, salt: me.salt, invisible: me.invisible, created: me.created, av: me.av || 0, status: me.status || '' } }); return;
       case 'freq': {   // Freundschaftsanfrage
         if (!other || ok === k) return send(c, { t: 'info', msg: 'Kein Konto mit dem Namen „' + String(m.u || '').slice(0, 20) + '“ gefunden.' });
         if (me.friends.includes(ok)) return send(c, { t: 'info', msg: other.name + ' ist schon dein Freund.' });
@@ -353,11 +439,12 @@ module.exports = function createChat({ wsSend, log }) {
         const name = f => (user(f) ? user(f).name : f);
         return send(c, { t: 'mydata', data: Object.assign(rest, { friends: me.friends.map(name), inReq: me.inReq.map(name), outReq: me.outReq.map(name), blocked: me.blocked.map(name),
           profilbild: avatars[k] ? 'data:image/jpeg;base64,' + avatars[k] : 'keins',
-          hinweis: 'Zusätzlich gespeichert: ein Hash deines Anmeldeschlüssels (nicht dein Passwort). Nachrichten an dich, die noch nicht zugestellt wurden, liegen verschlüsselt im Arbeitsspeicher: ' + ((queue.get(k) || []).length) }) });
+          gruppen: Object.values(db.groups).filter(g => g.members.includes(k)).map(g => ({ name: g.name, leiter: name(g.owner), mitglieder: g.members.map(name) })),
+          hinweis: 'Zusätzlich gespeichert: ein Hash deines Anmeldeschlüssels (nicht dein Passwort). Verschlüsselte Nachrichten an dich, die noch nicht zugestellt wurden: ' + ((queue.get(k) || []).length) }) });
       }
       case 'delete': {   // Konto löschen (Art. 17 DSGVO)
         if (!(await checkAuth(me, m.auth))) { touch(); return send(c, { t: 'info', msg: 'Passwort falsch – Konto wurde nicht gelöscht.' }); }
-        const touched = Object.keys(db.users).filter(kk => kk !== k && (db.users[kk].friends.includes(k) || db.users[kk].inReq.includes(k) || db.users[kk].outReq.includes(k)));
+        const touched = Object.keys(db.users).filter(kk => kk !== k && (db.users[kk].friends.includes(k) || db.users[kk].inReq.includes(k) || db.users[kk].outReq.includes(k) || Object.values(db.groups).some(g => g.members.includes(k) && g.members.includes(kk))));
         const friends = me.friends.slice();
         removeUser(k); touch(); save();
         for (const kk of touched) pushSocial(kk);
@@ -387,7 +474,12 @@ module.exports = function createChat({ wsSend, log }) {
     if (m.op === 'ring') {
       if (!other || !me.friends.includes(ok)) return send(c, { t: 'call', op: 'end', cid, u: String(m.u || ''), why: 'Nur Freunde können angerufen werden.' });
       if (!isOn(ok) || other.invisible) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' ist offline.' });
-      for (const call of calls.values()) if (call.a === ok || call.b === ok) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' telefoniert gerade.' });
+      for (const [xid, call] of calls) {
+        // Beide rufen sich gleichzeitig an → den anderen Anruf direkt verbinden
+        if (call.a === ok && call.b === c.key && !call.bc) { call.bc = c; send(call.ac, { t: 'call', op: 'accept', cid: xid, u: me.name }); return send(c, { t: 'call', op: 'joined', cid: xid, old: cid, u: other.name }); }
+        if (call.a === ok || call.b === ok) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' telefoniert gerade.' });
+      }
+      for (const [xid, call] of calls) if (call.ac === c || call.bc === c) { calls.delete(xid); }   // alter, hängender Anruf dieses Geräts
       if (calls.size > 200) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: 'Server ausgelastet.' });
       calls.set(cid, { a: c.key, ac: c, b: ok, bc: null, t: now() });
       sendUser(ok, { t: 'call', op: 'ring', cid, u: me.name });

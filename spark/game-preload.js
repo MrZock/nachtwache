@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('SPARK', {
   launch: (id, q) => ipcRenderer.invoke('spark-launch', String(id), q && typeof q === 'object' ? { join: String(q.join || '') } : {}),
   running: () => ipcRenderer.invoke('spark-running'),
   rooms: () => ipcRenderer.invoke('spark-rooms'),
+  show: () => ipcRenderer.send('spark-show'),
+  badge: n => ipcRenderer.send('spark-badge', n | 0),
   presence: p => ipcRenderer.send('spark-presence', p && typeof p === 'object' ? { room: String(p.room || ''), role: String(p.role || '') } : null),
   vault: {
     get: k => ipcRenderer.invoke('spark-vault', 'get', String(k)),

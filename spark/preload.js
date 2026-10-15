@@ -3,7 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('spark', {
   state: () => ipcRenderer.invoke('state'),
   refresh: () => ipcRenderer.invoke('refresh'),
-  install: id => ipcRenderer.invoke('install', id),
+  install: (id, opts) => ipcRenderer.invoke('install', id, opts),
+  shortcut: (id, on) => ipcRenderer.invoke('shortcut', id, on),
+  onToast: fn => ipcRenderer.on('toast', (e, m) => fn(m)),
   uninstall: id => ipcRenderer.invoke('uninstall', id),
   play: id => ipcRenderer.invoke('play', id),
   folder: id => ipcRenderer.invoke('folder', id),

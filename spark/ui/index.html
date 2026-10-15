@@ -145,6 +145,36 @@
   .uprog { margin-top: 12px; display: none; } .uprog.on { display: block; }
   .links { display: flex; gap: 10px; flex-wrap: wrap; }
   ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: rgba(46, 230, 255, .2); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; }
+  .seg button { height: 34px; padding: 0 12px; font: 600 13px var(--f-body); clip-path: var(--cut-s); box-shadow: inset 0 0 0 1px var(--line); }
+  .seg button.on { background: rgba(255, 150, 40, .2); box-shadow: inset 0 0 0 2px var(--orange); }
+  .check { display: flex; gap: 10px; align-items: center; margin: 14px 0 18px; font-size: 16px; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--orange); }
+  /* Helles Design */
+  [data-theme="light"] { --bg: #eef1f7; --glass: rgba(255, 255, 255, .78); --line: rgba(20, 40, 80, .13); --line-hot: rgba(230, 110, 20, .45); --text: #141824; --dim: #556079; --faint: #8a92a8; }
+  [data-theme="light"] body { background: radial-gradient(900px 520px at 85% -10%, rgba(255, 106, 31, .16), transparent 62%), radial-gradient(700px 500px at -5% 40%, rgba(138, 92, 255, .1), transparent 60%), var(--bg); }
+  [data-theme="light"] .bar { background: rgba(255, 255, 255, .7); }
+  [data-theme="light"] aside { background: rgba(255, 255, 255, .72); }
+  [data-theme="light"] .game:hover { background: rgba(20, 40, 80, .05); }
+  [data-theme="light"] .label { color: #0a8597; }
+  [data-theme="light"] .hero { background: #0b0d14; }
+  [data-theme="light"] .hero .shade { background: linear-gradient(90deg, rgba(5, 6, 11, .95) 0%, rgba(5, 6, 11, .55) 45%, rgba(5, 6, 11, 0) 78%), linear-gradient(0deg, rgba(5, 6, 11, .9) 0%, rgba(5, 6, 11, 0) 45%); }
+  [data-theme="light"] .hero .label { color: var(--cyan); }
+  [data-theme="light"] .hero .info { color: #eef2fb; }
+  [data-theme="light"] .hero .sec { color: #eef2fb; }
+  [data-theme="light"] .body { padding-top: 22px; }
+  [data-theme="light"] .desc, [data-theme="light"] .feat li, [data-theme="light"] .cl li, [data-theme="light"] .cl p { color: #2c3345; }
+  [data-theme="light"] .news { background: linear-gradient(135deg, rgba(255, 201, 60, .22), rgba(255, 255, 255, .7) 60%); }
+  [data-theme="light"] .modal { background: rgba(220, 225, 235, .7); }
+  [data-theme="light"] .sheet { background: #fff; }
+  [data-theme="light"] .grp { background: rgba(20, 40, 80, .03); }
+  [data-theme="light"] .row + .row { border-top-color: rgba(20, 40, 80, .07); }
+  [data-theme="light"] .sw { background: rgba(20, 40, 80, .12); }
+  [data-theme="light"] .sw.on { background: linear-gradient(120deg, #ffc93c, #ff6a1f); }
+  [data-theme="light"] .scan, [data-theme="light"] .horizon { opacity: .15; }
+  [data-theme="light"] .sec { color: #141824; }
+  [data-theme="light"] .soon { color: #8a92a8; }
+  [data-theme="light"] .unews { background: rgba(255, 201, 60, .1); }
 </style>
 </head>
 <body>
@@ -170,6 +200,13 @@
   <span class="label" id="cllabel">// Changelog</span><h2 id="cltitle">NEUIGKEITEN</h2>
   <div class="cl" id="cllist"></div>
 </div></div>
+<div class="modal" id="instmodal"><div class="sheet hud" style="width:min(520px,92vw)">
+  <button class="x" id="instclose" title="Schließen">×</button>
+  <span class="label">// Installieren</span><h2 id="insttitle">SPIEL</h2>
+  <div id="instinfo" style="color:var(--dim)"></div>
+  <label class="check"><input type="checkbox" id="instlnk"> <span>🖥 Verknüpfung auf dem Desktop erstellen</span></label>
+  <button class="play" id="instgo" style="width:100%">INSTALLIEREN</button>
+</div></div>
 <div class="modal" id="modal"><div class="sheet hud">
   <button class="x" id="close" title="Schließen">×</button>
   <span class="label">// System</span><h2><span>EIN</span>STELLUNGEN</h2>
@@ -184,7 +221,12 @@
     <div class="row"><div><b>Launcher beim Spielen ausblenden</b><small>Kommt nach dem Spiel automatisch zurück.</small></div><button class="sw" data-k="hideOnPlay"></button></div>
     <div class="row"><div><b>Spieleordner</b><small id="gdir">–</small></div><button class="sec" id="sfolder">📁 Öffnen</button></div>
   </div>
+  <div class="grp"><span class="label">// Hintergrund & Start</span>
+    <div class="row"><div><b>SPARK Chat im Hintergrund weiterlaufen lassen</b><small>Beim Schließen läuft der Chat unten rechts weiter – du bekommst Nachrichten und Anrufe.</small></div><button class="sw" data-k="chatBackground"></button></div>
+    <div class="row"><div><b>Mit Windows starten</b><small>SPARK startet unsichtbar im Hintergrund, damit SPARK Chat Nachrichten empfängt.</small></div><button class="sw" data-k="autostart"></button></div>
+  </div>
   <div class="grp"><span class="label">// Darstellung</span>
+    <div class="row"><div><b>Design</b><small>Hell, Dunkel oder wie in Windows eingestellt.</small></div><div class="seg" id="themeSeg"><button data-v="dark">🌙 Dunkel</button><button data-v="light">☀ Hell</button><button data-v="system">🖥 System</button></div></div>
     <div class="row"><div><b>Hintergrund-Effekte</b><small>Raster und Funken – aus spart Leistung auf schwachen PCs.</small></div><button class="sw" data-k="effects"></button></div>
   </div>
   <div class="grp"><span class="label">// Info</span>
@@ -216,6 +258,9 @@ function clHtml(entries, cur) {
     (e.items ? '<ul>' + e.items.map(i => '<li>' + esc(i) + '</li>').join('') + '</ul>' : md(e.body))).join('');
 }
 function showChangelog(title, label, html) { $('cltitle').textContent = title; $('cllabel').textContent = label; $('cllist').innerHTML = html || '<p>Noch keine Einträge.</p>'; $('clmodal').classList.add('open'); }
+const sysDark = matchMedia('(prefers-color-scheme: dark)');
+function applyTheme() { const t = SET.theme === 'system' ? (sysDark.matches ? 'dark' : 'light') : (SET.theme || 'dark'); document.documentElement.dataset.theme = t; for (const b of document.querySelectorAll('#themeSeg button')) b.classList.toggle('on', b.dataset.v === (SET.theme || 'dark')); }
+sysDark.addEventListener('change', applyTheme);
 function effects(on) { for (const el of document.querySelectorAll('.horizon, #fx, .scan')) el.style.display = on ? '' : 'none'; }
 function renderSettings() {
   for (const b of document.querySelectorAll('.sw')) b.classList.toggle('on', !!SET[b.dataset.k]);
@@ -254,7 +299,7 @@ async function load() {
   $('dot').className = 'dot' + (S.offline ? ' off' : ''); $('netbox').className = 'net' + (S.offline ? ' off' : '');
   $('net').textContent = S.loading ? 'Verbinde …' : S.offline ? 'Offline · installierte Spiele laufen' : 'System online';
   $('ver').textContent = 'SPARK ' + S.version;
-  SET = S.settings || {}; effects(SET.effects !== false); if (!U || !U.busy) U = S.update || U; $('gdir').textContent = S.gamesDir || '–'; renderSettings();
+  SET = S.settings || {}; effects(SET.effects !== false); applyTheme(); if (!U || !U.busy) U = S.update || U; $('gdir').textContent = S.gamesDir || '–'; renderSettings();
   if (!S.games.find(g => g.id === sel) && S.games[0]) sel = S.games[0].id;
   renderList(); renderMain();
 }
@@ -287,7 +332,7 @@ function renderMain() {
   else primary = '<button class="play green" id="act" data-a="play">▶ ' + verb + '</button>';
   const extra = g.installed && !g.busy && !g.playing
     ? (g.update && !S.offline ? '<button class="sec" id="playold">Ohne Update ' + verb.toLowerCase() + '</button>' : '')
-      + '<button class="sec" id="cl">📜 Changelog</button>' + (isApp ? '' : '<button class="sec" id="saves">💾 Spielstände</button>') + '<button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
+      + '<button class="sec" id="cl">📜 Changelog</button>' + (isApp ? '' : '<button class="sec" id="saves">💾 Spielstände</button>') + '<button class="sec" id="lnk" title="Verknüpfung auf dem Desktop">' + (g.shortcut ? '🖥 Verknüpfung entfernen' : '🖥 Desktop-Verknüpfung') + '</button><button class="sec danger" id="del">' + (confirmDel ? 'Wirklich deinstallieren?' : 'Deinstallieren') + '</button>' : '';
   main.innerHTML =
     '<div class="hero"><div class="bgimg" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="img" style="background-image:url(\'' + esc(g.coverUrl) + '\')"></div><div class="shade"></div>' +
     '<div class="info"><span class="label">' + (g.update && g.installed ? '// Update verfügbar' : g.installed ? (isApp ? '// Bereit' : '// Bereit zum Spielen') : '// Neu in der Bibliothek') + '</span><h1 class="title" style="color:' + esc(g.color || '#fff') + '">' + esc(g.name) + '</h1><div class="tagline">' + esc(g.tagline || '') + '</div>' +
@@ -300,7 +345,8 @@ function renderMain() {
     newsHtml(g) + '<div class="desc">' + esc(g.description || '') + '</div></div>' +
     (g.features && g.features.length ? '<div class="feat hud"><span class="label">// Das erwartet dich</span><ul style="margin:0;padding:0">' + g.features.map(f => '<li>' + esc(f) + '</li>').join('') + '</ul></div>' : '') + '</div>';
   const act = $('act');
-  if (act) act.onclick = () => act.dataset.a === 'play' ? play(g) : installThen(g, true);
+  if (act) act.onclick = () => act.dataset.a === 'play' ? play(g) : act.dataset.a === 'install' ? askInstall(g) : installThen(g, true);
+  if ($('lnk')) $('lnk').onclick = async () => { const r = await window.spark.shortcut(g.id, !g.shortcut); r.ok ? toast(g.shortcut ? 'Verknüpfung entfernt.' : 'Verknüpfung auf dem Desktop erstellt.', true) : toast(r.error); load(); };
   if ($('playold')) $('playold').onclick = () => play(g);
   if ($('saves')) $('saves').onclick = () => window.spark.saves(g.id);
   if ($('cl')) $('cl').onclick = () => showChangelog(g.name, '// Changelog', clHtml(g.changelog || [], g.installed ? g.installedVersion : ''));
@@ -312,9 +358,21 @@ function renderMain() {
     r.ok ? toast(g.name + ' wurde deinstalliert' + (g.type === 'app' ? '.' : ' – deine Spielstände bleiben erhalten.'), true) : toast(r.error);
   };
 }
-async function installThen(g, start) {
+// Vor dem Installieren fragen: Desktop-Verknüpfung ja/nein (Auswahl wird gemerkt)
+function askInstall(g) {
+  $('insttitle').textContent = g.name; $('instinfo').textContent = (g.tagline || '') + ' · ' + size(g.size || 0);
+  $('instlnk').checked = SET.shortcutAsk !== false;
+  $('instmodal').classList.add('open');
+  $('instgo').onclick = async () => {
+    $('instmodal').classList.remove('open');
+    const want = $('instlnk').checked;
+    if (want !== (SET.shortcutAsk !== false)) SET = await window.spark.set('shortcutAsk', want);
+    installThen(g, true, { shortcut: want });
+  };
+}
+async function installThen(g, start, opts) {
   progress[g.id] = { p: 0, file: '' };
-  const r = await window.spark.install(g.id);
+  const r = await window.spark.install(g.id, opts);
   delete progress[g.id];
   if (!r.ok) { toast('Fehler: ' + r.error); load(); return; }
   toast(g.name + (g.installed ? ' ist aktuell.' : ' ist installiert!'), true);
@@ -331,6 +389,10 @@ $('refresh').onclick = async () => { $('net').textContent = 'Verbinde …'; awai
 $('folder').onclick = () => window.spark.folder('');
 $('gear').onclick = () => { $('modal').classList.add('open'); renderSettings(); if (!U || !U.checked) $('ubtn').click(); };
 $('close').onclick = () => $('modal').classList.remove('open');
+$('instclose').onclick = () => $('instmodal').classList.remove('open');
+$('instmodal').onclick = e => { if (e.target === $('instmodal')) $('instmodal').classList.remove('open'); };
+for (const b of document.querySelectorAll('#themeSeg button')) b.onclick = async () => { SET = await window.spark.set('theme', b.dataset.v); applyTheme(); };
+if (window.spark.onToast) window.spark.onToast(m => toast(m));
 $('clclose').onclick = () => $('clmodal').classList.remove('open');
 $('clmodal').onclick = e => { if (e.target === $('clmodal')) $('clmodal').classList.remove('open'); };
 $('modal').onclick = e => { if (e.target === $('modal')) $('modal').classList.remove('open'); };
@@ -345,7 +407,7 @@ $('lweb').onclick = () => window.spark.openWeb('site');
 $('lgit').onclick = () => window.spark.openWeb('github');
 $('lpriv').onclick = () => window.spark.openWeb('privacy');
 window.spark.onUpdate(onUpdate);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('modal').classList.remove('open'); $('clmodal').classList.remove('open'); } else if (e.key === 'Enter' && $('act') && !document.querySelector('.modal.open')) $('act').click(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { $('modal').classList.remove('open'); $('clmodal').classList.remove('open'); $('instmodal').classList.remove('open'); } else if (e.key === 'Enter' && $('act') && !document.querySelector('.modal.open')) $('act').click(); });
 load();
 // Funken im Hintergrund (sparsam, pausiert wenn das Fenster nicht sichtbar ist)
 (() => {

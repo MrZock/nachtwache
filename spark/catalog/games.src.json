@@ -106,30 +106,31 @@
             "Karte mit Planquadraten A1–H8, Chatfilter, Chat-Verlauf, neues Design"
           ]
         }
-      ]
+      ],
+      "shortcutName": "BLACKOUT"
     },
     {
       "id": "spark-chat",
       "type": "app",
       "name": "SPARK CHAT",
-      "tagline": "Freunde · Chat · Sprachanrufe – Ende-zu-Ende-verschlüsselt",
+      "tagline": "Freunde · Gruppen · Sprachanrufe – Ende-zu-Ende-verschlüsselt",
       "description": "Dein eigener Chat im SPARK-Launcher: Erstelle ein Konto, füge Freunde über ihren Benutzernamen hinzu, schreib Nachrichten und telefoniere. Lade Freunde mit einem Klick in dein BLACKOUT-Online-Spiel ein. Alle Nachrichten und Anrufe sind Ende-zu-Ende-verschlüsselt – der Server kann nichts mitlesen, und dein Passwort verlässt nie deinen PC.",
       "features": [
-        "Konto mit Benutzername und Passwort",
-        "Freunde hinzufügen, annehmen, blockieren",
-        "Privatchats mit Online-Status und „spielt BLACKOUT“",
-        "Bilder senden und Profilbilder",
-        "Sprachanrufe (auch im Schul-WLAN)",
+        "Freunde und Gruppen (bis 32 Leute)",
+        "Bilder, Sprachnachrichten, Reaktionen und Antworten",
+        "Nachrichten bearbeiten und für alle löschen",
+        "Sprachanrufe mit Lautsprecher-Knopf (auch im Schul-WLAN)",
         "BLACKOUT-Einladungen: ein Klick und du bist im Spiel",
-        "Auch im Browser und auf dem Handy: mrzock.github.io/nachtwache/chat",
-        "Ende-zu-Ende-verschlüsselt, Verlauf nur auf deinem Gerät"
+        "Läuft im Hintergrund weiter – Nachrichten kommen immer an",
+        "Hell/Dunkel, eigene Farbe, Schriftgröße, Status und Spitznamen",
+        "Auch im Browser und auf dem Handy: mrzock.github.io/spark-chat"
       ],
-      "version": "Alpha 1.0.0",
+      "version": "Alpha 1.1.0",
       "color": "#2ee6ff",
       "cover": "spark-chat.jpg",
       "icon": "spark-chat-icon.png",
-      "base": "https://mrzock.github.io/nachtwache/chat/",
-      "local": "../../chat",
+      "base": "https://mrzock.github.io/spark-chat/",
+      "local": "../../../spark-chat",
       "entry": "index.html",
       "saveDir": "SPARK Chat",
       "files": [
@@ -141,6 +142,22 @@
       ],
       "changelog": [
         {
+          "version": "Alpha 1.1.0",
+          "date": "2026-10-15",
+          "items": [
+            "Gruppen: erstellen, Freunde hinzufügen, umbenennen, verlassen – alles Ende-zu-Ende-verschlüsselt",
+            "Reaktionen (👍❤️😂😮😢🔥) und Antworten mit Zitat",
+            "Eigene Nachrichten bearbeiten oder für alle löschen",
+            "Sprachnachrichten (🎤, bis 2 Minuten)",
+            "Status-Text und private Spitznamen für Freunde",
+            "Aussehen: Hell, Dunkel, Schwarz oder wie System, 8 Farben, Schriftgröße, runde oder kantige Blasen",
+            "Anrufe: Echo-Unterdrückung, Lautsprecher-Knopf, flüssigere Wiedergabe, gleichzeitiges Anrufen verbindet direkt",
+            "Nachrichten kommen jetzt auch an, wenn der Server zwischendurch neu startet",
+            "Läuft im SPARK-Launcher im Hintergrund weiter (Symbol unten rechts)",
+            "Neue Adresse: mrzock.github.io/spark-chat"
+          ]
+        },
+        {
           "version": "Alpha 1.0.0",
           "date": "2026-10-15",
           "items": [
@@ -151,7 +168,9 @@
             "Läuft auch im Browser und auf dem Handy – zum Startbildschirm hinzufügbar"
           ]
         }
-      ]
+      ],
+      "background": true,
+      "shortcutName": "SPARK Chat"
     }
   ]
 }

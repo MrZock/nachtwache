@@ -1,7 +1,7 @@
 // SPARK – Spiele-Launcher
 // Lädt den Spiele-Katalog, installiert und aktualisiert Spiele (nur geänderte Dateien, mit Prüfsumme)
 // und startet sie in eigenen Fenstern. Installierte Spiele laufen auch ohne Internet.
-const { app, BrowserWindow, Menu, shell, ipcMain, net, safeStorage, session } = require('electron');
+const { app, BrowserWindow, Menu, Tray, nativeImage, shell, ipcMain, net, safeStorage, session } = require('electron');
 const path = require('path'), fs = require('fs'), os = require('os'), crypto = require('crypto'), { spawn } = require('child_process'), { pathToFileURL } = require('url');
 const SPARK_REPO = 'MrZock/spark', SITE = 'https://mrzock.github.io/spark/';
 const verName = v => 'Alpha ' + v;   // gleiches Schema wie die Spiele: Alpha 1.X.Y
@@ -19,7 +19,12 @@ const stateFile = () => path.join(dataDir(), 'installiert.json');
 const cacheFile = () => path.join(dataDir(), 'katalog.json');
 const coverDir = () => path.join(dataDir(), 'Cover');
 const setFile = () => path.join(dataDir(), 'einstellungen.json');
-const SET_DEF = { autoUpdate: true, hideOnPlay: true, gameFullscreen: true, effects: true };
+const SET_DEF = { autoUpdate: true, hideOnPlay: true, gameFullscreen: true, effects: true, chatBackground: true, autostart: false, shortcutAsk: true, theme: 'dark' };
+const THEMES = ['dark', 'light', 'system'];
+const START_HIDDEN = process.argv.includes('--hidden');            // Autostart mit Windows: nur im Hintergrund
+const argPlay = argv => { const a = (argv || []).find(x => x.startsWith('--play=')); return a ? a.slice(7) : ''; };   // Desktop-Verknüpfung
+let quitting = false;
+app.on('before-quit', () => { quitting = true; });
 let settings = null;
 const set = () => settings || (settings = Object.assign({}, SET_DEF, readJson(setFile(), {})));
 function readJson(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return d; } }
@@ -79,7 +84,7 @@ function view(g) {
   const update = installed && !!inst.files && g.files.some(f => inst.files[f.path] !== f.sha256);
   const cover = g.cover && path.join(coverDir(), g.id + path.extname(g.cover)), icon = g.icon && path.join(coverDir(), g.id + '-icon' + path.extname(g.icon));
   return Object.assign({}, g, { files: undefined, installed, update, playing: running.has(g.id), busy: busy.has(g.id),
-    installedVersion: inst && inst.version, playMs: (inst && inst.playMs) || 0, lastPlayed: inst && inst.lastPlayed,
+    installedVersion: inst && inst.version, playMs: (inst && inst.playMs) || 0, lastPlayed: inst && inst.lastPlayed, shortcut: installed && fs.existsSync(lnkPath(g)),
     coverUrl: cover && fs.existsSync(cover) ? pathToFileURL(cover).href + '?v=' + encodeURIComponent(g.version) : '',
     iconUrl: icon && fs.existsSync(icon) ? pathToFileURL(icon).href + '?v=' + encodeURIComponent(g.version) : '' });
 }
@@ -87,7 +92,7 @@ const findGame = id => catalog.games.find(g => g.id === id);
 
 // ---------- Installieren / Aktualisieren: in einen Zwischenordner laden, prüfen, dann austauschen
 const busy = new Set();
-async function install(id) {
+async function install(id, opts) {
   const g = findGame(id);
   if (!g) return { ok: false, error: 'Spiel nicht im Katalog' };
   if (busy.has(id)) return { ok: false, error: 'Läuft schon' };
@@ -112,6 +117,7 @@ async function install(id) {
     }
     fs.rmSync(dir, { recursive: true, force: true }); fs.renameSync(tmp, dir);
     st()[id] = Object.assign(st()[id] || {}, { version: g.version, files: hashes, installedAt: Date.now(), size: total }); saveState();
+    if (opts && opts.shortcut) { try { makeShortcut(g); } catch (e) { console.log('Verknüpfung:', e.message); } }
     return { ok: true, loaded };
   } catch (e) {
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -121,15 +127,39 @@ async function install(id) {
 function uninstall(id) {
   if (!okId(id) || running.has(id) || busy.has(id)) return { ok: false, error: 'Geht gerade nicht' };
   fs.rmSync(path.join(gamesDir(), id), { recursive: true, force: true });
+  const g0 = findGame(id); if (g0) try { fs.rmSync(lnkPath(g0), { force: true }); } catch (e) {}
   const s = st()[id]; if (s) { delete s.files; delete s.version; } saveState(); changed();
   return { ok: true };
+}
+
+// ---------- Desktop-Verknüpfungen: starten SPARK mit --play=<id> (Symbol aus dem Katalog als .ico)
+const desktopDir = () => process.env.SPARK_DESKTOP || app.getPath('desktop');
+const lnkPath = g => path.join(desktopDir(), String(g.shortcutName || g.name).replace(/[\\/:*?"<>|]/g, '').trim() + '.lnk');
+const exePath = () => process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+function icoFor(g) {
+  const png = path.join(coverDir(), g.id + '-icon' + path.extname(g.icon || '.png'));
+  if (!g.icon || !fs.existsSync(png) || path.extname(png).toLowerCase() !== '.png') return '';
+  const data = fs.readFileSync(png), ico = path.join(coverDir(), g.id + '.ico');
+  // ICO mit eingebettetem PNG (ab Windows Vista unterstützt)
+  const head = Buffer.alloc(22);
+  head.writeUInt16LE(0, 0); head.writeUInt16LE(1, 2); head.writeUInt16LE(1, 4);
+  head[6] = 0; head[7] = 0; head[8] = 0; head[9] = 0; head.writeUInt16LE(1, 10); head.writeUInt16LE(32, 12);
+  head.writeUInt32LE(data.length, 14); head.writeUInt32LE(22, 18);
+  fs.writeFileSync(ico, Buffer.concat([head, data]));
+  return ico;
+}
+function makeShortcut(g) {
+  if (process.platform !== 'win32') return false;
+  const args = (app.isPackaged ? '' : '"' + app.getAppPath() + '" ') + '--play=' + g.id;
+  const ico = icoFor(g);
+  return shell.writeShortcutLink(lnkPath(g), 'create', { target: exePath(), args, description: g.tagline || g.name, icon: ico || exePath(), iconIndex: 0, cwd: path.dirname(exePath()) });
 }
 
 // ---------- Spielen: eigenes Fenster, Spielstände in Dokumente/<saveDir>
 const running = new Map();
 let launcher = null;
 const rooms = new Map();   // laufende Spiele melden ihren Online-Raum (für Einladungen aus SPARK Chat)
-function play(id, extra) {
+function play(id, extra, opts) {
   const g = findGame(id), inst = st()[id];
   if (!g || !inst || !inst.files) return { ok: false, error: (g ? g.name : 'Das Spiel') + ' ist nicht installiert – installiere es im SPARK-Launcher.' };
   if (running.has(id)) { const rw = running.get(id); if (rw.isMinimized()) rw.restore(); rw.show(); rw.focus(); return { ok: true, running: true }; }
@@ -138,9 +168,9 @@ function play(id, extra) {
   if (!fs.existsSync(entry)) return { ok: false, error: 'Spieldateien fehlen – bitte neu installieren' };
   const saveName = String(g.saveDir || g.name).replace(/[^\w \-]/g, '').slice(0, 40) || id;
   const w = new BrowserWindow({
-    width: isApp ? 1100 : 1280, height: isApp ? 720 : 800, minWidth: isApp ? 380 : 800, minHeight: 500, fullscreen: !isApp && !process.env.SPARK_SELFTEST && set().gameFullscreen, show: !process.env.SPARK_SELFTEST,
+    width: isApp ? 1100 : 1280, height: isApp ? 720 : 800, minWidth: isApp ? 380 : 800, minHeight: 500, fullscreen: !isApp && !process.env.SPARK_SELFTEST && set().gameFullscreen, show: !process.env.SPARK_SELFTEST && !(opts && opts.hidden),
     backgroundColor: isApp ? '#05060b' : '#000000', title: g.name, icon: path.join(__dirname, 'build', 'icon.png'), autoHideMenuBar: true,
-    webPreferences: { preload: path.join(__dirname, 'game-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: isApp,
+    webPreferences: { preload: path.join(__dirname, 'game-preload.js'), contextIsolation: true, nodeIntegration: false, backgroundThrottling: false,
       additionalArguments: ['--spark-save=' + saveName, '--spark-id=' + id] },
   });
   const q = {}; for (const [k, v] of new URLSearchParams(g.query || '')) q[k] = v; q.spark = '1';
@@ -155,6 +185,12 @@ function play(id, extra) {
   w.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (isWeb(url)) shell.openExternal(url); } });
   const t0 = Date.now();
   running.set(id, w);
+  // SPARK Chat: Schließen versteckt nur das Fenster – Nachrichten und Anrufe kommen weiter an (Symbol in der Taskleiste)
+  if (g.background) w.on('close', e => {
+    if (quitting || !set().chatBackground || (process.env.SPARK_SELFTEST && !process.env.SPARK_TEST_BG)) return;
+    e.preventDefault(); w.hide(); ensureTray();
+    if (!st().bgHint) { st().bgHint = 1; saveState(); if (tray && tray.displayBalloon) tray.displayBalloon({ title: g.name + ' läuft weiter', content: 'Du bekommst weiter Nachrichten. Über das SPARK-Symbol unten rechts kannst du ihn öffnen oder beenden.', iconType: 'info' }); }
+  });
   w.on('closed', () => {
     running.delete(id); rooms.delete(id);
     const s = st()[id]; if (s) { s.playMs = (s.playMs || 0) + (Date.now() - t0); s.lastPlayed = Date.now(); saveState(); }
@@ -187,6 +223,15 @@ ipcMain.handle('spark-launch', (e, id, q) => {
   return { ok: r.ok, error: r.error, running: !!r.running };
 });
 ipcMain.handle('spark-running', e => callerId(e) ? [...running.keys()] : []);
+ipcMain.on('spark-show', e => { const id = callerId(e); const w = id && running.get(id); if (w) { if (w.isMinimized()) w.restore(); w.show(); w.focus(); } });
+const badges = {};
+ipcMain.on('spark-badge', (e, n) => {
+  const id = callerId(e); if (!id) return;
+  const was = badges[id] || 0; badges[id] = Math.max(0, n | 0);
+  const total = Object.values(badges).reduce((s, x) => s + x, 0);
+  if (tray) tray.setToolTip(total ? 'SPARK – ' + total + ' ungelesene Nachricht' + (total > 1 ? 'en' : '') : 'SPARK');
+  const w = running.get(id); if (w && badges[id] > was && !w.isFocused()) w.flashFrame(true);
+});
 ipcMain.handle('spark-rooms', e => callerId(e) ? Object.fromEntries(rooms) : {});
 ipcMain.on('spark-presence', (e, p) => {
   const id = callerId(e); if (!id) return;
@@ -268,29 +313,60 @@ async function runUpdate() {
 function send(ch, data) { if (launcher && !launcher.isDestroyed()) launcher.webContents.send(ch, data); }
 function changed() { send('changed'); }
 ipcMain.handle('state', () => ({ games: catalog.games.map(view), offline, loading, version: verName(app.getVersion()), gamesDir: gamesDir(), settings: set(), update: publicUpd(), site: SITE }));
-ipcMain.handle('set', (e, k, v) => { if (k in SET_DEF && typeof v === 'boolean') { set()[k] = v; writeJson(setFile(), set()); } return set(); });
+ipcMain.handle('set', (e, k, v) => {
+  if (k in SET_DEF && (typeof v === typeof SET_DEF[k]) && (k !== 'theme' || THEMES.includes(v))) { set()[k] = v; writeJson(setFile(), set()); if (k === 'autostart') applyAutostart(); if (k === 'chatBackground' && v) ensureTray(); }
+  return set();
+});
+ipcMain.handle('shortcut', (e, id, on) => {
+  const g = findGame(String(id)); if (!g || !st()[g.id] || !st()[g.id].files) return { ok: false, error: 'Nicht installiert' };
+  try { if (on) { if (!makeShortcut(g)) return { ok: false, error: 'Verknüpfung konnte nicht erstellt werden' }; } else fs.rmSync(lnkPath(g), { force: true }); changed(); return { ok: true }; }
+  catch (err) { return { ok: false, error: err.message }; }
+});
+// Mit Windows starten: SPARK startet unsichtbar, SPARK Chat läuft im Hintergrund
+function applyAutostart() {
+  if (!app.isPackaged || process.env.SPARK_SELFTEST) return;
+  try { app.setLoginItemSettings({ openAtLogin: !!set().autostart, path: exePath(), args: ['--hidden'] }); } catch (e) {}
+}
+// Symbol unten rechts in der Taskleiste
+let tray = null;
+function ensureTray() {
+  if (tray || (process.env.SPARK_SELFTEST && !process.env.SPARK_TEST_BG)) return;
+  try {
+    tray = new Tray(nativeImage.createFromPath(path.join(__dirname, 'build', 'icon.png')).resize({ width: 16, height: 16 }));
+    tray.setToolTip('SPARK');
+    const menu = () => Menu.buildFromTemplate([
+      { label: 'SPARK öffnen', click: showLauncher },
+      ...catalog.games.filter(g => g.background && st()[g.id] && st()[g.id].files).map(g => ({ label: g.name + ' öffnen', click: () => { const r = play(g.id); if (r.window) r.window.show(); } })),
+      { type: 'separator' },
+      { label: 'Beenden', click: () => { quitting = true; app.quit(); } },
+    ]);
+    tray.on('click', () => { const chat = [...running.entries()].find(([id]) => { const g = findGame(id); return g && g.background; }); if (chat) { chat[1].show(); chat[1].focus(); } else showLauncher(); });
+    tray.on('right-click', () => tray.popUpContextMenu(menu()));
+  } catch (e) { console.log('Tray:', e.message); }
+}
+function showLauncher() { if (!launcher || launcher.isDestroyed()) createLauncher(true); else { if (launcher.isMinimized()) launcher.restore(); launcher.show(); launcher.focus(); } }
 ipcMain.handle('update-check', () => checkUpdate());
 ipcMain.handle('update-run', () => runUpdate());
 ipcMain.handle('open-web', (e, which) => shell.openExternal(which === 'github' ? 'https://github.com/' + SPARK_REPO + '/releases' : which === 'privacy' ? SITE + 'datenschutz.html' : SITE));
 ipcMain.handle('refresh', async () => { await loadCatalog(); return true; });
-ipcMain.handle('install', (e, id) => install(String(id)));
+ipcMain.handle('install', (e, id, opts) => install(String(id), opts && typeof opts === 'object' ? { shortcut: !!opts.shortcut } : null));
 ipcMain.handle('uninstall', (e, id) => uninstall(String(id)));
 ipcMain.handle('play', (e, id) => { const r = play(String(id)); return { ok: r.ok, error: r.error }; });
 ipcMain.handle('folder', (e, id) => { const d = okId(id) ? path.join(gamesDir(), id) : gamesDir(); fs.mkdirSync(d, { recursive: true }); shell.openPath(d); });
 ipcMain.handle('saves', (e, id) => { const g = findGame(String(id)); if (g) { const d = saveDirOf(g.saveDir || g.name); fs.mkdirSync(d, { recursive: true }); shell.openPath(d); } });
 
-function createLauncher() {
+function createLauncher(show) {
   launcher = new BrowserWindow({
     width: 1180, height: 720, minWidth: 860, minHeight: 540, show: false, backgroundColor: '#0b0d12', title: 'SPARK',
     icon: path.join(__dirname, 'build', 'icon.png'), titleBarStyle: 'hidden', titleBarOverlay: { color: '#0b0d12', symbolColor: '#c8c8d0', height: 38 },
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   launcher.loadFile(path.join(__dirname, 'ui', 'index.html'));
-  launcher.once('ready-to-show', () => { if (!process.env.SPARK_SELFTEST) launcher.show(); });
+  launcher.once('ready-to-show', () => { if (!process.env.SPARK_SELFTEST && (show || !(START_HIDDEN || argPlay(process.argv)))) launcher.show(); });
   launcher.webContents.setWindowOpenHandler(({ url }) => { if (isWeb(url)) shell.openExternal(url); return { action: 'deny' }; });
   launcher.on('closed', () => { launcher = null; for (const [id, w] of running) { const g = findGame(id); if (!g || g.type !== 'app') w.close(); } });
 }
-app.on('second-instance', () => { if (launcher) { launcher.show(); launcher.focus(); } });
+app.on('second-instance', (e, argv) => { const id = argPlay(argv); if (id && findGame(id)) { const r = play(id); if (!r.ok) { showLauncher(); send('toast', r.error); } } else showLauncher(); });
 
 // Selbsttest ohne sichtbare Fenster: SPARK_SELFTEST=1 → Katalog laden, BLACKOUT installieren, starten, prüfen, beenden
 async function selftest() {
@@ -319,6 +395,7 @@ async function selftest() {
         await new Promise(res => setTimeout(res, 1500));
         out.chat = await pc.window.webContents.executeJavaScript('(async () => { const s = window.SPARK; await s.vault.set("test", "geheim-123"); const back = await s.vault.get("test"); await s.vault.del("test"); return JSON.stringify({ api: !!(s.launch && s.rooms && s.running && s.vault), vault: back === "geheim-123", running: await s.running(), authUi: !!document.getElementById("authForm"), stayRow: !document.getElementById("stayRow").hidden, crypto: !!(window.crypto && crypto.subtle) && isSecureContext }); })()');
         out.chatFullscreen = pc.window.isFullScreen();
+        if (process.env.SPARK_TEST_BG) { pc.window.close(); await new Promise(r => setTimeout(r, 400)); out.bgHidden = !pc.window.isDestroyed() && !pc.window.isVisible() && running.has(chat.id); out.tray = !!tray; }
         const vaultRaw = fs.readFileSync(vaultFile(), 'utf8'); out.vaultPlain = vaultRaw.includes('geheim');
         out.launchJoin = await pc.window.webContents.executeJavaScript('window.SPARK.launch("blackout", { join: "AB12" }).then(r => JSON.stringify(r))');
         // Spiel schließen, dann über Einladung neu starten → BLACKOUT bekommt ?join=AB12
@@ -329,6 +406,13 @@ async function selftest() {
         await gw.webContents.executeJavaScript('window.SPARK.presence({ room: "AB12", role: "host" })');
         out.rooms = await pc.window.webContents.executeJavaScript('window.SPARK.rooms().then(r => JSON.stringify(r))');
       } else out.chat = pc.error;
+    }
+    if (process.env.SPARK_DESKTOP) {
+      out.shortcut = makeShortcut(g) && fs.existsSync(lnkPath(g)) ? path.basename(lnkPath(g)) : 'fehlt';
+      try { const d = shell.readShortcutLink(lnkPath(g)); out.shortcutTarget = d.args; out.shortcutIcon = path.basename(d.icon || ''); } catch (e) { out.shortcutTarget = e.message; }
+      out.viewShortcut = view(g).shortcut;
+      if (running.has(g.id)) { running.get(g.id).close(); await new Promise(r => setTimeout(r, 800)); }
+      out.uninstall = uninstall(g.id).ok; out.shortcutAfterUninstall = fs.existsSync(lnkPath(g));
     }
     out.settingsUi = await launcher.webContents.executeJavaScript('(document.getElementById("gear") ? "Zahnrad da" : "kein Zahnrad")');
   } catch (e) { out.error = e.message; }
@@ -341,6 +425,12 @@ app.whenReady().then(async () => {
   if (process.env.SPARK_SELFTEST) return selftest();
   catalog = readJson(cacheFile(), { games: [] });   // sofort die bekannten Spiele zeigen, dann aktualisieren
   createLauncher();
+  applyAutostart();
+  if (set().chatBackground || START_HIDDEN) ensureTray();
+  // Mit Windows gestartet: SPARK Chat unsichtbar starten, damit Nachrichten ankommen
+  if (START_HIDDEN) for (const g of catalog.games) if (g.background && st()[g.id] && st()[g.id].files) play(g.id, null, { hidden: true });
+  const p0 = argPlay(process.argv);
+  if (p0 && findGame(p0)) { const r = play(p0); if (!r.ok) showLauncher(); }
   await loadCatalog(); changed();
   if (set().autoUpdate) { await checkUpdate(); send('update', publicUpd()); }
 });
