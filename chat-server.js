@@ -275,14 +275,26 @@ module.exports = function createChat({ wsSend, log }) {
     for (const set of online.values()) for (const c of set) if (t - c.seen > 80000) { try { c.sock.destroy(); } catch (e) {} }
   }, 15000).unref();
 
-  function endCallsOf(c, why) {
+  // Verbindung weg: klingelnde Anrufe enden sofort; laufende Anrufe warten 40 s, ob das Gerät zurückkommt
+  // (Handy kurz im Hintergrund, Funkloch, WLAN-Wechsel) – dann geht das Gespräch einfach weiter.
+  function endCallsOf(c, why, grace) {
     for (const [cid, call] of calls) {
       if (call.ac !== c && call.bc !== c) continue;
-      calls.delete(cid);
-      const other = call.ac === c ? (call.bc ? [call.bc] : [...conns(call.b)]) : [call.ac];
-      const me = call.ac === c ? user(call.a) : user(call.b);
-      for (const o of other) send(o, { t: 'call', op: 'end', cid, u: me ? me.name : '', why: why || '' });
+      const isA = call.ac === c, me = isA ? user(call.a) : user(call.b), other = isA ? call.bc : call.ac;
+      if (grace && call.live && other) {
+        if (isA) call.ac = null; else call.bc = null;
+        send(other, { t: 'call', op: 'hold', cid, u: me ? me.name : '' });
+        call[isA ? 'lostA' : 'lostB'] = setTimeout(() => { if (calls.get(cid) === call && !(isA ? call.ac : call.bc)) killCall(cid, call, me ? me.name : '', why); }, 40000);
+        continue;
+      }
+      killCall(cid, call, me ? me.name : '', why, c);
     }
+  }
+  function killCall(cid, call, name, why, except) {
+    calls.delete(cid); clearTimeout(call.lostA); clearTimeout(call.lostB);
+    const to = [call.ac, call.bc].filter(x => x && x !== except);
+    if (!call.live && !call.bc) for (const x of conns(call.b)) if (x !== except && !to.includes(x)) to.push(x);
+    for (const o of to) send(o, { t: 'call', op: 'end', cid, u: name, why: why || '' });
   }
 
   // ---------- Nachrichten vom Client
@@ -546,30 +558,31 @@ module.exports = function createChat({ wsSend, log }) {
       if (!isOn(ok) || other.invisible) { if (!isOn(ok)) pushTo(ok); return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' ist offline.' }); }
       for (const [xid, call] of calls) {
         // Beide rufen sich gleichzeitig an → den anderen Anruf direkt verbinden
-        if (call.a === ok && call.b === c.key && !call.bc) { call.bc = c; send(call.ac, { t: 'call', op: 'accept', cid: xid, u: me.name }); return send(c, { t: 'call', op: 'joined', cid: xid, old: cid, u: other.name }); }
+        if (call.a === ok && call.b === c.key && !call.bc && !call.live) { call.bc = c; call.live = true; send(call.ac, { t: 'call', op: 'accept', cid: xid, u: me.name }); return send(c, { t: 'call', op: 'joined', cid: xid, old: cid, u: other.name }); }
         if (call.a === ok || call.b === ok) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: other.name + ' telefoniert gerade.' });
       }
       for (const [xid, call] of calls) if (call.ac === c || call.bc === c) { calls.delete(xid); }   // alter, hängender Anruf dieses Geräts
       if (calls.size > 200) return send(c, { t: 'call', op: 'end', cid, u: other.name, why: 'Server ausgelastet.' });
       calls.set(cid, { a: c.key, ac: c, b: ok, bc: null, t: now() });
       sendUser(ok, { t: 'call', op: 'ring', cid, u: me.name });
-      setTimeout(() => { const call = calls.get(cid); if (call && !call.bc) { calls.delete(cid); send(call.ac, { t: 'call', op: 'end', cid, u: other.name, why: 'Keine Antwort.' }); sendUser(ok, { t: 'call', op: 'end', cid, u: me.name, why: 'Verpasster Anruf' }); } }, 45000);
+      setTimeout(() => { const call = calls.get(cid); if (call && !call.live) { calls.delete(cid); if (call.ac) send(call.ac, { t: 'call', op: 'end', cid, u: other.name, why: 'Keine Antwort.' }); sendUser(ok, { t: 'call', op: 'end', cid, u: me.name, why: 'Verpasster Anruf' }); } }, 45000);
       return;
     }
     const call = calls.get(cid);
+    if (m.op === 'resume') {   // Gerät ist nach kurzer Trennung zurück → Gespräch weiterführen
+      if (!call || !call.live) return send(c, { t: 'call', op: 'end', cid, u: '', why: 'Anruf ist schon beendet' });
+      if (call.a === c.key && !call.ac) { call.ac = c; clearTimeout(call.lostA); if (call.bc) send(call.bc, { t: 'call', op: 'resumed', cid, u: me.name }); }
+      else if (call.b === c.key && !call.bc) { call.bc = c; clearTimeout(call.lostB); if (call.ac) send(call.ac, { t: 'call', op: 'resumed', cid, u: me.name }); }
+      return;
+    }
     if (!call) return;
-    if (m.op === 'accept' && call.b === c.key && !call.bc) {
-      call.bc = c;
+    if (m.op === 'accept' && call.b === c.key && !call.bc && !call.live) {
+      call.bc = c; call.live = true;
       send(call.ac, { t: 'call', op: 'accept', cid, u: me.name });
       for (const cc of conns(c.key)) if (cc !== c) send(cc, { t: 'call', op: 'end', cid, u: user(call.a).name, why: 'Auf einem anderen Gerät angenommen' });
       return;
     }
-    if ((m.op === 'decline' || m.op === 'end') && (call.ac === c || call.b === c.key)) {
-      calls.delete(cid);
-      const to = call.ac === c ? (call.bc ? [call.bc] : [...conns(call.b)]) : [call.ac];
-      for (const o of to) send(o, { t: 'call', op: 'end', cid, u: me.name, why: m.op === 'decline' ? 'Abgelehnt' : '' });
-      if (call.ac !== c) for (const cc of conns(call.b)) if (cc !== c) send(cc, { t: 'call', op: 'end', cid, u: user(call.a) ? user(call.a).name : '' });
-    }
+    if ((m.op === 'decline' || m.op === 'end') && (call.a === c.key || call.b === c.key)) killCall(cid, call, me.name, m.op === 'decline' ? 'Abgelehnt' : '', c);
   }
   function relayAudio(c, m) {
     const call = calls.get(String(m.cid || ''));
@@ -634,7 +647,7 @@ module.exports = function createChat({ wsSend, log }) {
     _test: process.env.CHAT_TEST ? { pushEncrypt, vapidJwt, vapid: () => vapid } : undefined,
     text: onText,
     close(c) {
-      endCallsOf(c, 'Verbindung getrennt');
+      endCallsOf(c, 'Verbindung getrennt', true);
       if (!c.key) return;
       const set = online.get(c.key);
       if (set) { set.delete(c); if (!set.size) { online.delete(c.key); presence(c.key); requeue(c.key); } else presence(c.key); }

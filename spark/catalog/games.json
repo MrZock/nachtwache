@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-15T11:51:36.356Z",
+  "updated": "2026-10-16T14:21:05.484Z",
   "games": [
     {
       "id": "blackout",
@@ -146,7 +146,7 @@
         "Hell/Dunkel, eigene Farbe, Schriftgröße, Status und Spitznamen",
         "Auch im Browser und auf dem Handy: mrzock.github.io/spark-chat"
       ],
-      "version": "Alpha 1.1.1",
+      "version": "Alpha 1.1.2",
       "color": "#2ee6ff",
       "cover": "spark-chat.jpg",
       "icon": "spark-chat-icon.png",
@@ -156,13 +156,13 @@
       "files": [
         {
           "path": "index.html",
-          "size": 7054,
-          "sha256": "614a8dc543a84e0d8906ea53e6729fd122e07c96b2999763a69fe42383582317"
+          "size": 7167,
+          "sha256": "60338aabd4d1bf666210e4e507994d8847f2bd1ef21d66305151d4296b7a0bbd"
         },
         {
           "path": "chat.js",
-          "size": 103615,
-          "sha256": "a27f7ace257d86be2f44c37ef257c366708112cbdb78b4715a45c6b56be6c98e"
+          "size": 109865,
+          "sha256": "1c632339a79a20aab311d43582eca73adc758823cb48a1b6783f5cb03d37f3bf"
         },
         {
           "path": "chat.css",
@@ -176,11 +176,20 @@
         },
         {
           "path": "manifest.json",
-          "size": 377,
-          "sha256": "46d0f953fa373892d3aa0b88704ff6d6ac2171ffa2ae38adfd98a43b595681ac"
+          "size": 685,
+          "sha256": "c777dbd3e5dce1ea9c90f297fab86c552d77ffea3c2c977e04ce173a3118fc76"
         }
       ],
       "changelog": [
+        {
+          "version": "Alpha 1.1.2",
+          "date": "2026-10-16",
+          "items": [
+            "Anrufe laufen weiter, wenn die Verbindung kurz weg ist (z. B. Handy im Hintergrund) – bis zu 40 Sekunden",
+            "Bildschirm bleibt während eines Anrufs an, Ton und Mikrofon kommen nach dem Zurückwechseln wieder",
+            "Neue Webseite: mrzock.github.io/spark-chat-web – mit Android-App (APK) und iPhone-Test-App"
+          ]
+        },
         {
           "version": "Alpha 1.1.1",
           "date": "2026-10-15",
@@ -221,7 +230,7 @@
       ],
       "background": true,
       "shortcutName": "SPARK Chat",
-      "size": 178766
+      "size": 185437
     }
   ]
 }

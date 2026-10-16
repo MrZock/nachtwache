@@ -125,7 +125,7 @@
         "Hell/Dunkel, eigene Farbe, Schriftgröße, Status und Spitznamen",
         "Auch im Browser und auf dem Handy: mrzock.github.io/spark-chat"
       ],
-      "version": "Alpha 1.1.1",
+      "version": "Alpha 1.1.2",
       "color": "#2ee6ff",
       "cover": "spark-chat.jpg",
       "icon": "spark-chat-icon.png",
@@ -141,6 +141,15 @@
         "manifest.json"
       ],
       "changelog": [
+        {
+          "version": "Alpha 1.1.2",
+          "date": "2026-10-16",
+          "items": [
+            "Anrufe laufen weiter, wenn die Verbindung kurz weg ist (z. B. Handy im Hintergrund) – bis zu 40 Sekunden",
+            "Bildschirm bleibt während eines Anrufs an, Ton und Mikrofon kommen nach dem Zurückwechseln wieder",
+            "Neue Webseite: mrzock.github.io/spark-chat-web – mit Android-App (APK) und iPhone-Test-App"
+          ]
+        },
         {
           "version": "Alpha 1.1.1",
           "date": "2026-10-15",
