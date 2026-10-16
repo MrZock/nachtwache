@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-16T14:33:24.676Z",
+  "updated": "2026-10-16T14:50:50.040Z",
   "games": [
     {
       "id": "blackout",
@@ -146,7 +146,7 @@
         "Hell/Dunkel, eigene Farbe, Schriftgröße, Status und Spitznamen",
         "Auch im Browser und auf dem Handy: mrzock.github.io/spark-chat"
       ],
-      "version": "Alpha 1.1.2",
+      "version": "Alpha 1.1.3",
       "color": "#2ee6ff",
       "cover": "spark-chat.jpg",
       "icon": "spark-chat-icon.png",
@@ -156,18 +156,18 @@
       "files": [
         {
           "path": "index.html",
-          "size": 7167,
-          "sha256": "60338aabd4d1bf666210e4e507994d8847f2bd1ef21d66305151d4296b7a0bbd"
+          "size": 7306,
+          "sha256": "e4e8d9a08a49cf525bc91552648559b77ee76dafd884d325ec7130470d691bbf"
         },
         {
           "path": "chat.js",
-          "size": 110647,
-          "sha256": "71e64947e57d6363b7ac4c857241e7ad78f79d312199019eff35d1b886949481"
+          "size": 112985,
+          "sha256": "4d72343b61808d30608d8b1b30be868ab3ec848e04f8eccca26abce33a32bb40"
         },
         {
           "path": "chat.css",
-          "size": 26454,
-          "sha256": "ddcbb16d8474d2771572ff230f58fabb83218b900780c440013dc971d7502f2c"
+          "size": 27231,
+          "sha256": "179d14e5e6e6ff53fc25a60bc13d0c25b68b1300e0e7e010c4e0d1a42e578dd8"
         },
         {
           "path": "icon.png",
@@ -181,6 +181,17 @@
         }
       ],
       "changelog": [
+        {
+          "version": "Alpha 1.1.3",
+          "date": "2026-10-16",
+          "items": [
+            "Anruf einklappen (▁): kleine Leiste unten, dabei weiter mit anderen schreiben",
+            "Handy: im Chat nach rechts wischen → zurück zur Kontaktliste",
+            "Android-App: Anrufe laufen im Hintergrund weiter („Anruf läuft“-Benachrichtigung)",
+            "Android im Browser: Anruf bleibt im Hintergrund aktiv",
+            "iPhone: Hinweis, dass Apple den Ton im Hintergrund pausiert"
+          ]
+        },
         {
           "version": "Alpha 1.1.2",
           "date": "2026-10-16",
@@ -230,7 +241,7 @@
       ],
       "background": true,
       "shortcutName": "SPARK Chat",
-      "size": 186219
+      "size": 189473
     }
   ]
 }
