@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-16T14:27:51.215Z",
+  "updated": "2026-10-16T14:31:29.496Z",
   "games": [
     {
       "id": "blackout",
@@ -161,8 +161,8 @@
         },
         {
           "path": "chat.js",
-          "size": 110308,
-          "sha256": "36bc95a5322e0b516ed90031558a488829d10395c5f1448344656dcead912d84"
+          "size": 110655,
+          "sha256": "928f255aea0304c8db08747d463c9d06eefd1cd628529feaf35745ffbabe3321"
         },
         {
           "path": "chat.css",
@@ -230,7 +230,7 @@
       ],
       "background": true,
       "shortcutName": "SPARK Chat",
-      "size": 185880
+      "size": 186227
     }
   ]
 }

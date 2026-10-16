@@ -272,7 +272,7 @@ module.exports = function createChat({ wsSend, log }) {
       if (isOn(k) && e.n < 2) { for (const c of conns(k)) if (c.acks) send(c, e.m); e.t = t; e.n++; }
       else requeue(k, id);
     }
-    for (const set of online.values()) for (const c of set) if (t - c.seen > 80000) { try { c.sock.destroy(); } catch (e) {} }
+    for (const set of online.values()) for (const c of set) if (t - c.seen > 60000) { try { c.sock.destroy(); } catch (e) {} }
   }, 15000).unref();
 
   // Verbindung weg: klingelnde Anrufe enden sofort; laufende Anrufe warten 40 s, ob das Gerät zurückkommt
