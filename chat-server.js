@@ -571,8 +571,9 @@ module.exports = function createChat({ wsSend, log }) {
     const call = calls.get(cid);
     if (m.op === 'resume') {   // Gerät ist nach kurzer Trennung zurück → Gespräch weiterführen
       if (!call || !call.live) return send(c, { t: 'call', op: 'end', cid, u: '', why: 'Anruf ist schon beendet' });
-      if (call.a === c.key && !call.ac) { call.ac = c; clearTimeout(call.lostA); if (call.bc) send(call.bc, { t: 'call', op: 'resumed', cid, u: me.name }); }
-      else if (call.b === c.key && !call.bc) { call.bc = c; clearTimeout(call.lostB); if (call.ac) send(call.ac, { t: 'call', op: 'resumed', cid, u: me.name }); }
+      // auch wenn die alte Verbindung noch nicht als getrennt erkannt wurde (Handy im Hintergrund): neues Gerät übernimmt
+      if (call.a === c.key) { const old = call.ac; call.ac = c; clearTimeout(call.lostA); if (old && old !== c) { try { old.sock.destroy(); } catch (e) {} } if (call.bc) send(call.bc, { t: 'call', op: 'resumed', cid, u: me.name }); }
+      else if (call.b === c.key) { const old = call.bc; call.bc = c; clearTimeout(call.lostB); if (old && old !== c) { try { old.sock.destroy(); } catch (e) {} } if (call.ac) send(call.ac, { t: 'call', op: 'resumed', cid, u: me.name }); }
       return;
     }
     if (!call) return;
